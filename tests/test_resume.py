@@ -554,15 +554,19 @@ def test_a_restart_refused_by_validation_keeps_the_old_graph_on_and_recorded(fre
         power(client, "chat", "off")
 
 
-def test_no_resume_keeps_the_graphs_for_the_next_launch(fresh, monkeypatch, no_local_providers):
+def test_no_resume_keeps_the_graphs_for_the_next_launch(fresh, monkeypatch, no_local_providers,
+                                                       caplog):
     save(fresh, "chat", MANUAL_LOG)
     settings.update({"resume_workflows": True})
     with local_client() as client:
         power(client, "chat", "on", MANUAL_LOG)
     restart_server(monkeypatch)
-    with local_client() as client:
-        client.portal.call(server.launch_sequence, False)  # --no-resume
-        assert running() == []
+    with caplog.at_level(logging.INFO, logger="boltjar.graph"):
+        with local_client() as client:
+            client.portal.call(server.launch_sequence, False)  # --no-resume
+            assert running() == []
+    assert "--no-resume: left Off for this launch, resumed at the next: chat" in [
+        r.getMessage() for r in caplog.records]
     restart_server(monkeypatch)
     with local_client() as client:
         client.portal.call(server.launch_sequence)

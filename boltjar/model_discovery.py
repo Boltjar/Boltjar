@@ -1000,7 +1000,8 @@ def model_problem(model_id: str, kind: str, snap: Snapshot | None = None) -> str
         why = "not in the model list" + (f" ({reason})" if not ok and reason else "")
     nearest = closest(model_id, kind, snap.rows)
     hint = (f"closest available: {nearest}" if nearest
-            else f"pick another model, or connect {_family_words(kind)[0]} in Settings, AI Providers")
+            else f"pick another model, or connect {_family_words(kind)[0]} "
+                 "in Settings, AI Providers")
     return f"model {model_id} is {why}; {hint}"
 
 

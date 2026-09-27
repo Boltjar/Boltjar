@@ -535,7 +535,7 @@ def _settle_record(resume_on: bool, resume: bool) -> None:
         elif not resume:
             kept = _resume.carry()
             GRAPH_LINES.note(
-                f"--no-resume: {', '.join(kept)} stay Off for this launch, and come back at the next"
+                f"--no-resume: left Off for this launch, resumed at the next: {', '.join(kept)}"
                 if kept else "--no-resume: no graph was On when Boltjar last stopped")
     except OSError as exc:
         _launch_log.warning("could not read the graphs that were On: %s", exc, extra={"tone": "warn"})
@@ -939,7 +939,8 @@ def validate_graph(graph: dict) -> list[dict]:
                          if w.accepts_secrets and _widget_in_use(n["id"], cfg, w, edges_in))
         for name in _secrets.unresolved(text):
             problems.append({"node": n["id"], "kind": "missing-secret",
-                             "message": f"secret {name} is not defined: add it in Settings, Secrets"})
+                             "message": f"secret {name} is not defined: "
+                                        "add it in Settings, Secrets"})
     # a model picker whose model vanished (no manifest names it and no provider
     # lists it any more), or that holds another family's model: name it and the
     # closest available one before On, instead of a mock reply or a failed call.
