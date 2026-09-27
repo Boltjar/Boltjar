@@ -164,6 +164,12 @@
       "dst_port": "in"
     },
     {
+      "src": "tpl",
+      "src_port": "trigger",
+      "dst": "pv_prompt",
+      "dst_port": "trigger"
+    },
+    {
       "src": "chat",
       "src_port": "text",
       "dst": "tpl",
@@ -180,6 +186,12 @@
       "src_port": "audio",
       "dst": "preview1",
       "dst_port": "in"
+    },
+    {
+      "src": "tts1",
+      "src_port": "trigger",
+      "dst": "preview1",
+      "dst_port": "trigger"
     },
     {
       "src": "llm",

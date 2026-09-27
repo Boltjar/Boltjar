@@ -632,11 +632,12 @@ function PreviewSurface({
   }
   const key = `${wire.src}:${wire.srcPort}`;
   const inHistory = valueHistory[key] ?? [];
-  // when a `trigger` is wired, the Preview is GATED by it: it shows the `in` value
-  // sampled at each trigger event (the value current at that moment), so a Preview
-  // after an LLM only updates once the LLM's done fires - not the instant `in`
-  // changes. With no trigger wired it taps `in` live (every value). A draft-only
-  // trigger wire is ignored while live (it isn't part of the running graph).
+  // the Preview is GATED by its `trigger`: it shows the `in` value sampled at
+  // each trigger event (the value current at that moment), so a Preview after an
+  // LLM only updates once the LLM's done fires, not the instant `in` changes.
+  // Before its trigger is wired (the graph cannot turn On until it is) it shows
+  // every `in` value. A draft-only trigger wire is ignored while live (it isn't
+  // part of the running graph).
   const trigWire = wires.find((w) => w.dstPort === "trigger" && liveGatePasses(power, w.live));
   const history = trigWire
     ? (valueHistory[`${trigWire.src}:${trigWire.srcPort}`] ?? [])

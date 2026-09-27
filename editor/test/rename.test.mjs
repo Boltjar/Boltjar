@@ -61,7 +61,7 @@ const tagBase = (ghost) => port("tag", "any", { growable: true, optional: true, 
 const DEFS = new Map([
   def("core.value.text", "Text", [], [port("out", "text")], [widget("text", "code", { expand: true })]),
   def("core.output.preview", "Preview",
-    [port("in", "any", { trigger: true }), port("trigger", "event", { trigger: true, optional: true })],
+    [port("in", "any", { trigger: true }), port("trigger", "event", { trigger: true })],
     [port("out", "any"), port("trigger", "event")], []),
   def("core.ai.tts", "TTS",
     [port("trigger", "event", { trigger: true }), port("text", "text"), port("lang", "lang", { optional: true })],

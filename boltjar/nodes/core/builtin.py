@@ -2858,17 +2858,18 @@ class Log:
 
 @node(id="core.output.preview", name="Preview", kind=Kind.OUTPUT, category="Inspect",
       summary="Tap a wire and show its value live (adapts to the type). Sits "
-              "mid-flow: re-emits `in` on `out` and passes a trigger through.",
+              "mid-flow: when `trigger` fires it passes `in` on `out`, then the "
+              "trigger on.",
       icon="eye-outline", subline="preview · live tap")
 class Preview:
     # A transparent tap, so it can sit in the MIDDLE of a flow (in -> preview ->
-    # out). `in` is the value to show and fires the node so a tap updates live; it
-    # re-emits the value on `out` and NEVER the trigger (a value arriving is not a
-    # control event). The optional `trigger` (e.g. an LLM's done) re-emits the
-    # latest `in` on `out`, then forwards exactly one `trigger`. Wiring one source
-    # into both (value, then done) therefore relays one trigger per turn, not two.
+    # out). `in` is the value to show and fires the node so a tap updates live;
+    # it emits nothing (a value arriving is not a control event). `trigger` (e.g.
+    # an LLM's done) must be wired: it re-emits the latest `in` on `out`, then
+    # forwards exactly one `trigger`. Wiring one source into both (value, then
+    # done) therefore passes one value and one trigger per turn, never two.
     inputs = [Port("in", "any", trigger=True),
-              Port("trigger", "event", trigger=True, optional=True)]
+              Port("trigger", "event", trigger=True)]
     outputs = [Port("out", "any"), Port("trigger", "event")]
     # disabled, Preview wires through (in -> out, trigger -> trigger) so it can be
     # bypassed mid-flow without breaking the line.
@@ -2880,7 +2881,7 @@ class Preview:
         if getattr(self, "_fired_port", "in") != "trigger":
             ctx.log(f"preview: {value}")
             self._in_since_trigger = True
-            return {"out": value}
+            return {}
         # a `trigger` fire: `in` was latched by its own fire, or (fed by a PULLED
         # source such as a Text, which never fires `in`) is pulled right now. Emit
         # it on `out` BEFORE the trigger so a consumer fired by the trigger reads

@@ -5,8 +5,8 @@ graph, then runs it), driven by its trigger, and every live event is counted.
 One chat send means one LLM run, one reply, one row per side of the chat
 history and one TTS call; one Manual fire means one LLM run and one log line.
 A Preview is fired by its value and by its trigger, so it runs twice a turn and
-still relays exactly one trigger: the chat example once spoke every reply twice
-because a Preview relayed both.
+still passes on exactly one value and one trigger: the chat example once spoke
+every reply twice because a Preview relayed both.
 
 Offline: the LLM runs the mock, the TTS vendor is faked at the HTTP boundary
 and the chat history lives in a temp SQLite store."""
@@ -32,6 +32,7 @@ CHAT_FIRES = {
 }
 # the console lines one chat send writes: each Preview shows its value once.
 CHAT_LOGS = {"Context": 1, "Response Preview": 1, "Audio Preview": 1}
+CHAT_PREVIEWS = sorted(CHAT_LOGS)
 
 
 class Watch:
@@ -119,6 +120,7 @@ def test_chat_one_send_runs_each_node_once(tmp_path, monkeypatch, vendor_http):
                 "fires": watch.fires(),
                 "logs": watch.logs(),
                 "replies": len(watch.emits("LLM", "response")),
+                "passed": {pv: len(watch.emits(pv, "out")) for pv in CHAT_PREVIEWS},
                 "relayed": {f"{src}.{port}": len(watch.emits(src, port)) for src, port in triggers},
                 "rows": [r["sender"] for r in store.query(
                     db_key, "SELECT sender FROM chat_history ORDER BY id")],
@@ -132,6 +134,7 @@ def test_chat_one_send_runs_each_node_once(tmp_path, monkeypatch, vendor_http):
         assert turn["fires"] == _times(CHAT_FIRES, n), f"after send {n}"
         assert turn["logs"] == _times(CHAT_LOGS, n), f"after send {n}"
         assert turn["replies"] == n, "one LLM reply per send"
+        assert turn["passed"] == {pv: n for pv in CHAT_PREVIEWS}, "each Preview passes one value per send"
         assert turn["relayed"] == {k: n for k in turn["relayed"]}, \
             f"every trigger in the graph fires once per send, after send {n}"
         assert turn["rows"] == ["User", "Assistant"] * n, "one row per side per send"
