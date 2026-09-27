@@ -3,9 +3,10 @@ programmatic access to a running Boltjar backend.
 
 It is a thin MCP (FastMCP, stdio transport) client over the Boltjar REST + WS
 API. Point it at a backend with the BOLTJAR_URL env var (default
-http://127.0.0.1:8770); the backend must be running (uvicorn on 8770) for any
-tool to work. Nothing here starts a server. Every call carries the install
-token (user/data/token, written by the backend) as a Bearer header.
+http://127.0.0.1:8770); the backend must be running (start.bat, ./start.sh or
+python -m boltjar serve, port 8770 by default) for any tool to work. Nothing
+here starts a server. Every call carries the install token (user/data/token,
+written by the backend) as a Bearer header.
 
 The tools let the AI: read the node catalog (the schema source of truth, so it
 never guesses ports/knobs), list models, do full graph CRUD + validation, power
