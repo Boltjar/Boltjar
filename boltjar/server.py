@@ -536,9 +536,11 @@ def api_version() -> dict:
 
 @app.get("/api/session")
 def session() -> dict:
-    """The editor calls this once at boot: LocalGuard answers it with the
-    session cookie that every later /api, /ws, /stream and /audio call carries
-    (GET / sets it too, but under the Vite dev server the page comes from Vite)."""
+    """The editor calls this once at boot. To a browser on this machine,
+    LocalGuard answers it with the session cookie that every later /api, /ws,
+    /stream and /audio call carries (GET / sets it too, but under the Vite dev
+    server the page comes from Vite). Any other browser got the cookie from the
+    /?token=<token> link, and a request without it is refused."""
     return {"ok": True}
 
 

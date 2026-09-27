@@ -15,20 +15,28 @@ applied by one ASGI middleware (`LocalGuard`) to HTTP and WebSocket alike:
             /ws, /stream and /audio, from a cookie (the editor) or a Bearer
             header (any other local client, e.g. the MCP server).
 
+GET / and GET /api/session hand the cookie out, but only to a browser on this
+machine talking to the server directly: a loopback peer, a loopback Host, no
+proxy headers. A browser anywhere else opens the editor once through
+/?token=<token>, which sets the cookie and redirects to /. So the token keeps
+out web pages and other machines; it does not keep out another account on this
+machine, which can connect over loopback like the editor does.
+
 /hook/* skips all three: a webhook is meant to be reached from outside and is
 guarded by its own shared secret instead.
 """
 from __future__ import annotations
 
 import hmac
+import ipaddress
 import os
 import pathlib
 from secrets import token_urlsafe
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 from starlette.datastructures import Headers, MutableHeaders
 from starlette.requests import cookie_parser
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, RedirectResponse
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 # The per-install token. Module-level so the test suite can point it at a tmp dir.
@@ -38,6 +46,11 @@ LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "[::1]"})
 STATE_CHANGING = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 # The endpoint a browser calls once at boot to receive its cookie.
 SESSION_PATH = "/api/session"
+# The query parameter of the one-time link, /?token=<token>.
+LINK_PARAM = "token"
+# Headers a reverse proxy adds. A request carrying one was passed on, so it is
+# not a browser on this machine, whatever its peer address says.
+PROXY_HEADERS = ("forwarded", "x-forwarded-for", "x-forwarded-host", "x-real-ip")
 
 _cached: tuple[pathlib.Path, str] | None = None
 
@@ -141,6 +154,28 @@ def origin_allowed(origin: str | None) -> bool:
     return _host_name(parts.netloc) in allowed_hosts()
 
 
+def _loopback_address(address: str) -> bool:
+    try:
+        ip = ipaddress.ip_address(address)
+    except ValueError:
+        return False  # not an IP address (a unix socket, a test client's name)
+    if ip.version == 6 and ip.ipv4_mapped:
+        ip = ip.ipv4_mapped  # ::ffff:127.0.0.1 from a dual-stack socket
+    return ip.is_loopback
+
+
+def from_this_machine(scope, headers: Headers) -> bool:
+    """A browser on this machine talking to the server directly: the peer is a
+    loopback address, the Host a loopback name, and no proxy passed it on (a
+    proxy on this machine makes every client it serves arrive from loopback)."""
+    client = scope.get("client")
+    if not client or not _loopback_address(client[0]):
+        return False
+    if _host_name(headers.get("host", "")) not in LOOPBACK_HOSTS:
+        return False
+    return not any(name in headers for name in PROXY_HEADERS)
+
+
 # ---------------------------------------------------------------- the middleware
 
 def _is_hook(path: str) -> bool:
@@ -148,8 +183,6 @@ def _is_hook(path: str) -> bool:
 
 
 def _needs_token(path: str) -> bool:
-    if path == SESSION_PATH:
-        return False
     return any(path == p or path.startswith(p + "/") for p in ("/api", "/ws", "/stream", "/audio"))
 
 
@@ -158,9 +191,16 @@ def session_cookie(secure: bool = False) -> str:
     return cookie + "; Secure" if secure else cookie
 
 
+def _link_token(scope) -> str | None:
+    """The token a /?token=<token> link carries, or None when there is no link."""
+    values = parse_qs(scope.get("query_string", b"").decode("latin-1"), keep_blank_values=True)
+    return values[LINK_PARAM][0] if LINK_PARAM in values else None
+
+
 class LocalGuard:
     """ASGI middleware applying the Host, Origin and token checks (module doc)
-    and handing the browser its session cookie on GET / and GET /api/session."""
+    and handing the session cookie to a browser on this machine (GET / and GET
+    /api/session) or to one that opens the /?token=<token> link."""
 
     def __init__(self, app) -> None:
         self.app = app
@@ -181,12 +221,31 @@ class LocalGuard:
         if checks_origin and not origin_allowed(headers.get("origin")):
             await _deny(scope, receive, send, 403, "origin not allowed")
             return
+        secure = scope.get("scheme") == "https"
+        if kind == "http" and method == "GET" and path == "/":
+            link = _link_token(scope)
+            if link is not None:
+                await _open_link(scope, receive, send, link, secure)
+                return
+        local = kind == "http" and from_this_machine(scope, headers)
         if _needs_token(path) and not token_matches(request_token(headers)):
-            await _deny(scope, receive, send, 401, "missing or invalid token")
-            return
-        if kind == "http" and method == "GET" and path in ("/", SESSION_PATH):
-            send = _with_cookie(send, session_cookie(secure=scope.get("scheme") == "https"))
+            # a browser on this machine asks the session endpoint for the token.
+            if not (path == SESSION_PATH and local):
+                await _deny(scope, receive, send, 401, "missing or invalid token")
+                return
+        if local and method == "GET" and path in ("/", SESSION_PATH):
+            send = _with_cookie(send, session_cookie(secure))
         await self.app(scope, receive, send)
+
+
+async def _open_link(scope, receive, send, provided: str, secure: bool) -> None:
+    """/?token=<token>: set the cookie and send the browser on to /, so the
+    token leaves the address bar at once. A wrong token is refused."""
+    if not token_matches(provided):
+        await _deny(scope, receive, send, 401, "missing or invalid token")
+        return
+    headers = {"set-cookie": session_cookie(secure), "cache-control": "no-store"}
+    await RedirectResponse("/", status_code=303, headers=headers)(scope, receive, send)
 
 
 def _with_cookie(send, cookie: str):

@@ -11,13 +11,20 @@ listens on `127.0.0.1` by default, and every request has to pass three checks:
 - **Origin**: WebSockets and every request that changes something must come
   from the editor's own origin, or from a client that is not a browser.
 - **Token**: `/api`, `/ws`, `/stream` and `/audio` need the per-install token
-  in `user/data/token`, created on first start. The editor receives it as an
+  in `user/data/token`, created on first start. A browser holds it as an
   `HttpOnly`, `SameSite=Strict` cookie. Other local clients (the MCP server, your
   own scripts) send `Authorization: Bearer <token>`. To rotate it, stop the
   server, delete the file and start again.
 
-Together these keep other web pages you visit, and other sites in your browser,
-away from the API.
+The server hands the cookie only to a browser on this machine that talks to it
+directly: from a loopback address, to `127.0.0.1`, `localhost` or `[::1]`, with
+no proxy headers. A browser anywhere else opens `http://<host>:<port>/?token=<token>`
+once; the server sets the cookie and redirects to the editor.
+
+Together these keep web pages you visit and other machines away from the API.
+They do not keep out other accounts on this machine: anyone who can connect to
+`127.0.0.1` can ask for the cookie. Do not run Boltjar on a machine you share
+with people you do not trust.
 
 ## A graph is code
 
@@ -46,11 +53,16 @@ AI the same control of the API that the editor has.
 
 ## Exposing the server
 
-Keep it on loopback. If you do open it to other machines, put it behind a
-reverse proxy that terminates TLS, keep the token required, and make sure every
-name clients use is in `BOLTJAR_ALLOWED_HOSTS`
-(`python -m boltjar serve --host <address> --allow-remote` puts the bind
-address there). Never port-forward or tunnel the whole server.
+Keep it on loopback. Boltjar has no user accounts, and the token is not a
+login: whoever holds it has full control, and plain HTTP shows it to anyone on
+the network path. If other machines must reach the editor, put the server behind
+a reverse proxy that terminates TLS and authenticates every user itself, pass
+the original `Host` header through, and add every name clients use to
+`BOLTJAR_ALLOWED_HOSTS` (`python -m boltjar serve --host <address> --allow-remote`
+adds the bind address). A proxy that rewrites the `Host` to `127.0.0.1` and adds
+no `X-Forwarded-For` makes every client it serves look like a browser on this
+machine, and each one gets the cookie. Never port-forward or tunnel the whole
+server.
 
 To receive webhooks, expose only `/hook/*`. Those routes skip the token and
 host checks because outside services call them, so give every Webhook node a

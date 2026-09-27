@@ -9,12 +9,14 @@ import pytest
 from starlette.testclient import WebSocketDenialResponse
 
 from boltjar import security
-from boltjar.server import HUBS
-from local_client import local_client
+from boltjar.server import HUBS, app
+from local_client import BASE_URL, LOOPBACK_PEER, LocalClient, local_client
 
 # a page on another site, and a page served by the Vite dev server.
 EVIL = "http://evil.example"
 DEV = "http://localhost:5173"
+# another machine on the network.
+LAN_PEER = ("192.168.1.50", 51000)
 
 
 @pytest.fixture
@@ -173,6 +175,69 @@ def test_editor_shell_sets_the_cookie_without_a_token(anon):
     r = anon.get("/")
     assert r.status_code != 401
     assert r.headers["set-cookie"].startswith(f"{security.COOKIE_NAME}=")
+
+
+# ---------------------------------------------------------------- who gets the cookie
+
+def test_a_network_client_gets_no_cookie(monkeypatch):
+    # --allow-remote puts the machine's names in BOLTJAR_ALLOWED_HOSTS: a client on
+    # the LAN passes the Host check with one, and must still prove the token.
+    monkeypatch.setenv("BOLTJAR_ALLOWED_HOSTS", "box.lan")
+    lan = LocalClient(app, base_url="http://box.lan:8770", client=LAN_PEER)
+    r = lan.get("/api/session")
+    assert r.status_code == 401
+    assert "set-cookie" not in r.headers
+    assert "set-cookie" not in lan.get("/").headers
+    assert lan.get("/api/secrets").status_code == 401
+
+
+@pytest.mark.parametrize("peer, host, extra", [
+    (LAN_PEER, "127.0.0.1:8770", {}),  # a loopback name, sent from another machine
+    (LOOPBACK_PEER, "box.lan:8770", {}),  # a proxy on this machine that keeps the Host
+    (LOOPBACK_PEER, "127.0.0.1:8770", {"x-forwarded-for": "203.0.113.9"}),  # one that rewrites it
+    (LOOPBACK_PEER, "127.0.0.1:8770", {"forwarded": "for=203.0.113.9"}),
+    (("testclient", 50000), "127.0.0.1:8770", {}),  # a peer that is no address at all
+])
+def test_the_cookie_needs_a_direct_browser_on_this_machine(monkeypatch, peer, host, extra):
+    monkeypatch.setenv("BOLTJAR_ALLOWED_HOSTS", "box.lan")
+    other = LocalClient(app, base_url=BASE_URL, client=peer)
+    for path in ("/", "/api/session"):
+        assert "set-cookie" not in other.get(path, headers={"host": host, **extra}).headers, path
+    assert other.get("/api/session", headers={"host": host, **extra}).status_code == 401
+
+
+@pytest.mark.parametrize("peer, host", [
+    (LOOPBACK_PEER, "127.0.0.1:8770"),
+    (("::1", 50000), "[::1]:8770"),
+    (("::ffff:127.0.0.1", 50000), "localhost:8770"),  # an IPv4 peer on a dual-stack socket
+])
+def test_a_browser_on_this_machine_gets_the_cookie(peer, host):
+    here = LocalClient(app, base_url=BASE_URL, client=peer)
+    r = here.get("/api/session", headers={"host": host})
+    assert r.status_code == 200
+    assert r.headers["set-cookie"].startswith(f"{security.COOKIE_NAME}={security.get_token()};")
+
+
+def test_the_link_sets_the_cookie_and_leaves_the_address_bar(monkeypatch):
+    monkeypatch.setenv("BOLTJAR_ALLOWED_HOSTS", "box.lan")
+    lan = LocalClient(app, base_url="http://box.lan:8770", client=LAN_PEER)
+    r = lan.get(f"/?token={security.get_token()}", follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == "/"
+    assert r.headers["cache-control"] == "no-store"
+    cookie = r.headers["set-cookie"]
+    assert cookie.startswith(f"{security.COOKIE_NAME}={security.get_token()};")
+    assert "HttpOnly" in cookie and "SameSite=Strict" in cookie
+    # the browser holds the cookie now: the editor's boot and its API calls pass.
+    assert lan.get("/api/session").status_code == 200
+    assert lan.get("/api/graphs").status_code == 200
+
+
+@pytest.mark.parametrize("query", ["token=wrong", "token="])
+def test_the_link_with_a_wrong_token_is_refused(anon, query):
+    r = anon.get(f"/?{query}", follow_redirects=False)
+    assert r.status_code == 401
+    assert "set-cookie" not in r.headers
 
 
 def test_static_files_need_no_token(anon):
