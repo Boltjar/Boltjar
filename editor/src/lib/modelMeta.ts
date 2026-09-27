@@ -54,7 +54,8 @@ export function groupByProvider(manifests: ModelManifest[]): Array<{ provider: s
 // Pure, so the grouping and the lines it shows are testable without React.
 
 /** The special value an LLM picker offers above the list: the runtime runs the
- *  first runnable model (an installed Ollama chat model, else a keyed provider's). */
+ *  first runnable model (an installed Ollama chat model, else a model of another
+ *  connected provider that answered, curated ones first). */
 export const AUTO_MODEL = "auto";
 
 /** The models a picker of `kind` lists: its family, runnable now. A manifest

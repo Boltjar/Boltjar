@@ -709,20 +709,37 @@ def _chat(manifest: ModelManifest) -> bool:
     return manifest.kind == "llm" and "text" in manifest.outputs
 
 
+def _answering(provider: str, view: View) -> bool:
+    """Whether "auto" may run a model of `provider` now: a provider discovery
+    asks must have answered the last time it was asked (a local server that is
+    down, or a key that was refused, is skipped); one it never asks (a pack's
+    own) needs its key."""
+    listing = _state.get(provider)
+    if provider in view.usable and listing is not None:
+        return listing.ok
+    return view.has_key(provider)
+
+
 def resolve_auto(snap: Snapshot | None = None) -> ModelManifest | None:
-    """What an "auto" LLM runs: the first installed Ollama chat model (Ollama
-    answered the last time it was asked), else the first chat model of a provider
-    with a key, else None (the node replies with AUTO_MOCK_REPLY)."""
+    """What an "auto" LLM runs: the first installed Ollama chat model when Ollama
+    answered the last time it was asked; else, among the other providers that
+    answered, the first curated chat model (a manifest describes it) and only
+    then the first model a provider merely lists, since a bare list says nothing
+    about price or fitness and some lists (OpenRouter's) run to hundreds; else
+    None (the node replies with AUTO_MOCK_REPLY)."""
     snap = snap or Snapshot.now()
     ollama = _state.get("ollama")
     if ollama is not None and ollama.ok:
         for entry in snap.rows:
             if entry.manifest.provider == "ollama" and entry.installed and _chat(entry.manifest):
                 return entry.manifest
-    for entry in snap.rows:
-        m = entry.manifest
-        if m.provider != "ollama" and entry.available and _chat(m) and snap.view.has_key(m.provider):
-            return m
+    runnable = [e for e in snap.rows
+                if e.manifest.provider != "ollama" and e.available and _chat(e.manifest)
+                and _answering(e.manifest.provider, snap.view)]
+    for curated in (True, False):
+        for entry in runnable:
+            if (entry.source != "discovered") == curated:
+                return entry.manifest
     return None
 
 

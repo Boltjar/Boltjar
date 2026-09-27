@@ -602,6 +602,50 @@ def test_auto_with_nothing_connected_says_how_to_connect(fresh, vendor_http):
     assert "trigger" in out, "the mock reply still completes the node"
 
 
+def _openai_list(*ids: str) -> dict:
+    return {"object": "list", "data": [{"id": i, "object": "model"} for i in ids]}
+
+
+def test_auto_never_picks_a_model_chat_completions_refuses(fresh, vendor_http, monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
+    # api.openai.com answers in no useful order; the first row is completions only.
+    vendor_http.reply = vendors(ollama=False, openai=_openai_list(
+        "gpt-3.5-turbo-instruct", "o1-pro", "gpt-6-luna", "gpt-4o"))
+    refresh()
+    assert md.payload()["auto"] == "openai/gpt-4o", "a curated model before a bare listed one"
+    # with no curated model listed, a listed chat model still serves.
+    vendor_http.reply = vendors(ollama=False, openai=_openai_list("gpt-3.5-turbo-instruct", "o3"))
+    refresh()
+    assert md.payload()["auto"] == "openai/o3"
+
+
+def test_auto_prefers_a_curated_model_over_an_earlier_listed_one(fresh, vendor_http, monkeypatch):
+    monkeypatch.setenv("XAI_API_KEY", "test-xai-key")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
+    only_new = {"models": [m for m in XAI_MODELS["models"] if m["id"] == "grok-4.7"]}
+    vendor_http.reply = vendors(ollama=False, xai=only_new, openai=_openai_list("gpt-4o"))
+    refresh()
+    # xAI ranks first, but grok-4.7 has no manifest: a bare listing waits.
+    assert md.resolve_auto().id == "openai/gpt-4o"
+
+
+def test_auto_skips_a_provider_that_did_not_answer(fresh, vendor_http, monkeypatch):
+    endpoints.save("lmstudio", "http://localhost:1234")
+    vendor_http.reply = vendors(ollama=False, endpoints_={"http://localhost:1234/v1": LMSTUDIO_MODELS})
+    refresh()
+    assert md.resolve_auto().id == "lmstudio/qwen2.5-7b-instruct"
+    # LM Studio stopped: its cached list stays in the picker, auto no longer runs it.
+    vendor_http.reply = vendors(ollama=False)
+    refresh()
+    assert md.payload()["providers"]["lmstudio"]["ok"] is False
+    assert md.resolve_auto() is None
+    # a key the provider refused is skipped the same way.
+    monkeypatch.setenv("XAI_API_KEY", "test-xai-key")
+    vendor_http.reply = vendors(ollama=False, xai=lambda r: httpx.Response(401, text="bad key"))
+    refresh()
+    assert md.resolve_auto() is None
+
+
 # -------------------------------------------------------- vanished models
 
 def _llm_graph(model: str, node_type: str = "core.ai.llm") -> dict:
