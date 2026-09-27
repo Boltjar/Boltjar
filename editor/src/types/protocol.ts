@@ -86,8 +86,8 @@ export interface Widget {
    *  fixed). A node with >=1 expandable field is resizable. */
   expand?: boolean;
   /** a model picker (kind "model") lists the models of this family: llm | tts |
-   *  stt | embed | rerank. Its `options` are the special values it offers above
-   *  the list ("auto" on the LLM). null on every other widget. */
+   *  stt | embed | rerank. It starts with no model picked (no default, no
+   *  special values: a model can cost money). null on every other widget. */
   model_kind?: string | null;
 }
 
@@ -193,8 +193,6 @@ export type ProviderFailure = "not_running" | "unreachable" | "timeout" | "key_r
 /** GET /api/models (and POST /api/models/refresh) payload: the live list. */
 export interface ModelsInfo {
   models: ModelManifest[];
-  /** the model an "auto" LLM runs now; null means the offline mock. */
-  auto?: string | null;
   /** the newest successful refresh (ISO 8601 UTC); null before the first. */
   updated?: string | null;
   /** a background refresh is running (the list will change soon). */

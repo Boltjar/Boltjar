@@ -1,8 +1,9 @@
 // ============================================================================
 // Framework-free test script for the model picker's decisions: which models it
 // lists (the runnable ones of the node's family), how it groups them (by
-// provider, in the served order), and what its "last updated" line and its
-// button say. Drives the REAL src/lib/modelMeta.ts, transpiled with the
+// provider, in the served order), what its dropdown holds (the model rows only,
+// never an Auto row, or "Add a connection" when nothing of its family can run),
+// and what its "last updated" line and its button say. Drives the REAL src/lib/modelMeta.ts, transpiled with the
 // installed TypeScript compiler (its only imports are type-only). Run:
 // `npm run test`.
 // ============================================================================
@@ -20,7 +21,8 @@ async function load(rel) {
   return import("data:text/javascript," + encodeURIComponent(js));
 }
 const {
-  AUTO_MODEL, ago, listState, modelStatus, pickerGroups, runnableModels, searchModels, updatedLine,
+  ago, listState, modelStatus, pickerButton, pickerGroups, pickerList, runnableModels, searchModels,
+  updatedLine,
 } = await load("modelMeta.ts");
 
 let failures = 0;
@@ -75,10 +77,24 @@ check("a search that matches nothing runnable gives no group",
   pickerGroups(served, "llm", "qwen3:14b"), []);
 check("an empty search keeps every row", searchModels(served, "  ").length, served.length);
 
+// ---- the dropdown: model rows only, never an Auto row
+const rowsOf = (list) => list.kind === "models" ? list.groups.flatMap((g) => g.models.map((m) => m.id)) : list.kind;
+check("an LLM picker lists its runnable models and nothing above them",
+  rowsOf(pickerList(served, "llm", "")),
+  ["ollama/gemma4:e4b", "ollama/llama3.2:latest", "anthropic/claude-opus-5", "xai/grok-4.7", "pack/legacy"]);
+check("searching auto finds no Auto row", pickerList(served, "llm", "auto"), { kind: "empty" });
+check("a search that hides every runnable model says so", pickerList(served, "llm", "qwen3:14b"), { kind: "empty" });
+check("with nothing connected an LLM picker offers Add a connection",
+  pickerList(served.map((m) => ({ ...m, available: false })), "llm", ""), { kind: "connect" });
+check("with an empty list it offers Add a connection", pickerList([], "llm", ""), { kind: "connect" });
+check("a TTS picker with no runnable TTS model offers Add a connection",
+  pickerList(served.filter((m) => m.id !== "xai/tts"), "tts", ""), { kind: "connect" });
+check("Add a connection stays while searching", pickerList([], "rerank", "bge"), { kind: "connect" });
+
 // ---- the "last updated" line
 const now = Date.parse("2026-09-27T12:00:00Z");
 const meta = (extra = {}) => ({
-  list: "ready", auto: null, updated: null, refreshing: false, providers: {}, ...extra,
+  list: "ready", updated: null, refreshing: false, providers: {}, ...extra,
 });
 check("never refreshed", updatedLine(meta(), now), "not checked yet");
 check("refreshing", updatedLine(meta({ refreshing: true, updated: "2026-09-27T11:59:00Z" }), now), "refreshing…");
@@ -128,10 +144,17 @@ check("a failure of no known kind (an older cache) failed",
 // ---- what the button says about the picked model
 const byId = new Map(served.map((m) => [m.id, m]));
 check("nothing picked", modelStatus("", byId, meta()), { state: "none", note: "" });
-check("auto names the model it runs",
-  modelStatus(AUTO_MODEL, byId, meta({ auto: "ollama/gemma4:e4b" })), { state: "auto", note: "runs Gemma 4 e4b (Ollama)" });
-check("auto with nothing connected runs the mock",
-  modelStatus(AUTO_MODEL, byId, meta()), { state: "auto", note: "runs the mock until a model is connected" });
+check("nothing picked reads select a model",
+  pickerButton("", undefined, modelStatus("", byId, meta())), { label: "select a model", sub: "", warn: false });
+check("a picked model reads its label and provider",
+  pickerButton("anthropic/claude-opus-5", byId.get("anthropic/claude-opus-5"),
+    modelStatus("anthropic/claude-opus-5", byId, meta())),
+  { label: "Claude Opus 5", sub: "Anthropic", warn: false });
+check("a vanished pick keeps its id and says why",
+  pickerButton("ollama/llama3.1:8b", undefined, modelStatus("ollama/llama3.1:8b", byId, meta())),
+  { label: "ollama/llama3.1:8b", sub: "not in the model list any more", warn: true });
+check("auto is no special pick any more: it is a model nothing lists",
+  modelStatus("auto", byId, meta()), { state: "missing", note: "not in the model list any more" });
 check("an unavailable model carries the server's reason",
   modelStatus("ollama/qwen3:14b", byId, meta()),
   { state: "unavailable", note: "not installed in Ollama: pull it in Settings, AI Providers" });
@@ -151,9 +174,6 @@ check("while the list loads a picked model is neutral",
 check("a list that could not be read claims nothing about the model",
   modelStatus("xai/grok-4.7", empty, meta({ list: "failed" })),
   { state: "unknown", note: "the model list could not be read" });
-check("auto while the list loads says what it does, not that it runs the mock",
-  modelStatus(AUTO_MODEL, empty, meta({ list: "loading" })),
-  { state: "auto", note: "picks a model that can run when it runs" });
 check("the mock is fine before the list too",
   modelStatus("mock/echo", empty, meta({ list: "failed" })), { state: "ok", note: "" });
 

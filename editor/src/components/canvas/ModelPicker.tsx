@@ -2,9 +2,11 @@
 // ModelPicker: a model node's model selector. A button showing the current
 // model's label opens a searchable dropdown of the models that can run now,
 // grouped by provider, each row a label + capability chips (in/out modalities,
-// tools, thinking, the context size). A picker that offers "auto" lists it first:
-// the runtime runs the first runnable model, and the row says which one. A
-// footer says when the list was last updated and refreshes it on demand.
+// tools, thinking, the context size). It never picks a model for anyone (a model
+// can cost money): with none picked the button says "select a model", and when
+// no model of its family can run, the list offers "Add a connection" (Settings,
+// AI Providers). A footer says when the list was last updated and refreshes it
+// on demand.
 // Selecting a model calls back so the node can set config.model, reset params to
 // the model's defaults and drop stale promotions. It never mutates state itself
 // (it only reports a choice), so the graph store stays the single source of truth.
@@ -21,13 +23,12 @@ import type { ModelManifest } from "../../types/protocol";
 import { Icon } from "../../lib/icons";
 import { typeColorVar } from "../../lib/types";
 import {
-  AUTO_MODEL,
   formatContext,
   modalityIcon,
   modelStatus,
-  pickerGroups,
+  pickerButton,
+  pickerList,
   providerLabel,
-  runnableModels,
   updatedLine,
 } from "../../lib/modelMeta";
 import { useEditor } from "../../lib/editorContext";
@@ -38,8 +39,7 @@ interface ModelPickerProps {
   manifests: ModelManifest[];
   /** the family this picker lists (the model widget's model_kind). */
   kind: string;
-  /** offer "auto" above the list (declared on the model widget). */
-  offersAuto?: boolean;
+  /** the picked model id; "" when none is picked. */
   selectedId: string;
   /** the resolved manifest for selectedId, if any (so a missing model still shows). */
   selected: ModelManifest | undefined;
@@ -65,7 +65,6 @@ const VIEWPORT_MARGIN = 8;
 export function ModelPicker({
   manifests,
   kind,
-  offersAuto = false,
   selectedId,
   selected,
   onSelect,
@@ -140,7 +139,7 @@ export function ModelPicker({
   }, [open]);
 
   // the panel's natural height (its content, up to its own cap), measured after
-  // every render before paint, so a short list (Auto and "Add a connection")
+  // every render before paint, so a short list (a lone "Add a connection")
   // opens against the trigger instead of where a full-height panel would sit.
   // The list scrolls when the panel is held shorter, so its full height is the
   // panel's height minus what the list shows plus all the list holds.
@@ -163,15 +162,11 @@ export function ModelPicker({
     if (panelH === null || Math.abs(natural - panelH) > 0.5) setPanelH(natural);
   });
 
-  const runnable = useMemo(() => runnableModels(manifests, kind), [manifests, kind]);
-  const groups = useMemo(() => pickerGroups(manifests, kind, query), [manifests, kind, query]);
-  const flat = useMemo(() => groups.flatMap((g) => g.models), [groups]);
-  const q = query.trim().toLowerCase();
-  const showAuto = offersAuto && (!q || "auto".includes(q));
-  // keyboard order: auto first (when offered), then the rows as grouped.
+  const list = useMemo(() => pickerList(manifests, kind, query), [manifests, kind, query]);
+  // keyboard order: the rows as grouped.
   const navIds = useMemo(
-    () => [...(showAuto ? [AUTO_MODEL] : []), ...flat.map((m) => m.id)],
-    [showAuto, flat],
+    () => (list.kind === "models" ? list.groups.flatMap((g) => g.models.map((m) => m.id)) : []),
+    [list],
   );
 
   useEffect(() => {
@@ -201,16 +196,7 @@ export function ModelPicker({
   };
 
   const status = modelStatus(selectedId, models, modelsMeta);
-  const warn = status.state === "missing" || status.state === "unavailable";
-  const label =
-    status.state === "auto" ? "Auto" : selected?.label ?? (selectedId || "select a model");
-  let sub = "";
-  if (status.state === "auto" || warn) sub = status.note;
-  else if (selected) {
-    // a voice / embed model has no token context: show just its provider.
-    sub = `${providerLabel(selected.provider)}${selected.context > 0 ? ` · ${formatContext(selected.context)} ctx` : ""}`;
-  }
-  const autoNote = modelStatus(AUTO_MODEL, models, modelsMeta).note;
+  const { label, sub, warn } = pickerButton(selectedId, selected, status);
 
   // screen-space placement for the portaled panel (lib/popover): against the
   // trigger, below it when the panel's measured height fits there, above it
@@ -287,42 +273,26 @@ export function ModelPicker({
             />
           </div>
           <div className="mp-list nowheel">
-            {showAuto && (
+            {list.kind === "connect" ? (
+              // Nothing of this family can run: invite the user to add a connection.
               <button
                 type="button"
-                className={`mp-row ${navIds[active] === AUTO_MODEL ? "active" : ""} ${selectedId === AUTO_MODEL ? "selected" : ""}`}
-                onMouseEnter={() => setActive(0)}
-                onClick={() => pick(AUTO_MODEL)}
+                className="mp-getmore nodrag"
+                onClick={() => { setOpen(false); openConnections(); }}
               >
-                <span className="mp-row-main">
-                  <span className="mp-row-label">Auto</span>
-                  {selectedId === AUTO_MODEL && <Icon name="checkmark" className="mp-row-check" />}
+                <span className="mp-getmore-tile">
+                  <Icon name="git-network-outline" />
                 </span>
-                <span className="mp-row-note">{autoNote}</span>
+                <span className="mp-getmore-text">
+                  <span className="mp-getmore-primary">Add a connection</span>
+                  <span className="mp-getmore-secondary">connect a provider to get models</span>
+                </span>
+                <Icon name="chevron-forward-outline" className="mp-getmore-arrow" />
               </button>
-            )}
-            {flat.length === 0 ? (
-              runnable.length === 0 ? (
-                // Nothing of this family can run: invite the user to add a connection.
-                <button
-                  type="button"
-                  className="mp-getmore nodrag"
-                  onClick={() => { setOpen(false); openConnections(); }}
-                >
-                  <span className="mp-getmore-tile">
-                    <Icon name="git-network-outline" />
-                  </span>
-                  <span className="mp-getmore-text">
-                    <span className="mp-getmore-primary">Add a connection</span>
-                    <span className="mp-getmore-secondary">connect a provider to get models</span>
-                  </span>
-                  <Icon name="chevron-forward-outline" className="mp-getmore-arrow" />
-                </button>
-              ) : showAuto ? null : (
-                <div className="mp-empty">no matching model</div>
-              )
+            ) : list.kind === "empty" ? (
+              <div className="mp-empty">no matching model</div>
             ) : (
-              groups.map((grp) => (
+              list.groups.map((grp) => (
                 <div className="mp-group" key={grp.provider}>
                   <div className="mp-group-head">{providerLabel(grp.provider)}</div>
                   {grp.models.map((m) => {

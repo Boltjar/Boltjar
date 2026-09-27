@@ -51,12 +51,9 @@ export function groupByProvider(manifests: ModelManifest[]): Array<{ provider: s
 // ----------------------------------------------------------- the model picker
 // The picker lists only what can run now (the server marks each model
 // `available`), for the node's family, grouped by provider in the served order.
-// Pure, so the grouping and the lines it shows are testable without React.
-
-/** The special value an LLM picker offers above the list: the runtime runs the
- *  first runnable model (an installed Ollama chat model, else a model of another
- *  connected provider that answered, curated ones first). */
-export const AUTO_MODEL = "auto";
+// It never picks a model for anyone (a model can cost money): its rows are the
+// models, and nothing above them. Pure, so the grouping and the lines it shows
+// are testable without React.
 
 /** The models a picker of `kind` lists: its family, runnable now. A manifest
  *  without a kind is an LLM (older TOMLs). */
@@ -81,6 +78,21 @@ export function pickerGroups(
   return groupByProvider(searchModels(runnableModels(manifests, kind), query));
 }
 
+/** The body of a picker's dropdown: the model rows (`models`, grouped), the
+ *  "Add a connection" row that opens Settings on AI Providers when no model of
+ *  its family can run (`connect`: nothing is connected for it), or "no
+ *  matching model" when a search hides every runnable one (`empty`). */
+export type PickerList =
+  | { kind: "models"; groups: Array<{ provider: string; models: ModelManifest[] }> }
+  | { kind: "connect" }
+  | { kind: "empty" };
+
+export function pickerList(manifests: readonly ModelManifest[], kind: string, query: string): PickerList {
+  if (runnableModels(manifests, kind).length === 0) return { kind: "connect" };
+  const groups = pickerGroups(manifests, kind, query);
+  return groups.length ? { kind: "models", groups } : { kind: "empty" };
+}
+
 /** The live list's state, as GET /api/models reports it (times are ISO UTC).
  *  `list` says whether a list was read at all: "loading" before the first
  *  answer, "failed" when GET /api/models failed and none was ever read, "ready"
@@ -88,7 +100,6 @@ export function pickerGroups(
  *  called missing. */
 export interface ModelsMeta {
   list: "loading" | "failed" | "ready";
-  auto: string | null;
   updated: string | null;
   refreshing: boolean;
   providers: Record<string, Pick<ProviderListing, "ok" | "checked" | "updated" | "error" | "failure">
@@ -162,31 +173,18 @@ export function updatedLine(meta: ModelsMeta, nowMs: number): string {
   return down.length ? `${head} · ${down.join(", ")}` : head;
 }
 
-/** What the picker's button says about the picked model: `ok`, `auto` (with
- *  the model it runs now), `unavailable` (with the server's reason), `missing`
- *  (no longer in the list), `unknown` (no list was read yet, so nothing can be
- *  claimed either way) or `none` (nothing picked). A `mock/` model is the
- *  offline mock, which always runs. */
+/** What the picker's button says about the picked model: `ok`,
+ *  `unavailable` (with the server's reason), `missing` (no longer in the
+ *  list), `unknown` (no list was read yet, so nothing can be claimed either
+ *  way) or `none` (nothing picked). A `mock/` model is the offline mock, which
+ *  always runs. */
 export function modelStatus(
   selectedId: string,
   models: ReadonlyMap<string, ModelManifest>,
-  meta: Pick<ModelsMeta, "auto" | "list">,
-): { state: "ok" | "auto" | "unavailable" | "missing" | "unknown" | "none"; note: string } {
+  meta: Pick<ModelsMeta, "list">,
+): { state: "ok" | "unavailable" | "missing" | "unknown" | "none"; note: string } {
   if (!selectedId) return { state: "none", note: "" };
   const listed = meta.list === "ready";
-  if (selectedId === AUTO_MODEL) {
-    const runs = meta.auto ? models.get(meta.auto) : undefined;
-    return {
-      state: "auto",
-      note: !listed
-        ? "picks a model that can run when it runs"
-        : runs
-          ? `runs ${runs.label}`
-          : meta.auto
-            ? `runs ${meta.auto}`
-            : "runs the mock until a model is connected",
-    };
-  }
   if (selectedId.startsWith("mock/")) return { state: "ok", note: "" };
   if (!listed) {
     return { state: "unknown", note: meta.list === "failed" ? "the model list could not be read" : "" };
@@ -195,4 +193,23 @@ export function modelStatus(
   if (!manifest) return { state: "missing", note: "not in the model list any more" };
   if (manifest.available === false) return { state: "unavailable", note: manifest.reason ?? "not available now" };
   return { state: "ok", note: "" };
+}
+
+/** The words on the picker's button: the picked model's label, or its id when
+ *  no manifest describes it, or "select a model" when none is picked; under it,
+ *  why a picked model cannot run, else its provider and context size. */
+export function pickerButton(
+  selectedId: string,
+  selected: ModelManifest | undefined,
+  status: ReturnType<typeof modelStatus>,
+): { label: string; sub: string; warn: boolean } {
+  const warn = status.state === "missing" || status.state === "unavailable";
+  const label = selected?.label ?? (selectedId || "select a model");
+  let sub = "";
+  if (warn) sub = status.note;
+  else if (selected) {
+    // a voice / embed model has no token context: show just its provider.
+    sub = `${providerLabel(selected.provider)}${selected.context > 0 ? ` · ${formatContext(selected.context)} ctx` : ""}`;
+  }
+  return { label, sub, warn };
 }

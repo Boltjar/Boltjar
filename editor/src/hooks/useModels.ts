@@ -1,8 +1,8 @@
 // ============================================================================
 // useModels: the live model list (GET /api/models) as a fast Map<id,
 // ModelManifest> for the model nodes to resolve a model by id (the capability
-// source that reshapes a node's ports and knobs), plus the list's state: what
-// "auto" runs, when it was last updated and which providers did not answer.
+// source that reshapes a node's ports and knobs), plus the list's state: when
+// it was last updated and which providers did not answer.
 //
 // `reload` reads the server's list again (cheap: the server answers from its
 // cache and refreshes a stale list in the background). `refresh` asks every
@@ -40,7 +40,6 @@ export interface ModelsState {
 function metaOf(info: ModelsInfo | null, loading: boolean, error: string | null): ModelsMeta {
   return {
     list: listState(info !== null, loading, error),
-    auto: info?.auto ?? null,
     updated: info?.updated ?? null,
     refreshing: info?.refreshing ?? false,
     providers: info?.providers ?? {},

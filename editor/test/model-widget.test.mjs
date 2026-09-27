@@ -44,7 +44,7 @@ check("the picker widget is found by kind, not by name",
   modelWidgetOf(def("acme.voice", [widget("text", "text"), widget("voice_model", "model")]))?.name, "voice_model");
 
 check("a core node reads the same way (the LLM declares llm)",
-  modelKindOf(def("core.ai.llm", [widget("model", "model", { model_kind: "llm", options: ["auto"] })])), "llm");
+  modelKindOf(def("core.ai.llm", [widget("model", "model", { model_kind: "llm" })])), "llm");
 
 // a switch writes the model under the widget's own name, whatever it is.
 const voice = def("acme.voice", [widget("voice_model", "model", { model_kind: "tts" })]);

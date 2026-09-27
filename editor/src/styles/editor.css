@@ -964,8 +964,6 @@ button{font-family:inherit;}
 
 /* the picked model can not run (vanished, not installed, no key): say why */
 .mp-trig-sub.warn{color:var(--warn);}
-/* the "auto" row: which model it runs now */
-.mp-row-note{font-family:var(--font-mono); font-size:9px; color:var(--ink-faint); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
 /* footer: when the list was last updated + refresh on demand */
 .mp-foot{display:flex; align-items:center; gap:8px; padding:6px 8px 6px 10px; border-top:1px solid var(--line); flex:none;}
 .mp-updated{flex:1; min-width:0; font-family:var(--font-mono); font-size:9px; color:var(--ink-faint);

@@ -704,7 +704,6 @@ function LLMBody({
       <ModelPicker
         manifests={[...new Set(models.values())]}
         kind={widget.model_kind || "llm"}
-        offersAuto={widget.options.includes("auto")}
         selectedId={selectedId}
         selected={manifest}
         onSelect={onSelectModel}

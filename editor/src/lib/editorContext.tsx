@@ -26,7 +26,7 @@ export interface EditorContextValue {
   defs: Map<string, NodeDef>;
   /** model id -> manifest, so the LLM node + inspector resolve the selected model. */
   models: ReadonlyMap<string, ModelManifest>;
-  /** the live list's state: what "auto" runs, when it was updated, who answered. */
+  /** the live list's state: whether it was read, when it was updated, who answered. */
   modelsMeta: ModelsMeta;
   /** read the model list again (the server answers from its cache). */
   reloadModels: () => Promise<void>;
