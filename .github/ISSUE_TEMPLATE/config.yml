@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Ask a question
+    url: https://github.com/Boltjar/Boltjar/discussions/categories/q-a
+    about: Questions about using Boltjar get answered in Discussions Q&A.
+  - name: Share an idea
+    url: https://github.com/Boltjar/Boltjar/discussions/categories/ideas
+    about: Early ideas and wishes, before they are a concrete feature request.
+  - name: Read the docs
+    url: https://boltjar.link/docs
+    about: Guides and reference for building with Boltjar.
+  - name: Report a security problem
+    url: https://github.com/Boltjar/Boltjar/security/advisories/new
+    about: Your report goes privately to the maintainer. Please never post one in a public issue.

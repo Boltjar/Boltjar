@@ -1,0 +1,33 @@
+name: Feature request
+description: A concrete change or a new node you want in Boltjar.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Start with the problem. A clear problem often has a better answer than the first idea for it.
+
+        Still exploring? [Discussions Ideas](https://github.com/Boltjar/Boltjar/discussions/categories/ideas) is the place to think out loud before it becomes a request.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to build, and where does Boltjar get in the way?
+      placeholder: I want a graph that ... but ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: The idea
+      description: What would you add or change? A new node, a new port or knob on an existing node, an editor change?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives
+      description: Other ways around it you tried or thought about. Wiring existing nodes together counts.

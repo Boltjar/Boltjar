@@ -1,0 +1,84 @@
+name: Bug report
+description: Something in Boltjar is broken or behaves differently than it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. One bug per issue, and a quick search of the [open issues](https://github.com/Boltjar/Boltjar/issues) first helps a lot.
+
+        Questions go to [Discussions Q&A](https://github.com/Boltjar/Boltjar/discussions/categories/q-a). A security problem never goes in a public issue: [report it privately](https://github.com/Boltjar/Boltjar/security/advisories/new).
+
+  - type: input
+    id: app_version
+    attributes:
+      label: Boltjar version
+      description: |
+        From the Boltjar folder with the venv active: `python -c "import boltjar; print(boltjar.__version__)"`. If you run from a git clone, add the commit from `git rev-parse --short HEAD`.
+      placeholder: 0.1.0 (a1b2c3d)
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: Windows 11, macOS 15, Ubuntu 24.04
+    validations:
+      required: true
+
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      description: |
+        The one inside the venv: `.venv\Scripts\python --version` on Windows, `.venv/bin/python --version` on macOS and Linux.
+      placeholder: 3.12.10
+    validations:
+      required: true
+
+  - type: textarea
+    id: what_happened
+    attributes:
+      label: What happened
+      description: What you saw. Error messages and the node they came from help most.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The shortest path from a fresh start to the bug.
+      placeholder: |
+        1. Open the chat example
+        2. Turn it On
+        3. Send "hello" from Chat Input
+        4. The Response Preview stays empty
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+
+  - type: textarea
+    id: graph
+    attributes:
+      label: Graph JSON (optional)
+      description: |
+        The smallest graph that shows the bug. Saved graphs live in `user/graphs/`.
+
+        **Remove API keys, secrets and personal data before you paste.** A graph keeps every node setting exactly as typed, so check webhook secrets, HTTP headers, prompts, file paths and text values. A `{{secret.NAME}}` token is fine to leave in: it holds a name, not the key.
+      render: json
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs (optional)
+      description: |
+        The server console output around the error. Check it for keys and personal data too.
+      render: shell
