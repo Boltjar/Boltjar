@@ -23,10 +23,23 @@ fail() { printf '%s\n' "$*" >&2; exit 1; }
 
 supported() { "$1" -c "$SUPPORTED" >/dev/null 2>&1; }
 
+# On macOS the Pythons in /usr/bin are stubs until the Command Line Tools are
+# installed, and running one opens the tools' install dialog. So they are only
+# tried once xcode-select reports the tools.
+macos_stub() {
+    [ "$(uname -s)" = Darwin ] || return 1
+    case $1 in
+        /usr/bin/*) ! xcode-select -p >/dev/null 2>&1 ;;
+        *) return 1 ;;
+    esac
+}
+
 find_python() {
     for candidate in python3.12 python3.13 python3.11 python3 python; do
-        if command -v "$candidate" >/dev/null 2>&1 && supported "$candidate"; then
-            PY=$(command -v "$candidate")
+        path=$(command -v "$candidate" 2>/dev/null) || continue
+        macos_stub "$path" && continue
+        if supported "$path"; then
+            PY=$path
             return 0
         fi
     done
