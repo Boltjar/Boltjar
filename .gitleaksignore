@@ -1,0 +1,6 @@
+# Findings the secret scan skips, one fingerprint per line
+# (commit:file:rule-id:line, as gitleaks prints it). Only made-up test values.
+
+# tests/test_redaction.py KEY, a made-up key shaped like a real one; the line now
+# carries gitleaks:allow, this entry covers the commit that added it.
+3ab2a942e17c834cd1aaa0cfc2b12b0ff007d541:tests/test_redaction.py:generic-api-key:14

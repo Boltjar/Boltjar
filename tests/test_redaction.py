@@ -11,7 +11,7 @@ import boltjar.nodes.core  # noqa: F401  (registers the core nodes)
 from boltjar import secrets
 from boltjar.runtime import Runtime
 
-KEY = "sk-live-0123456789abcdef"
+KEY = "sk-live-0123456789abcdef"  # gitleaks:allow (a made-up key shaped like a real one)
 
 
 @pytest.fixture(autouse=True)
