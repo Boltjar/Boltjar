@@ -1,15 +1,20 @@
-"""The terminal console: capability detection, painting, the checklist, the log
-line format and the live graph lines."""
+"""The terminal console: capability detection, painting, the banner with the
+boot checklist, the side-accent blocks, the log line format and the live graph
+lines."""
 from __future__ import annotations
 
 import io
 import logging
+import re
 import sys
+import time
 
 import pytest
 
-from boltjar import console
-from boltjar.console import Caps, Console, GraphLines, LogFormatter, Style
+from boltjar import banner_art, console
+from boltjar.console import Caps, Console, GraphLines, LogFormatter, Row, Style
+
+SGR = re.compile(r"\x1b\[([0-9;]*)m")
 
 
 class FakeStream(io.StringIO):
@@ -30,6 +35,9 @@ def caps_for(env: dict, platform: str = "linux", tty: bool = True, vt: bool = Tr
              encoding: str = "utf-8") -> Caps:
     return console.detect(FakeStream(tty, encoding), env=env, platform=platform,
                           vt_probe=lambda _stream: vt)
+
+
+COLOUR = {tier: Caps(tty=True, vt=True, color=tier, unicode=True) for tier in ("truecolor", "256", "16")}
 
 
 # ---------------------------------------------------------------- detection
@@ -88,91 +96,270 @@ def test_rgb_to_256_picks_the_cube_or_the_grey_ramp():
     assert console.rgb_to_256(128, 128, 128) == 244
 
 
+def test_rgb_to_16_picks_the_nearest_ansi_colour():
+    assert console.rgb_to_16(0x06, 0xF2, 0xF9) == 96  # the logo cyan: bright cyan
+    assert console.rgb_to_16(0x36, 0x51, 0xFA) == 94  # the logo indigo: bright blue
+    assert console.rgb_to_16(250, 10, 10) == 91
+
+
 def test_style_writes_each_tier():
-    text = "ok"
-    true = Style(Caps(tty=True, vt=True, color="truecolor"))("ok", "good")
-    assert true == "\x1b[38;2;74;222;128mok\x1b[0m"
-    assert Style(Caps(tty=True, vt=True, color="256"))(text, "good").startswith("\x1b[38;5;")
-    assert Style(Caps(tty=True, vt=True, color="16"))(text, "good") == "\x1b[32mok\x1b[0m"
-    assert Style(Caps())(text, "good", bold=True) == "ok"
+    assert Style(COLOUR["truecolor"])("ok", "good") == "\x1b[38;2;74;222;128mok\x1b[0m"
+    assert Style(COLOUR["256"])("ok", "good").startswith("\x1b[38;5;")
+    assert Style(COLOUR["16"])("ok", "good") == "\x1b[32mok\x1b[0m"
+    assert Style(Caps())("ok", "good", bold=True) == "ok"
+
+
+def test_a_role_on_16_colours_keeps_its_meaning():
+    # the slate rule would be nearest to black, which vanishes on a dark theme
+    assert Style(COLOUR["16"])("x", "rule") == "\x1b[90mx\x1b[0m"
+    assert Style(COLOUR["16"])("x", "soft", bold=True) == "\x1b[1;39mx\x1b[0m"
 
 
 def test_emphasis_is_bold_in_the_terminal_foreground():
-    assert Style(Caps(tty=True, vt=True, color="truecolor"))("Boltjar", bold=True) == "\x1b[1mBoltjar\x1b[0m"
+    assert Style(COLOUR["truecolor"])("Boltjar", bold=True) == "\x1b[1mBoltjar\x1b[0m"
 
 
 def test_links_fall_back_to_the_plain_url():
     url = "http://127.0.0.1:8770"
-    assert Style(Caps())("x") == "x"
     assert Style(Caps()).link(url) == url
     linked = Style(Caps(tty=True, vt=True, color="16", links=True)).link(url)
     assert linked == f"\x1b]8;;{url}\x1b\\{url}\x1b]8;;\x1b\\"
     assert console.visible_len(linked) == len(url)
 
 
-def test_glyphs_have_an_ascii_set():
-    assert Style(Caps(unicode=True)).glyph("ok") == "✓"
-    assert Style(Caps(unicode=False)).glyph("ok") == "+"
-    assert Style(Caps(unicode=False)).glyph("bad") == "x"
+def test_status_glyphs_and_their_ascii_set():
+    unicode, ascii_ = Style(Caps(unicode=True)), Style(Caps(unicode=False))
+    assert [unicode.glyph(t) for t in ("ok", "warn", "bad", "info")] == ["✓", "!", "✗", "ℹ"]
+    assert [ascii_.glyph(t) for t in ("ok", "warn", "bad", "info")] == ["+", "!", "x", "i"]
 
 
-# ---------------------------------------------------------------- the checklist
-def plain_console(width: int = 80) -> tuple[Console, FakeStream]:
+def test_status_colours():
+    s = Style(COLOUR["truecolor"])
+    assert s.glyph("ok") == "\x1b[38;2;74;222;128m✓\x1b[0m"
+    assert s.glyph("warn") == "\x1b[38;2;234;179;8m!\x1b[0m"
+    assert s.glyph("bad") == "\x1b[38;2;239;68;68m✗\x1b[0m"
+    assert s.glyph("info") == "\x1b[38;2;96;165;250mℹ\x1b[0m"
+
+
+# ---------------------------------------------------------------- the side accent
+def test_bars_run_down_the_logo_gradient_and_back():
+    positions = [console.bar_position(i) for i in range(10)]
+    assert positions[:5] == pytest.approx([0.15, 0.35, 0.55, 0.75, 0.95])
+    assert positions[5:10] == pytest.approx([0.75, 0.55, 0.35, 0.15, 0.35])
+    assert console.gradient(0) == (0x06, 0xF2, 0xF9)
+    assert console.gradient(1) == (0x36, 0x51, 0xFA)
+
+
+def test_a_bar_is_a_half_block_in_the_gradient_colour():
+    top = console.gradient(0.15)
+    assert Style(COLOUR["truecolor"]).bar(0) == "\x1b[38;2;{};{};{}m▌\x1b[0m ".format(*top)
+    assert Style(Caps(unicode=False)).bar(0) == "| "
+
+
+def test_a_section_rule_is_the_title_between_dashes():
+    rule = Style(Caps(unicode=True)).rule("Graphs")
+    assert rule == "── Graphs " + "─" * 38 and len(rule) == console.RULE_WIDTH
+    assert Style(Caps(unicode=False)).rule("Graphs").startswith("-- Graphs ---")
+    noted = Style(Caps(unicode=True)).rule("Graphs", "times in UTC+10:00")
+    assert noted.startswith("── Graphs  times in UTC+10:00 ─") and len(noted) == console.RULE_WIDTH
+
+
+def test_a_section_rule_paints_its_title_blue_and_its_dashes_slate():
+    rule = Style(COLOUR["truecolor"]).rule("Graphs")
+    assert "\x1b[1;38;2;59;130;246mGraphs\x1b[0m" in rule
+    assert "\x1b[38;2;51;65;85m─" in rule
+
+
+def plain_console(width: int = 120) -> tuple[Console, FakeStream]:
     stream = FakeStream(tty=False)
-    return Console(stream, Caps(unicode=True)), stream
+    return Console(stream, Caps(unicode=True), width=width), stream
 
 
-def test_check_lines_align_and_carry_a_fix(monkeypatch):
-    monkeypatch.setattr(console, "terminal_width", lambda _s=None: 80)
+def test_the_ready_block():
     out, stream = plain_console()
-    out.check("python", "3.12.9")
-    out.check("port", "8770 is in use", "bad", fix="use another port: --port 8771")
+    out.ready("http://127.0.0.1:8770", "opening your browser · Ctrl+C stops everything")
     assert stream.getvalue().splitlines() == [
-        "    ✓ python       3.12.9",
-        "    ✗ port         8770 is in use",
-        "                   fix: use another port: --port 8771",
+        "▌ Ready  →  http://127.0.0.1:8770",
+        "▌ opening your browser · Ctrl+C stops everything",
     ]
 
 
-def test_long_text_wraps_under_the_detail_column(monkeypatch):
-    monkeypatch.setattr(console, "terminal_width", lambda _s=None: 40)
+def test_the_ready_url_is_a_link_where_the_terminal_makes_one():
+    stream = FakeStream()
+    out = Console(stream, Caps(tty=True, vt=True, color="truecolor", unicode=True, links=True), width=120)
+    out.ready("http://127.0.0.1:8770", "note")
+    first = stream.getvalue().splitlines()[0]
+    assert "\x1b[1;38;2;0;229;255mReady\x1b[0m" in first  # bold brand cyan
+    assert "\x1b]8;;http://127.0.0.1:8770\x1b\\\x1b[1mhttp://127.0.0.1:8770\x1b[0m\x1b]8;;\x1b\\" in first
+
+
+def test_a_section_opens_a_new_block():
     out, stream = plain_console()
-    out.check("editor", "not built: the API runs, the editor page does not", "warn")
-    lines = stream.getvalue().splitlines()
-    assert len(lines) > 1
-    assert all(len(line) <= 40 for line in lines)
-    assert lines[1].startswith(" " * 19) and lines[1].strip()
+    out.section("Shutdown")
+    out.line("stop", "stopping 1 graph")
+    out.line("ok", "1 graph turned off", hint="a dim hint")
+    out.goodbye()
+    assert stream.getvalue().splitlines() == [
+        "",
+        "── Shutdown " + "─" * 36,
+        "▌ ▶ stopping 1 graph",
+        "▌ ✓ 1 graph turned off",
+        "▌   a dim hint",
+        "▌ bye",
+    ]
 
 
-def test_a_step_settles_to_what_its_body_reported(monkeypatch):
-    monkeypatch.setattr(console, "terminal_width", lambda _s=None: 80)
-    out, stream = plain_console()
-    with out.step("providers") as step:
-        step.done("ollama, xai")
-    assert stream.getvalue() == "    ✓ providers    ollama, xai\n"
+def test_bye_is_brand_cyan():
+    stream = FakeStream()
+    Console(stream, COLOUR["truecolor"], width=120).goodbye()
+    assert "\x1b[1;38;2;0;229;255mbye\x1b[0m" in stream.getvalue()
 
 
-def test_a_step_spins_only_on_a_terminal_that_can_redraw(monkeypatch):
-    monkeypatch.setattr(console, "terminal_width", lambda _s=None: 80)
+def test_pending_spins_only_on_a_terminal_that_can_redraw_and_leaves_nothing():
+    quiet, stream = plain_console()
+    with quiet.pending("loading the node packs"):
+        time.sleep(0.2)
+    assert stream.getvalue() == ""
+
     stream = FakeStream(tty=True)
-    out = Console(stream, Caps(tty=True, vt=True, color="none", unicode=True))
-    with out.step("packs") as step:
-        import time
+    out = Console(stream, Caps(tty=True, vt=True, color="none", unicode=True), width=120)
+    with out.pending("loading the node packs"):
         time.sleep(0.35)  # long enough for frames to draw
-        step.done("core")
     text = stream.getvalue()
-    assert "\r" in text and "\x1b[?25l" in text  # frames drew with the cursor hidden
-    assert text.endswith("\x1b[?25h    ✓ packs        core\n")  # cursor back, then the line
+    assert "\x1b[?25l" in text and "loading the node packs" in text
+    assert text.endswith("\r\x1b[2K\x1b[?25h")  # the line wiped, the cursor back
 
 
-def test_banner_names_the_product_and_version():
-    out, stream = plain_console()
-    out.banner("0.1.0", "a tagline")
-    assert "Boltjar 0.1.0" in stream.getvalue()
-    assert "a tagline" in stream.getvalue()
+# ---------------------------------------------------------------- the banner
+ROWS = [
+    Row("Python", "3.12.9", aside=".venv", gap="  "),
+    Row("Editor", "bundle ready"),
+    Row("Port", "8770 free"),
+    Row("Packs", "core", aside="(63 nodes)"),
+]
+
+
+def banner(width: int, rows=ROWS, caps: Caps | None = None) -> list[str]:
+    out = Console(FakeStream(tty=False), caps or Caps(unicode=True), width=width)
+    return out.banner_lines("0.1.0", rows)
+
+
+def test_the_art_data_has_a_colour_for_every_character():
+    for rows, colors in ((banner_art.FLASK, banner_art.FLASK_RGB), (banner_art.WORD, banner_art.WORD_RGB)):
+        assert len(rows) == len(colors)
+        for row, hexes in zip(rows, colors):
+            assert len(hexes) == len(row)
+            assert all(bool(hx) == (ch != " ") for ch, hx in zip(row, hexes))
+            assert all(re.fullmatch(r"[0-9A-F]{6}", hx) for hx in hexes if hx)
+
+
+def test_a_wide_window_shows_the_flask_beside_the_word_and_the_checklist():
+    lines = banner(120)
+    (word_line,) = [line for line in lines if line.endswith(banner_art.WORD[2])]
+    assert any(word_line.startswith("  " + row + " ") for row in banner_art.FLASK)
+    assert any(line.endswith("v0.1.0  Catch the spark. Keep it running.") for line in lines)
+    assert any(line.endswith("✓ Python     3.12.9  .venv") for line in lines)
+    assert any(line.endswith("✓ Packs      core (63 nodes)") for line in lines)
+    # the column beside the flask is centred on it: flask rows above and below
+    beside = [i for i, line in enumerate(lines) if "Catch the spark" in line or "✓" in line]
+    assert 1 < beside[0] and beside[-1] < len(banner_art.FLASK)
+
+
+def test_the_word_is_followed_by_a_blank_the_version_a_blank_and_the_checklist():
+    column = 2 + max(map(len, banner_art.FLASK)) + console.ART_GAP
+    lines = [line[column:] for line in banner(120)]
+    start = lines.index(banner_art.WORD[0])
+    word = len(banner_art.WORD)
+    assert lines[start:start + word] == banner_art.WORD
+    assert lines[start + word] == ""
+    assert lines[start + word + 1] == "v0.1.0  Catch the spark. Keep it running."
+    assert lines[start + word + 2] == ""
+    assert lines[start + word + 3].startswith("✓ Python")
+
+
+def test_a_window_too_narrow_for_the_flask_keeps_the_word_and_the_checklist():
+    lines = banner(80)
+    assert not any(banner_art.FLASK[5].strip() in line for line in lines)
+    assert "  " + banner_art.WORD[3] in lines
+    assert "  ✓ Editor     bundle ready" in lines
+
+
+def test_a_window_narrower_still_gets_one_plain_line():
+    lines = banner(40)
+    assert not any(banner_art.WORD[3] in line for line in lines)
+    assert "  Boltjar v0.1.0" in lines
+    assert "  ✓ Port       8770 free" in lines
+
+
+@pytest.mark.parametrize("width", [40, 43, 44, 60, 80, 89, 90, 91, 120, 200])
+def test_no_banner_line_reaches_the_last_column(width):
+    long = Row("Packs", "core; failed: " + ", ".join(f"pack-{i}" for i in range(12)), "warn",
+               aside="(63 nodes)", fixes=("the reason is in the log line above, and at /api/packs",))
+    assert max(console.visible_len(line) for line in banner(width, [*ROWS, long])) < width
+
+
+def test_the_flask_needs_room_for_the_whole_column_beside_it():
+    flask = max(map(len, banner_art.FLASK))
+    beside = len("v0.1.0  Catch the spark. Keep it running.")
+    fits = 2 + flask + console.ART_GAP + beside + 1  # the last column stays free
+    assert any(banner_art.FLASK[5] in line for line in banner(fits))
+    assert not any(banner_art.FLASK[5] in line for line in banner(fits - 1))
+
+
+def test_a_checklist_row_aligns_and_carries_its_fixes():
+    rows = [Row("Port", "8770 is in use", "bad", fixes=("use another port: --port 8771",))]
+    assert banner(80, rows)[-3:] == [
+        "  ✗ Port       8770 is in use",
+        "               fix: use another port: --port 8771",
+        "",
+    ]
+
+
+def test_an_aside_that_does_not_fit_takes_its_own_line():
+    rows = [Row("Packs", "core; failed: " + "x" * 40, "warn", aside="(63 nodes)")]
+    assert banner(80, rows)[-3:] == [f"  ! Packs      core; failed: {'x' * 40}", "               (63 nodes)", ""]
+
+
+def test_asides_and_fixes_are_dim_and_the_version_bold_soft_white():
+    text = "\n".join(banner(120, [Row("Python", "3.12.9", "warn", aside=".venv", gap="  ",
+                                      fixes=("run it again",))], COLOUR["truecolor"]))
+    assert "\x1b[2m.venv\x1b[0m" in text
+    assert "\x1b[2mfix: run it again\x1b[0m" in text
+    assert "\x1b[1;38;2;248;250;252mv0.1.0\x1b[0m  \x1b[2mCatch the spark. Keep it running.\x1b[0m" in text
+
+
+@pytest.mark.parametrize("tier, allowed", [
+    ("truecolor", r"38;2;\d+;\d+;\d+"),
+    ("256", r"38;5;\d+"),
+    ("16", r"3[0-7]|9[0-7]"),
+])
+def test_the_art_steps_down_to_the_terminals_colours(tier, allowed):
+    painted = Style(COLOUR[tier]).art(banner_art.WORD, banner_art.WORD_RGB)
+    codes = {code for row in painted for code in SGR.findall(row)} - {"0"}
+    assert codes and all(re.fullmatch(allowed, code) for code in codes)
+    assert [console.strip_ansi(row) for row in painted] == banner_art.WORD
+
+
+def test_the_art_shares_an_escape_across_a_run_of_one_colour():
+    # 16 colours give a handful of runs per row, not an escape per character
+    painted = Style(COLOUR["16"]).art(banner_art.FLASK, banner_art.FLASK_RGB)
+    assert max(len(SGR.findall(row)) for row in painted) < 8
+
+
+def test_without_colour_the_art_is_the_plain_text():
+    assert Style(Caps()).art(banner_art.FLASK, banner_art.FLASK_RGB) == banner_art.FLASK
+
+
+def test_the_whole_banner_steps_down_with_the_console():
+    for tier, banned in (("256", "38;2;"), ("16", "38;")):
+        assert banned not in "\n".join(banner(120, caps=COLOUR[tier]))
+    assert "\x1b" not in "\n".join(banner(120))
 
 
 # ---------------------------------------------------------------- log lines
+LINE = re.compile(r"^(\S) (\d\d:\d\d:\d\d)  (\S) (.*)$")
+
+
 def record(msg: str, level: int = logging.INFO, **extra) -> logging.LogRecord:
     rec = logging.LogRecord("boltjar.test", level, __file__, 1, msg, (), None)
     rec.created = 0
@@ -182,15 +369,16 @@ def record(msg: str, level: int = logging.INFO, **extra) -> logging.LogRecord:
 
 
 def plain_formatter(verbose: bool = False) -> LogFormatter:
-    return LogFormatter(verbose=verbose, stream=FakeStream(tty=False))
+    fmt = LogFormatter(verbose=verbose, stream=FakeStream(tty=False))
+    fmt.style = Style(Caps(unicode=True))
+    return fmt
 
 
-def test_log_line_is_time_glyph_tag_message():
+def test_log_line_is_bar_time_glyph_tag_message():
     line = plain_formatter().format(record("power on", tone="ok", tag="chat"))
-    stamp, glyph, rest = line.strip().split(" ", 2)
-    assert len(stamp) == 8 and stamp.count(":") == 2
-    assert glyph == "+" or glyph == "✓"
-    assert rest == "chat  power on"
+    bar, stamp, glyph, rest = LINE.match(line).groups()
+    assert (bar, glyph, rest) == ("▌", "✓", "chat  power on")
+    assert stamp == time.strftime("%H:%M:%S", time.localtime(0))
 
 
 def test_levels_map_to_the_editor_tones():
@@ -200,6 +388,12 @@ def test_levels_map_to_the_editor_tones():
     assert fmt.tone(record("x", logging.ERROR)) == "bad"
     assert fmt.tone(record("x", logging.DEBUG)) == "debug"
     assert fmt.tone(record("x", logging.INFO, tone="ok")) == "ok"
+
+
+def test_the_time_is_dim():
+    fmt = LogFormatter(stream=FakeStream())
+    fmt.style = Style(COLOUR["truecolor"])
+    assert f"\x1b[2m{time.strftime('%H:%M:%S', time.localtime(0))}\x1b[0m" in fmt.format(record("x"))
 
 
 def _raise_here():
@@ -213,8 +407,10 @@ def test_an_error_is_one_line_with_a_location_and_a_hint():
         rec = record("could not load", logging.ERROR, exc_info=sys.exc_info())
     lines = plain_formatter().format(rec).splitlines()
     assert lines[0].endswith("could not load: ValueError: the reason")
-    assert lines[1].strip() == f"at tests/test_console.py:{_raise_here.__code__.co_firstlineno + 1} in _raise_here"
+    assert lines[1].lstrip("▌ ") == \
+        f"at tests/test_console.py:{_raise_here.__code__.co_firstlineno + 1} in _raise_here"
     assert "--verbose" in lines[2]
+    assert all(line.startswith("▌ ") for line in lines)
     assert "Traceback" not in "\n".join(lines)
 
 

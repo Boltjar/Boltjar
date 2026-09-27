@@ -18,9 +18,13 @@ from boltjar import console, serve
 @pytest.fixture
 def boot(monkeypatch):
     """serve() as the terminal runs it, minus the process-wide setup (logging
-    config, stream encodings) that would leak into the rest of the suite."""
+    config, stream encodings) that would leak into the rest of the suite, on a
+    unicode terminal without colour 80 columns wide (the word and the
+    checklist, no flask), whatever terminal runs the suite."""
     monkeypatch.setattr(logging.config, "dictConfig", lambda config: None)
     monkeypatch.setattr(console, "prepare_streams", lambda: None)
+    monkeypatch.setattr(console, "detect", lambda stream=None, **kw: console.Caps(unicode=True))
+    monkeypatch.setattr(console, "terminal_width", lambda stream=None: 80)
     return serve.serve
 
 
@@ -184,10 +188,10 @@ def test_a_busy_port_is_caught_before_anything_starts():
     try:
         with pytest.raises(OSError) as exc:
             serve.bind("127.0.0.1", port)
-        detail, tone, fix = serve.port_problem(exc.value, port)
-        assert tone == "bad"
-        assert f"{port} is in use" in detail
-        assert f"--port {port + 1}" in fix
+        row = serve.port_problem(exc.value, port)
+        assert (row.label, row.tone) == ("Port", "bad")
+        assert f"{port} is in use" in row.detail
+        assert f"--port {port + 1}" in row.fixes[0]
     finally:
         holder.close()
 
@@ -203,42 +207,72 @@ def test_a_free_port_is_bound_and_handed_over():
 def test_a_reserved_port_says_so():
     denied = OSError(10013, "access denied")
     denied.winerror = 10013
-    detail, _tone, fix = serve.port_problem(denied, 8000)
-    assert "reserved or blocked" in detail and "--port 8001" in fix
+    row = serve.port_problem(denied, 8000)
+    assert "reserved or blocked" in row.detail and "--port 8001" in row.fixes[0]
 
 
 # ---------------------------------------------------------------- the checklist
-def test_python_check():
-    assert serve.python_check((3, 12, 9)) == ("3.12.9", "ok", None)
-    detail, tone, fix = serve.python_check((3, 14, 0))
-    assert tone == "warn" and "3.11 to 3.13" in detail and fix
+VENV = str(serve.ROOT / ".venv")
 
 
-def test_venv_check(tmp_path):
-    assert serve.venv_check(str(tmp_path), str(tmp_path))[1] == "warn"
-    assert serve.venv_check(str(serve.ROOT / ".venv"), str(tmp_path)) == (".venv", "ok", None)
+def test_python_row_names_the_version_and_the_virtualenv(tmp_path):
+    row = serve.python_row((3, 12, 9), VENV, str(tmp_path), "current")
+    assert row == console.Row("Python", "3.12.9", "ok", aside=".venv", gap="  ")
+    assert serve.python_row((3, 12, 9), VENV, str(tmp_path), "untracked").tone == "ok"
 
 
-def test_requirements_check_reads_the_install_stamp():
-    assert serve.requirements_check("current")[:2] == ("up to date", "ok")
-    assert serve.requirements_check("changed")[1] == "warn"
-    assert serve.requirements_check("untracked")[1] == "info"
+def test_python_row_warns_about_an_untested_version(tmp_path):
+    row = serve.python_row((3, 14, 0), VENV, str(tmp_path), "current")
+    assert row.tone == "warn" and "3.11 to 3.13" in row.detail and row.fixes
 
 
-def test_editor_check(tmp_path):
+def test_python_row_warns_without_a_virtualenv(tmp_path):
+    row = serve.python_row((3, 12, 9), str(tmp_path), str(tmp_path), "current")
+    assert (row.tone, row.aside) == ("warn", "no virtualenv")
+    assert "creates .venv" in row.fixes[0]
+
+
+def test_python_row_warns_when_the_requirements_changed(tmp_path):
+    row = serve.python_row((3, 12, 9), VENV, str(tmp_path), "changed")
+    assert row.tone == "warn" and "requirements.txt changed" in row.fixes[0]
+
+
+def test_a_virtualenv_outside_the_install_shows_only_its_name(tmp_path):
+    # a full path would put the account name in every screenshot of the terminal
+    row = serve.python_row((3, 12, 9), str(tmp_path / "envs" / "boltjar"), str(tmp_path), "current")
+    assert row.aside == "boltjar"
+
+
+def test_editor_row(tmp_path):
     index = tmp_path / "index.html"
-    assert serve.editor_check(index)[1] == "warn"
+    assert serve.editor_row(index).tone == "warn"
     index.write_text("<html></html>")
-    assert serve.editor_check(index) == ("built", "ok", None)
+    assert serve.editor_row(index) == console.Row("Editor", "bundle ready")
 
 
-def test_packs_check_counts_what_loaded():
-    import boltjar.nodes.core  # noqa: F401  (registers the core nodes)
-    detail, tone, _fix = serve.packs_check()
-    assert tone == "ok"
-    assert "core" in detail and "nodes" in detail and "models" in detail
+def test_port_row():
+    assert serve.port_row("127.0.0.1", 8770, ["localhost", "127.0.0.1", "::1"]) ==         console.Row("Port", "8770 free")
+    row = serve.port_row("0.0.0.0", 8770, ["localhost", "127.0.0.1", "::1", "studio"])
+    assert row.tone == "warn" and row.detail == "0.0.0.0:8770, reachable from other machines as studio"
 
 
+def test_packs_row_counts_the_nodes_of_every_pack():
+    report = {"loaded": [{"id": "core", "nodes": 63}, {"id": "hello", "nodes": 2}], "failed": []}
+    assert serve.packs_row(report) == console.Row("Packs", "core, hello", aside="(65 nodes)")
+
+
+def test_packs_row_names_a_pack_that_failed():
+    report = {"loaded": [{"id": "core", "nodes": 63}], "failed": [{"id": None, "folder": "broken"}]}
+    row = serve.packs_row(report)
+    assert (row.tone, row.detail, row.aside) == ("warn", "core; failed: broken", "(63 nodes)")
+    assert "/api/packs" in row.fixes[0]
+
+
+def test_packs_row_reads_the_loaded_packs():
+    from boltjar import packs
+    packs.load_all()
+    row = serve.packs_row()
+    assert row.detail.startswith("core") and row.aside.endswith(" nodes)")
 
 
 # ---------------------------------------------------------------- start and stop order
@@ -376,7 +410,7 @@ def test_allow_remote_hands_the_bind_to_the_server(boot, monkeypatch):
 
     monkeypatch.setattr(serve, "_machine_names", lambda: ["studio"])
     monkeypatch.setattr(serve, "bind", lambda host, port: socket.socket())
-    monkeypatch.setattr(serve, "packs_check", stop_here)  # the step right after the env is set
+    monkeypatch.setattr(serve, "packs_row", stop_here)  # the step right after the env is set
     monkeypatch.setenv("BOLTJAR_ALLOWED_HOSTS", "")
     monkeypatch.setenv("BOLTJAR_PORT", "")
     assert boot(host="0.0.0.0", port=9001, open_browser=False, allow_remote=True) == 1
@@ -392,7 +426,7 @@ def test_a_remote_bind_lists_the_names_it_answers_to(boot, monkeypatch, capsys):
 
     monkeypatch.setattr(serve, "_machine_names", lambda: ["studio", "192.168.1.20"])
     monkeypatch.setattr(serve, "bind", lambda host, port: socket.socket())
-    monkeypatch.setattr(serve, "packs_check", stop_here)
+    monkeypatch.setattr(serve, "packs_row", stop_here)
     monkeypatch.setenv("BOLTJAR_ALLOWED_HOSTS", "proxy.example")
     monkeypatch.setenv("BOLTJAR_PORT", "")
     boot(host="0.0.0.0", port=9001, open_browser=False, allow_remote=True)
@@ -426,7 +460,7 @@ def test_a_boot_over_ssh_leaves_the_browser_closed(boot, monkeypatch):
     monkeypatch.setattr(serve.webbrowser, "open", opened.append)
     monkeypatch.setattr(serve, "threading", types.SimpleNamespace(Thread=Thread))
     monkeypatch.setattr(serve, "bind", lambda host, port: socket.socket())
-    monkeypatch.setattr(serve, "packs_check", lambda: ("core", "ok", None))
+    monkeypatch.setattr(serve, "packs_row", lambda: console.Row("Packs", "core"))
     monkeypatch.setattr(serve, "make_server", lambda config, shutdown_app, on_ready, **kw: Server(on_ready))
     assert boot(port=9001) == 0
     assert opened == []
@@ -436,11 +470,73 @@ class ReadyServer:
     """Stands in for uvicorn: reports ready at once, then returns as after a Ctrl+C."""
     graphs_stopped = 0
 
-    def __init__(self, on_ready):
+    def __init__(self, on_ready, on_stop=None):
         self.on_ready = on_ready
+        self.on_stop = on_stop
 
     def run(self, sockets=None):
         self.on_ready()
+
+
+def ready_boot(boot, monkeypatch, server=ReadyServer, **options):
+    """A whole boot on a stand-in socket and server; returns the exit code."""
+    import boltjar.server  # noqa: F401  (imported up front, so the boot's import step is instant)
+    monkeypatch.setattr(serve, "bind", lambda host, port: socket.socket())
+    monkeypatch.setattr(serve, "make_server",
+                        lambda config, shutdown_app, on_ready, on_stop, **kw: server(on_ready, on_stop))
+    monkeypatch.setenv("BOLTJAR_ALLOWED_HOSTS", "")
+    monkeypatch.setenv("BOLTJAR_PORT", "")
+    return boot(**{"port": 9001, "open_browser": False, **options})
+
+
+def test_the_checklist_is_python_editor_port_and_packs(boot, monkeypatch):
+    shown: list = []
+    monkeypatch.setattr(console.Console, "banner", lambda self, version, rows: shown.extend(rows))
+    assert ready_boot(boot, monkeypatch) == 0
+    assert [row.label for row in shown] == ["Python", "Editor", "Port", "Packs"]
+
+
+def test_the_ready_block(boot, monkeypatch, capsys):
+    assert ready_boot(boot, monkeypatch) == 0
+    lines = capsys.readouterr().out.splitlines()
+    ready = next(i for i, line in enumerate(lines) if "Ready" in line)
+    assert lines[ready].endswith("Ready  →  http://127.0.0.1:9001")
+    assert lines[ready + 1].endswith("Ctrl+C stops everything · --verbose shows requests")
+
+
+def test_the_ready_note_says_only_what_applies(boot, monkeypatch, capsys):
+    monkeypatch.setattr(serve, "browser_can_open", lambda: True)
+    monkeypatch.setattr(serve.webbrowser, "open", lambda url: None)
+    ready_boot(boot, monkeypatch, open_browser=True, verbose=True)
+    note = next(line for line in capsys.readouterr().out.splitlines() if "Ctrl+C" in line)
+    assert note.endswith("opening your browser · Ctrl+C stops everything")
+
+
+def test_a_lan_bind_prints_the_token_link(boot, monkeypatch, capsys):
+    from boltjar import security
+    ready_boot(boot, monkeypatch, host="192.168.1.20", allow_remote=True)
+    assert f"http://192.168.1.20:9001/?token={security.get_token()}" in capsys.readouterr().out
+
+
+def test_ctrl_c_prints_the_shutdown_steps_and_bye(boot, monkeypatch, capsys):
+    import boltjar.server as app_module
+
+    class StoppedServer(ReadyServer):
+        graphs_stopped = 1
+
+        def run(self, sockets=None):
+            self.on_ready()
+            self.on_stop()  # what the Ctrl+C sets off
+
+    monkeypatch.setattr(app_module, "running_graphs", lambda: ["chat"])
+    assert ready_boot(boot, monkeypatch, server=StoppedServer) == 0
+    lines = capsys.readouterr().out.splitlines()
+    shutdown = next(i for i, line in enumerate(lines) if "Shutdown" in line)
+    assert lines[shutdown].startswith("── Shutdown ─")
+    assert lines[shutdown + 1:] == [
+        "▌ ▶ stopping 1 graph",
+        "▌ bye",
+    ]
 
 
 def test_the_boot_never_lists_providers_or_keys(boot, monkeypatch, capsys):

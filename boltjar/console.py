@@ -5,14 +5,15 @@ Stdlib only: the start scripts import it before any requirement is known to be
 installed. It detects what the terminal can do (a TTY, NO_COLOR, TERM=dumb,
 COLORTERM, Windows VT processing, the output encoding, the width) and draws to
 match: truecolor, 256, 16 or no colours, unicode glyphs or an ASCII set. It owns
-the banner, the boot checklist, the ready line, one log line format for
-Boltjar's loggers and uvicorn's, and the live graph lines read off the runtime's
-event stream.
+the banner with the boot checklist, the ready block, the section rules, one log
+line format for Boltjar's loggers and uvicorn's, and the live graph lines read
+off the runtime's event stream.
 
-Colours are semantic roles taken from the editor tokens (editor/src/styles/
-tokens.css), so the terminal and the editor console agree on what green means.
-Emphasis is bold in the terminal's own foreground, never a hard-coded white
-that vanishes on a light theme.
+The look is a side accent: every line after the banner hangs off a bar in the
+logo gradient, and a section opens with a rule (`── Graphs ────`). Status colours
+are the editor's (editor/src/styles/tokens.css), so the terminal and the editor
+console agree on what green means. Names and the URL are bold in the terminal's
+own foreground, never a hard-coded white that vanishes on a light theme.
 """
 from __future__ import annotations
 
@@ -29,45 +30,77 @@ import threading
 import time
 import traceback
 from dataclasses import dataclass
-from typing import Callable, Iterator, Mapping, TextIO
+from typing import Callable, Iterator, Mapping, Sequence, TextIO
 
+from boltjar import banner_art
 from boltjar.media import summarize
 
 # ---------------------------------------------------------------- palette
-# RGB per role, from the editor tokens (--accent, --good, --warn, --bad, --info).
-# `brand` (the logo cyan) is for the banner mark only.
-ROLES: dict[str, tuple[int, int, int]] = {
-    "accent": (0x6E, 0xC6, 0xC0),
+RGB = tuple[int, int, int]
+
+# RGB per role. The status roles are the editor tokens (--good, --warn, --bad,
+# --info); `brand` is the logo cyan, `title` and `rule` draw the section rules,
+# `soft` is the version in the banner.
+ROLES: dict[str, RGB] = {
     "good": (0x4A, 0xDE, 0x80),
     "warn": (0xEA, 0xB3, 0x08),
     "bad": (0xEF, 0x44, 0x44),
     "info": (0x60, 0xA5, 0xFA),
     "brand": (0x00, 0xE5, 0xFF),
+    "title": (0x3B, 0x82, 0xF6),
+    "rule": (0x33, 0x41, 0x55),
+    "soft": (0xF8, 0xFA, 0xFC),
 }
 # A 16-colour terminal gets the ANSI colour that MEANS the same thing, not the
-# nearest RGB (the nearest to the calm teal accent would be a grey).
+# nearest RGB; `soft` becomes the terminal's own foreground (39).
 ROLES_16: dict[str, int] = {
-    "accent": 36, "good": 32, "warn": 33, "bad": 31, "info": 94, "brand": 96,
+    "good": 32, "warn": 33, "bad": 31, "info": 94, "brand": 96, "title": 94, "rule": 90, "soft": 39,
 }
+# The logo gradient, cyan to indigo: (position, RGB) stops. The side bars take
+# their colour from it.
+GRADIENT: tuple[tuple[float, RGB], ...] = (
+    (0.0, (0x06, 0xF2, 0xF9)), (0.3, (0x05, 0xE7, 0xFA)), (0.45, (0x08, 0xDD, 0xFA)),
+    (0.57, (0x0F, 0xC6, 0xFA)), (0.7, (0x1E, 0xA6, 0xF8)), (0.82, (0x2D, 0x80, 0xFA)),
+    (1.0, (0x36, 0x51, 0xFA)),
+)
+# The xterm 16-colour palette, for art and bars on a 16-colour terminal.
+_ANSI_16: tuple[tuple[int, RGB], ...] = (
+    (30, (0, 0, 0)), (31, (205, 0, 0)), (32, (0, 205, 0)), (33, (205, 205, 0)),
+    (34, (0, 0, 238)), (35, (205, 0, 205)), (36, (0, 205, 205)), (37, (229, 229, 229)),
+    (90, (127, 127, 127)), (91, (255, 0, 0)), (92, (0, 255, 0)), (93, (255, 255, 0)),
+    (94, (92, 92, 255)), (95, (255, 0, 255)), (96, (0, 255, 255)), (97, (255, 255, 255)),
+)
 
 # A line's tone (the editor console's levels) and the role that colours it.
-TONES: dict[str, str | None] = {"ok": "good", "info": "info", "warn": "warn", "bad": "bad", "debug": None}
+TONES: dict[str, str | None] = {
+    "ok": "good", "info": "info", "warn": "warn", "bad": "bad", "debug": None,
+    "on": "good", "off": "rule", "stop": "warn",
+}
 
 GLYPHS: dict[bool, dict[str, str]] = {
-    True: {"ok": "✓", "info": "•", "warn": "▲", "bad": "✗", "debug": "·", "bar": "▌", "sep": "·"},
-    False: {"ok": "+", "info": "-", "warn": "!", "bad": "x", "debug": ".", "bar": "|", "sep": "-"},
+    True: {"ok": "✓", "info": "ℹ", "warn": "!", "bad": "✗", "debug": "·", "on": "●", "off": "○",
+           "stop": "▶", "bar": "▌", "sep": "·", "rule": "─", "arrow": "→"},
+    False: {"ok": "+", "info": "i", "warn": "!", "bad": "x", "debug": ".", "on": "*", "off": "o",
+            "stop": ">", "bar": "|", "sep": "-", "rule": "-", "arrow": "->"},
 }
 SPINNER: dict[bool, str] = {True: "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏", False: "|/-\\"}
+
+TAGLINE = "Catch the spark. Keep it running."
+LABEL_WIDTH = 11   # a checklist label, "Python" and the rest
+RULE_WIDTH = 48    # a section rule, `── Title ───...`
+ART_GAP = 4        # between the flask and the column beside it
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]|\x1b\]8;;[^\x1b]*\x1b\\")
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
-# Serialises every write to the screen: the spinner thread, the checklist and
+# Serialises every write to the screen: the spinner thread, the boot screen and
 # the log handler. A log record that lands mid-spinner clears the spinner line
 # first, so the two never print over each other.
 _SCREEN = threading.RLock()
 _live_spinner: "_Spinner | None" = None
+# Where the open side-accent block is: the next bar takes its colour from here.
+_block_line = 0
 
 
 # ---------------------------------------------------------------- capabilities
@@ -208,6 +241,10 @@ def visible_len(text: str) -> int:
     return len(_ANSI_RE.sub("", text))
 
 
+def strip_ansi(text: str) -> str:
+    return _ANSI_RE.sub("", text)
+
+
 def rgb_to_256(r: int, g: int, b: int) -> int:
     """The nearest xterm-256 index: the 6x6x6 cube or the 24-step grey ramp."""
     def level(v: int) -> int:
@@ -224,6 +261,29 @@ def rgb_to_256(r: int, g: int, b: int) -> int:
     if distance(cube) <= distance(grey_rgb):
         return 16 + 36 * level(r) + 6 * level(g) + level(b)
     return 232 + grey
+
+
+def rgb_to_16(r: int, g: int, b: int) -> int:
+    """The SGR foreground code of the nearest xterm 16-colour entry."""
+    return min(_ANSI_16, key=lambda entry: sum((x - y) ** 2 for x, y in zip(entry[1], (r, g, b))))[0]
+
+
+def gradient(t: float) -> RGB:
+    """The logo gradient at `t` (0 cyan, 1 indigo)."""
+    t = min(1.0, max(0.0, t))
+    for (a, ca), (b, cb) in zip(GRADIENT, GRADIENT[1:]):
+        if t <= b:
+            k = (t - a) / (b - a)
+            return tuple(int(round(x + (y - x) * k)) for x, y in zip(ca, cb))  # type: ignore[return-value]
+    return GRADIENT[-1][1]
+
+
+def bar_position(line: int) -> float:
+    """Where on the gradient the bar of a block's `line` (0 first) sits: from
+    0.15 down to 0.95 over five lines, then back up, so a block of any length,
+    a live one included, keeps an even sweep."""
+    step = line % 8
+    return 0.15 + 0.2 * (step if step <= 4 else 8 - step)
 
 
 def local_zone() -> str:
@@ -243,24 +303,38 @@ class Style:
 
     def __call__(self, text: str, role: str | None = None, *, bold: bool = False,
                  dim: bool = False, underline: bool = False) -> str:
+        return self._paint(text, ROLES[role] if role else None, role, bold, dim, underline)
+
+    def rgb(self, text: str, color: RGB, *, bold: bool = False) -> str:
+        """`text` in an exact colour (art, a bar), stepped down to the terminal's tier."""
+        return self._paint(text, color, None, bold, False, False)
+
+    def _paint(self, text: str, color: RGB | None, role: str | None, bold: bool, dim: bool,
+               underline: bool) -> str:
         if self.caps.color == "none" or not text:
             return text
         codes = [c for c, on in (("1", bold), ("2", dim), ("4", underline)) if on]
-        if role:
-            codes.append(self._fg(role))
+        if color is not None:
+            codes.append(self.fg(color, role))
         return f"\x1b[{';'.join(codes)}m{text}\x1b[0m" if codes else text
 
-    def _fg(self, role: str) -> str:
+    def fg(self, color: RGB, role: str | None = None) -> str:
+        """The SGR foreground parameters for `color` on this terminal. A role on
+        a 16-colour terminal takes the colour that means the same thing."""
         if self.caps.color == "truecolor":
-            return "38;2;{};{};{}".format(*ROLES[role])
+            return "38;2;{};{};{}".format(*color)
         if self.caps.color == "256":
-            return f"38;5;{rgb_to_256(*ROLES[role])}"
-        return str(ROLES_16[role])
+            return f"38;5;{rgb_to_256(*color)}"
+        return str(ROLES_16[role] if role else rgb_to_16(*color))
 
     def glyph(self, tone: str) -> str:
-        """The coloured level glyph for a tone (ok, info, warn, bad, debug)."""
+        """The coloured glyph for a tone (ok, info, warn, bad, debug, on, off, stop)."""
         role = TONES.get(tone)
         return self(self.glyphs.get(tone, self.glyphs["info"]), role, dim=role is None)
+
+    def bar(self, line: int) -> str:
+        """The side-accent bar of a block's `line`, with the space after it."""
+        return self.rgb(self.glyphs["bar"], gradient(bar_position(line))) + " "
 
     def link(self, url: str, text: str | None = None) -> str:
         """`text` as an OSC 8 hyperlink to `url` where the terminal supports it."""
@@ -269,78 +343,200 @@ class Style:
             return text
         return f"\x1b]8;;{url}\x1b\\{text}\x1b]8;;\x1b\\"
 
+    def rule(self, title: str, note: str = "", width: int = RULE_WIDTH) -> str:
+        """A section rule: `── Title ──────`, the title bold, `note` dim after it,
+        `width` columns in all."""
+        dash = self.glyphs["rule"]
+        head = f"{dash * 2} "
+        used = len(head) + len(title) + (2 + len(note) + 1 if note else 1)
+        tail = dash * max(3, width - used)
+        note = f"  {self(note, dim=True)} " if note else " "
+        return f"{self(head, 'title')}{self(title, 'title', bold=True)}{note}{self(tail, 'rule')}"
 
-# ---------------------------------------------------------------- boot screen
+    def art(self, rows: Sequence[str], colors: Sequence[Sequence[str]]) -> list[str]:
+        """Rows of banner art painted one colour per character (`colors` holds a
+        hex RGB per visible character, "" for a blank). A run of characters that
+        land on the same terminal colour shares one escape."""
+        if self.caps.color == "none":
+            return list(rows)
+        painted = []
+        for row, hexes in zip(rows, colors):
+            out, current = [], None
+            for ch, hx in zip(row, list(hexes) + [""] * (len(row) - len(hexes))):
+                if ch != " " and hx:
+                    code = self.fg((int(hx[0:2], 16), int(hx[2:4], 16), int(hx[4:6], 16)))
+                    if code != current:
+                        out.append(f"\x1b[{code}m")
+                        current = code
+                out.append(ch)
+            painted.append("".join(out) + ("\x1b[0m" if current else ""))
+        return painted
+
+
+# ---------------------------------------------------------------- the boot screen
+@dataclass(frozen=True)
+class Row:
+    """One boot checklist line: `✓ Python     3.12.9  .venv`. `aside` prints dim
+    after the detail, `gap` apart; each of `fixes` prints dim underneath."""
+    label: str
+    detail: str
+    tone: str = "ok"
+    aside: str = ""
+    gap: str = " "
+    fixes: tuple[str, ...] = ()
+
+
+def _wrap(text: str, width: int) -> list[str]:
+    # a pack id, a flag or a path keeps its hyphens: it breaks only at spaces
+    return textwrap.wrap(text, width, break_on_hyphens=False)
+
+
+def next_bar(style: Style) -> str:
+    """The bar for the next line of the open block (call under _SCREEN)."""
+    global _block_line
+    bar = style.bar(_block_line)
+    _block_line += 1
+    return bar
+
+
+def open_block() -> None:
+    """Start a new side-accent block: its first bar is the top of the gradient."""
+    global _block_line
+    with _SCREEN:
+        _block_line = 0
+
+
 class Console:
-    """The boot sequence's writer: banner, checklist, ready line, goodbye."""
+    """The boot sequence's writer: the banner, the ready block, section rules
+    and the side-accent lines under them."""
 
-    LABEL_WIDTH = 12  # "requirements"
-
-    def __init__(self, stream: TextIO | None = None, caps: Caps | None = None) -> None:
+    def __init__(self, stream: TextIO | None = None, caps: Caps | None = None,
+                 width: int | None = None) -> None:
         self.stream = sys.stdout if stream is None else stream
         self.caps = detect(self.stream) if caps is None else caps
         self.style = Style(self.caps)
+        self._width = width
+
+    def width(self) -> int:
+        """The columns a line may fill: one short of the window, since a line
+        that reaches the last column makes some consoles add a blank line."""
+        return (terminal_width(self.stream) if self._width is None else self._width) - 1
 
     def write(self, line: str = "") -> None:
         with _SCREEN:
             self.stream.write(line + "\n")
             self.stream.flush()
 
-    def banner(self, version: str, tagline: str) -> None:
-        s = self.style
-        bar = s(s.glyphs["bar"], "brand")
-        self.write()
-        self.write(f"  {bar} {s('Boltjar', bold=True)} {s(version, dim=True)}")
-        self.write(f"  {bar} {s(tagline, dim=True)}")
-        self.write()
-
-    def check(self, label: str, detail: str = "", tone: str = "ok", fix: str | None = None) -> None:
-        """One checklist line: glyph, label, detail. A problem can carry a dim
-        `fix:` line under it saying what to do. Text wraps at the window's
-        width and continues under the detail column."""
-        for line in self._check_lines(label, detail, tone, fix):
+    # ------------------------------------------------ the banner
+    def banner(self, version: str, rows: Sequence[Row]) -> None:
+        """The flask, `Boltjar` in big letters, the version with the tagline and
+        the boot checklist, side by side. A window too narrow for the flask
+        drops it; one too narrow for the letters gets a single line instead."""
+        for line in self.banner_lines(version, rows):
             self.write(line)
 
-    def _check_lines(self, label: str, detail: str, tone: str, fix: str | None = None,
-                     glyph: str | None = None) -> list[str]:
+    def banner_lines(self, version: str, rows: Sequence[Row]) -> list[str]:
         s = self.style
-        indent = " " * (6 + self.LABEL_WIDTH + 1)
-        room = max(20, terminal_width(self.stream) - len(indent))
-        quiet = tone in ("ok", "info")
-        parts = textwrap.wrap(detail, room) or [""]
-        mark = glyph if glyph is not None else s.glyph(tone)
-        lines = [f"    {mark} {label.ljust(self.LABEL_WIDTH)} {s(parts[0], dim=quiet)}".rstrip()]
-        lines += [indent + s(part, dim=quiet) for part in parts[1:]]
-        if fix:
-            lines += [indent + s(part, dim=True) for part in textwrap.wrap(f"fix: {fix}", room)]
+        width = self.width()
+        heading = f"{s(f'v{version}', 'soft', bold=True)}  {s(TAGLINE, dim=True)}"
+        need = max(max(map(len, banner_art.WORD)), visible_len(heading))
+        flask_width = max(map(len, banner_art.FLASK))
+        if width >= 2 + flask_width + ART_GAP + need:
+            room = width - 2 - flask_width - ART_GAP
+            right = self._word() + ["", heading, ""] + self._checklist(rows, room)
+            return ["", *self._beside(s.art(banner_art.FLASK, banner_art.FLASK_RGB), right), ""]
+        if width >= 2 + need:
+            lines = self._word() + ["", heading, ""]
+        else:
+            name = f"{s('Boltjar', bold=True)} {s(f'v{version}', 'soft', bold=True)}"
+            fits = 2 + visible_len(name) + 2 + len(TAGLINE) <= width
+            lines = [f"{name}  {s(TAGLINE, dim=True)}" if fits else name, ""]
+        lines += self._checklist(rows, width - 2)
+        return ["", *(f"  {line}".rstrip() for line in lines), ""]
+
+    def _word(self) -> list[str]:
+        return self.style.art(banner_art.WORD, banner_art.WORD_RGB)
+
+    @staticmethod
+    def _beside(left: list[str], right: list[str]) -> list[str]:
+        """`left` (the flask) with `right` beside it, centred on its height."""
+        flask_width = max(map(len, banner_art.FLASK))
+        height = max(len(left), len(right))
+        top = (height - len(right)) // 2
+        lines = []
+        for i in range(height):
+            art = left[i] if i < len(left) else ""
+            shown = banner_art.FLASK[i] if i < len(banner_art.FLASK) else ""
+            j = i - top
+            beside = right[j] if 0 <= j < len(right) else ""
+            pad = " " * (flask_width - len(shown) + ART_GAP)
+            lines.append(f"  {art}{pad}{beside}".rstrip() if beside else f"  {art}".rstrip())
         return lines
 
+    def _checklist(self, rows: Sequence[Row], room: int) -> list[str]:
+        """The checklist rows, each wrapped to `room` columns under its detail."""
+        s = self.style
+        indent = " " * (2 + LABEL_WIDTH)
+        text_room = max(20, room - len(indent))
+        lines = []
+        for row in rows:
+            parts = _wrap(row.detail, text_room) or [""]
+            if row.aside:
+                # the aside follows the detail, or takes a line of its own when
+                # it does not fit after it
+                if len(parts[-1]) + len(row.gap) + len(row.aside) <= text_room:
+                    parts[-1] += row.gap + s(row.aside, dim=True)
+                else:
+                    parts.append(s(row.aside, dim=True))
+            lines.append(f"{s.glyph(row.tone)} {row.label.ljust(LABEL_WIDTH)}{parts[0]}".rstrip())
+            lines += [indent + part for part in parts[1:]]
+            for fix in row.fixes:
+                lines += [indent + s(part, dim=True) for part in _wrap(f"fix: {fix}", text_room)]
+        return lines
+
+    # ------------------------------------------------ after the banner
+    def ready(self, url: str, note: str) -> None:
+        """`Ready → <url>` (a link where the terminal makes one) and a dim note."""
+        s = self.style
+        arrow = s(s.glyphs["arrow"], "rule")
+        open_block()
+        with _SCREEN:
+            self.write(f"{next_bar(s)}{s('Ready', 'brand', bold=True)}  {arrow}  {s.link(url, s(url, bold=True))}")
+            self.write(f"{next_bar(s)}{s(note, dim=True)}")
+
+    def section(self, title: str, note: str = "") -> None:
+        """A blank line and a section rule; the lines after it are a new block."""
+        open_block()
+        self.write()
+        self.write(self.style.rule(title, note, min(RULE_WIDTH, self.width())))
+
+    def line(self, tone: str, text: str, hint: str = "") -> None:
+        """A status line on the open block, with an optional dim hint under it."""
+        s = self.style
+        with _SCREEN:
+            self.write(f"{next_bar(s)}{s.glyph(tone)} {text}")
+            if hint:
+                self.write(f"{next_bar(s)}  {s(hint, dim=True)}")
+
+    def goodbye(self) -> None:
+        with _SCREEN:
+            self.write(f"{next_bar(self.style)}{self.style('bye', 'brand', bold=True)}")
+
+    # ------------------------------------------------ waiting
     @contextlib.contextmanager
-    def step(self, label: str) -> Iterator["Step"]:
-        """A checklist line for work that takes a moment: a spinner turns while
-        the body runs (on a terminal that can redraw a line), then the line
-        settles to whatever the body reported with `step.done(...)`."""
-        step = Step()
-        spinner = _Spinner(self, label) if self.caps.vt else None
-        if spinner is not None:
+    def pending(self, text: str) -> Iterator[None]:
+        """A spinner with `text` while the body runs, on a terminal that can
+        redraw a line; the line is wiped after, leaving nothing behind."""
+        spinner = None
+        if self.caps.vt:
+            s = self.style
+            spinner = _Spinner(self, lambda frame: f"  {s(frame, 'info')} {s(text, dim=True)}")
             spinner.start()
         try:
-            yield step
+            yield
         finally:
             if spinner is not None:
                 spinner.stop()
-        self.check(label, step.detail, step.tone, step.fix)
-
-    def ready(self, url: str, note: str) -> None:
-        s = self.style
-        bar = s(s.glyphs["bar"], "accent")
-        self.write()
-        self.write(f"  {bar} {s('ready', 'good', bold=True)}  {s.link(url, s(url, 'accent', underline=True))}")
-        self.write(f"  {bar} {s(note, dim=True)}")
-        self.write()
-
-    def goodbye(self, text: str) -> None:
-        self.write(f"  {self.style.glyph('ok')} {text}")
 
     def show_cursor(self) -> None:
         if self.caps.vt:
@@ -349,28 +545,17 @@ class Console:
                 self.stream.flush()
 
 
-@dataclass
-class Step:
-    """What a `Console.step` body reports; the line shows it when the body ends."""
-    detail: str = ""
-    tone: str = "ok"
-    fix: str | None = None
-
-    def done(self, detail: str, tone: str = "ok", fix: str | None = None) -> None:
-        self.detail, self.tone, self.fix = detail, tone, fix
-
-
 class _Spinner(threading.Thread):
-    """Turns a spinner on the step's line until stopped. It waits a beat before
+    """Turns a spinner on its own line until stopped. It waits a beat before
     the first frame, so work that finishes at once never flickers; it hides the
     cursor while it draws and always shows it again."""
 
     FRAME = 0.08
 
-    def __init__(self, console: Console, label: str) -> None:
+    def __init__(self, console: Console, render: Callable[[str], str]) -> None:
         super().__init__(daemon=True)
         self.console = console
-        self.label = label
+        self.render = render
         self.halt = threading.Event()
         self.hidden = False  # the cursor is hidden and must come back
         self.drawn = False   # a frame is on the line and must be wiped
@@ -380,7 +565,7 @@ class _Spinner(threading.Thread):
         frames = SPINNER[self.console.caps.unicode]
         if self.halt.wait(0.1):
             return
-        stream, s = self.console.stream, self.console.style
+        stream = self.console.stream
         with _SCREEN:
             _live_spinner = self
             stream.write("\x1b[?25l")
@@ -388,9 +573,7 @@ class _Spinner(threading.Thread):
         i = 0
         while not self.halt.is_set():
             with _SCREEN:
-                frame = s(frames[i % len(frames)], "info")
-                line = self.console._check_lines(self.label, "", "info", glyph=frame)[0]
-                stream.write("\r" + line + "\x1b[K")
+                stream.write("\r" + self.render(frames[i % len(frames)]) + "\x1b[K")
                 stream.flush()
                 self.drawn = True
             i += 1
@@ -419,14 +602,16 @@ class _Spinner(threading.Thread):
 _LEVEL_TONES = ((logging.ERROR, "bad"), (logging.WARNING, "warn"), (logging.INFO, "info"))
 _TONE_LEVELS = {"ok": logging.INFO, "info": logging.INFO, "warn": logging.WARNING,
                 "bad": logging.ERROR, "debug": logging.DEBUG}
+# the columns before a message: the bar, the time and the glyph.
+_MESSAGE_INDENT = " " * 12
 
 
 class LogFormatter(logging.Formatter):
-    """`HH:MM:SS ✓ tag  message`: a dim local time, a glyph coloured by tone (the
-    editor's ok/info/warn/bad), an optional accent tag (a graph, a subsystem),
-    then the message. A record can set its tone with `extra={"tone": "ok"}` and
-    its tag with `extra={"tag": ...}`. An exception prints as one line plus a
-    dim location and hint; the full traceback only when verbose."""
+    """`▌ HH:MM:SS  ✓ message`: a bar on the open block, a dim local time, a
+    glyph coloured by tone (the editor's ok/info/warn/bad), then the message. A
+    record can set its tone with `extra={"tone": "ok"}` and name its graph in
+    bold with `extra={"tag": ...}`. An exception prints as one line plus a dim
+    location and hint; the full traceback only when verbose."""
 
     def __init__(self, verbose: bool = False, stream: TextIO | None = None) -> None:
         super().__init__()
@@ -445,25 +630,27 @@ class LogFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         s = self.style
         stamp = s(time.strftime("%H:%M:%S", time.localtime(record.created)), dim=True)
+        head = f"{stamp}  {s.glyph(self.tone(record))} "
         message = self.text(record)
         tag = getattr(record, "tag", None)
         if tag:
-            message = f"{s(str(tag), 'accent')}  {message}"
-        line = f"  {stamp} {s.glyph(self.tone(record))} {message}"
+            message = f"{s(str(tag), bold=True)}  {message}"
+        lines = [head + message]
         if record.exc_info and record.exc_info[1] is not None:
-            line += self._exception(record.exc_info)
-        return line
+            lines = self._exception(lines, record.exc_info)
+        with _SCREEN:
+            return "\n".join(next_bar(s) + line for line in lines)
 
-    def _exception(self, exc_info) -> str:
+    def _exception(self, lines: list[str], exc_info) -> list[str]:
         if self.verbose:
-            return "\n" + self.formatException(exc_info)
+            return lines + self.formatException(exc_info).splitlines()
         exc = exc_info[1]
-        indent = " " * 13
-        lines = f": {type(exc).__name__}: {exc}" if str(exc) else f": {type(exc).__name__}"
+        lines = list(lines)
+        lines[0] += f": {type(exc).__name__}: {exc}" if str(exc) else f": {type(exc).__name__}"
         where = error_location(exc_info[2])
         if where:
-            lines += "\n" + indent + self.style(f"at {where}", dim=True)
-        return lines + "\n" + indent + self.style("--verbose prints the full traceback", dim=True)
+            lines.append(_MESSAGE_INDENT + self.style(f"at {where}", dim=True))
+        return lines + [_MESSAGE_INDENT + self.style("--verbose prints the full traceback", dim=True)]
 
 
 class AccessFormatter(LogFormatter):
