@@ -20,6 +20,12 @@ class PathEscapeError(ValueError):
     """A requested path resolved outside the sandbox root and was rejected."""
 
 
+def within(root: pathlib.Path, path: pathlib.Path) -> bool:
+    """Whether ``path`` is ``root`` or a descendant of it, compared as given:
+    resolve both first to compare the real paths (symlinks followed)."""
+    return path == root or root in path.parents
+
+
 def _resolve(root: pathlib.Path, path: str) -> pathlib.Path:
     """Resolve ``path`` relative to ``root`` and verify it stays inside.
 
@@ -37,8 +43,7 @@ def _resolve(root: pathlib.Path, path: str) -> pathlib.Path:
     parts = [p for p in raw.parts if p not in (raw.anchor, "/", "\\")]
     candidate = (root / pathlib.PurePath(*parts)) if parts else root
     resolved = candidate.resolve()
-    # Containment: resolved must equal root or have root among its parents.
-    if resolved != root and root not in resolved.parents:
+    if not within(root, resolved):
         raise PathEscapeError(f"path escapes the sandbox: {path!r}")
     return resolved
 

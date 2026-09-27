@@ -2,7 +2,8 @@
 
 All network is mocked (httpx is patched) so NO real call leaves the box:
 - The Image node (core.value.image) passes an https URL through and turns a
-  local file into a `data:image/...;base64,` URL.
+  local file inside user/data/files or examples/ into a `data:image/...;base64,`
+  URL; a path anywhere else is refused.
 - `_image_to_b64` splits a data: URL in place and (mock-)fetches an http URL.
 - `_xai` builds the OpenAI-style image_url content array when given media.
 - `_anthropic` builds a base64 image block BEFORE the text block.
@@ -14,8 +15,11 @@ import asyncio
 import base64
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 import boltjar.nodes.core  # noqa: F401  (registers the core nodes)
 import boltjar.nodes.core.builtin as b
+from boltjar.file_store import PathEscapeError
 from boltjar.sdk import NODE_REGISTRY
 
 
@@ -70,17 +74,95 @@ def test_image_node_passes_https_url_through():
     assert inst.value() == {"out": "https://example.com/cat.png"}
 
 
-def test_image_node_encodes_local_file_to_data_url(tmp_path):
-    png = tmp_path / "pixel.png"
-    png.write_bytes(_PNG_BYTES)
-    spec = NODE_REGISTRY["core.value.image"]
-    inst = spec.cls()
-    inst.src = str(png)
-    out = inst.value()["out"]
+@pytest.fixture
+def media_roots(tmp_path, monkeypatch):
+    """A tmp repo: user/data/files is the Files sandbox, examples/ ships graphs."""
+    from boltjar import server
+    from boltjar.file_store import FileStore
+    files = tmp_path / "user" / "data" / "files"
+    examples = tmp_path / "examples"
+    examples.mkdir()
+    monkeypatch.setattr(server, "FILE_STORE", FileStore(files))
+    monkeypatch.setattr(server, "EXAMPLES_DIR", examples)
+    monkeypatch.setattr(server, "ROOT", tmp_path)
+    return tmp_path
+
+
+def _image(src: str) -> str:
+    inst = NODE_REGISTRY["core.value.image"].cls()
+    inst.src = src
+    return inst.value()["out"]
+
+
+def _png_payload(out: str) -> bytes:
     assert out.startswith("data:image/png;base64,")
-    # the encoded payload round-trips back to the original bytes.
-    b64 = out.split(";base64,", 1)[1]
-    assert base64.b64decode(b64) == _PNG_BYTES
+    return base64.b64decode(out.split(";base64,", 1)[1])
+
+
+def test_image_node_encodes_local_file_to_data_url(media_roots):
+    png = media_roots / "user" / "data" / "files" / "pics" / "pixel.png"
+    png.parent.mkdir()
+    png.write_bytes(_PNG_BYTES)
+    # a relative path lands in the Files sandbox; the absolute path works too.
+    assert _png_payload(_image("pics/pixel.png")) == _PNG_BYTES
+    assert _png_payload(_image(str(png))) == _PNG_BYTES
+
+
+def test_image_node_reads_shipped_examples(media_roots):
+    (media_roots / "examples" / "pixel.png").write_bytes(_PNG_BYTES)
+    assert _png_payload(_image("examples/pixel.png")) == _PNG_BYTES
+
+
+@pytest.mark.parametrize("where", ["absolute", "dotdot"])
+def test_image_node_refuses_a_path_outside_the_roots(media_roots, where):
+    secret = media_roots / "private" / "key.png"
+    secret.parent.mkdir()
+    secret.write_bytes(b"TOP-SECRET")
+    src = str(secret) if where == "absolute" else "../../../private/key.png"
+    with pytest.raises(PathEscapeError) as exc:
+        _image(src)
+    message = str(exc.value)
+    assert message.startswith("Image: ") and "user/data/files and examples/" in message
+    assert "TOP-SECRET" not in message
+    assert base64.b64encode(b"TOP-SECRET").decode() not in message
+
+
+def test_image_node_refuses_a_symlink_out_of_the_sandbox(media_roots):
+    outside = media_roots / "private.png"
+    outside.write_bytes(b"TOP-SECRET")
+    link = media_roots / "user" / "data" / "files" / "link.png"
+    try:
+        link.symlink_to(outside)
+    except OSError:
+        pytest.skip("creating symlinks is not permitted here")
+    with pytest.raises(PathEscapeError):
+        _image("link.png")
+
+
+def test_image_node_never_reads_the_repo_root(media_roots):
+    # ".env" is not in the sandbox; the name passes through, the file is never read.
+    (media_roots / ".env").write_text("XAI_API_KEY=secret", encoding="utf-8")
+    assert _image(".env") == ".env"
+
+
+def test_image_node_passes_data_urls_and_bare_base64_through(media_roots):
+    data_url = "data:image/png;base64," + base64.b64encode(_PNG_BYTES).decode()
+    assert _image(data_url) == data_url
+    bare = base64.b64encode(_PNG_BYTES).decode()
+    assert _image(bare) == bare
+    long_bare = base64.b64encode(bytes(range(256)) * 400).decode()  # too long to be a path
+    assert _image(long_bare) == long_bare
+
+
+def test_audio_node_follows_the_same_roots(media_roots):
+    clip = media_roots / "user" / "data" / "files" / "clip.wav"
+    clip.write_bytes(b"RIFF")
+    audio = NODE_REGISTRY["core.value.audio"].cls()
+    audio.src = "clip.wav"
+    assert audio.value()["out"] == "data:audio/wav;base64," + base64.b64encode(b"RIFF").decode()
+    audio.src = str(media_roots / "elsewhere.wav")
+    with pytest.raises(PathEscapeError, match="^Audio: "):
+        audio.value()
 
 
 def test_image_node_empty_and_unknown_pass_through():

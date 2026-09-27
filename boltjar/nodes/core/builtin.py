@@ -76,6 +76,64 @@ class Boolean:
         return {"out": bool(self.on)}
 
 
+# ---- media sources (Image / Audio) ----
+# A local path is read only from inside two folders: the Files sandbox
+# (user/data/files, where a relative path lands, as with Read File) and the shipped
+# examples/. Anywhere else is refused before anything is read, so a graph (or a
+# value wired into `src`) can never turn a media node into a reader for .env.
+_MEDIA_ROOTS_LABEL = "user/data/files and examples/"
+
+
+def _media_file(src: str, node_name: str):
+    """The readable file `src` names, or None when there is none (the value then
+    passes through as-is: bare base64, or a name with no file behind it). Raises
+    PathEscapeError for a path outside the media roots."""
+    import pathlib
+    from boltjar.file_store import PathEscapeError, within
+    from boltjar.server import EXAMPLES_DIR, FILE_STORE, ROOT
+
+    roots = [FILE_STORE.root.resolve(), EXAMPLES_DIR.resolve()]
+    raw = pathlib.Path(src)
+    if raw.anchor:  # absolute, drive-qualified or a UNC share
+        candidates = [raw]
+    else:  # relative: the Files sandbox first, then the repo root (examples/...)
+        candidates = [roots[0] / raw, ROOT / raw]
+    allowed = False
+    for cand in candidates:
+        try:
+            # containment is checked on the lexical path first, so a path outside
+            # the roots (a network share included) is never touched on disk.
+            if not any(within(r, pathlib.Path(os.path.abspath(cand))) for r in roots):
+                continue
+            real = cand.resolve()  # then again on the real path (symlinks followed)
+        except (OSError, ValueError):
+            return None  # not a usable path at all (raw base64 too long for one)
+        if any(within(r, real) for r in roots):
+            allowed = True
+            if real.is_file():
+                return real
+    if allowed:
+        return None
+    raise PathEscapeError(f"{node_name}: {src!r} is outside the folders a graph may read "
+                          f"files from ({_MEDIA_ROOTS_LABEL})")
+
+
+def _media_value(src: str, node_name: str, mimes: dict, fallback_mime: str) -> str:
+    """An Image / Audio source value. An http(s) URL or a data: URL passes straight
+    through (providers fetch a URL themselves); a local file inside the media roots
+    is read into a self-contained data: URL; anything else passes through."""
+    import base64
+
+    s = (src or "").strip()
+    if not s or s.lower().startswith(("http://", "https://", "data:")):
+        return s
+    path = _media_file(s, node_name)
+    if path is None:
+        return s
+    mime = mimes.get(path.suffix.lstrip(".").lower(), fallback_mime)
+    return f"data:{mime};base64,{base64.b64encode(path.read_bytes()).decode('ascii')}"
+
+
 # image extension -> MIME type, for turning a local file path into a data: URL.
 _IMAGE_MIME = {
     "jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
@@ -84,30 +142,14 @@ _IMAGE_MIME = {
 
 
 @node(id="core.value.image", name="Image", kind=Kind.VALUE, category="Values",
-      pulled=True, summary="An image source: paste an https URL or a local file path.")
+      pulled=True, summary="An image source: an https URL, or a local file in "
+                           "user/data/files or examples/ (read into a data: URL).")
 class Image:
     src: Widget = Widget(kind="text", default="", label="URL or path")
     outputs = [Port("out", "image")]
 
     def value(self):
-        import base64
-        import os.path
-
-        s = (self.src or "").strip()
-        if not s:
-            return {"out": s}
-        # an https/http URL passes straight through (providers fetch it themselves).
-        if s.lower().startswith(("http://", "https://")):
-            return {"out": s}
-        # a local file path is read + encoded to a self-contained data: URL.
-        if os.path.isfile(s):
-            ext = os.path.splitext(s)[1].lstrip(".").lower()
-            mime = _IMAGE_MIME.get(ext, "image/jpeg")
-            with open(s, "rb") as fh:
-                b64 = base64.b64encode(fh.read()).decode("ascii")
-            return {"out": f"data:{mime};base64,{b64}"}
-        # not a URL and not an existing file: pass the value through unchanged.
-        return {"out": s}
+        return {"out": _media_value(self.src, "Image", _IMAGE_MIME, "image/jpeg")}
 
 
 _AUDIO_MIME = {
@@ -117,30 +159,15 @@ _AUDIO_MIME = {
 
 
 @node(id="core.value.audio", name="Audio", kind=Kind.VALUE, category="Values",
-      pulled=True, summary="An audio source: an https URL or a local file path "
-                           "(read into a self-contained data: URL). Mirror of Image. "
-                           "A file path reads ANYWHERE on disk (not sandboxed like "
-                           "Read File), so do not wire an untrusted value into it.")
+      pulled=True, summary="An audio source: an https URL, or a local file in "
+                           "user/data/files or examples/ (read into a data: URL). "
+                           "Mirror of Image.")
 class Audio:
     src: Widget = Widget(kind="text", default="", label="URL or path")
     outputs = [Port("out", "audio")]
 
     def value(self):
-        import base64
-        import os.path
-
-        s = (self.src or "").strip()
-        if not s:
-            return {"out": s}
-        if s.lower().startswith(("http://", "https://")):
-            return {"out": s}
-        if os.path.isfile(s):
-            ext = os.path.splitext(s)[1].lstrip(".").lower()
-            mime = _AUDIO_MIME.get(ext, "audio/wav")
-            with open(s, "rb") as fh:
-                b64 = base64.b64encode(fh.read()).decode("ascii")
-            return {"out": f"data:{mime};base64,{b64}"}
-        return {"out": s}
+        return {"out": _media_value(self.src, "Audio", _AUDIO_MIME, "audio/wav")}
 
 
 # ---- inline expression tags -> mood / display text (the avatar mood signal) ----
