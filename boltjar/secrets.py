@@ -232,6 +232,30 @@ def provider_status() -> list[dict]:
     ]
 
 
+# A secret shorter than this is too likely to be ordinary text (redacting "yes"
+# would blank every "yes" on every wire), so redaction leaves it alone.
+_REDACT_MIN_LEN = 8
+
+
+def redact(text: str) -> str:
+    """Replace every known secret value in `text` (the stored secrets and the
+    curated provider keys) with its {{secret.NAME}} token, longest value first so
+    a secret containing another is replaced whole. Used on live events, so a
+    resolved key never reaches the editor, the /state cache or a websocket."""
+    known: dict[str, str] = {}
+    for name in _ENV_SECRETS:
+        value = os.environ.get(name)
+        if value:
+            known[value] = name
+    for name, value in _store.items():
+        if value:
+            known[value] = name
+    for value in sorted(known, key=len, reverse=True):
+        if len(value) >= _REDACT_MIN_LEN and value in text:
+            text = text.replace(value, "{{secret." + known[value] + "}}")
+    return text
+
+
 def resolve_secrets(text: str) -> str:
     """Replace every {{secret.NAME}} token in text with the resolved value.
 

@@ -31,6 +31,7 @@ import itertools
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 
+from . import secrets as _secrets
 from .sdk import Kind, NodeFailure, NodeSpec, NODE_REGISTRY
 
 _TURN_CACHE_KEEP = 64  # bound the per-turn memo cache
@@ -511,7 +512,11 @@ class Runtime:
 
     def _notify(self, event: dict) -> None:
         if self._observer:
-            self._observer(event)
+            # every live event leaves through here, so this is where a resolved
+            # secret is swapped back for its {{secret.NAME}} token: the editor, the
+            # /state cache and every websocket see the token, never the key. The
+            # values flowing between nodes are untouched.
+            self._observer(_redact(event))
 
 
 def node_config(spec: NodeSpec, config: Optional[dict]) -> dict:
@@ -565,6 +570,18 @@ def _apply_promoted(obj: Any, inputs: dict) -> None:
             # stale wired value from a previous turn.
             setattr(obj, name, knob[name])
             cfg[name] = knob[name]
+
+
+def _redact(value: Any) -> Any:
+    """`value` with every known secret in its strings redacted (secrets.redact),
+    walking dicts and lists; anything else passes through."""
+    if isinstance(value, str):
+        return _secrets.redact(value)
+    if isinstance(value, dict):
+        return {k: _redact(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_redact(v) for v in value]
+    return value
 
 
 async def _run_start(inst: NodeInstance) -> None:
