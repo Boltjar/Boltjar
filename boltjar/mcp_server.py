@@ -195,8 +195,8 @@ async def delete_graph(name: str) -> dict:
 @mcp.tool()
 async def validate_graph(graph_json: dict) -> dict:
     """Validate a graph WITHOUT saving it. Returns {"problems": [...]}; empty means
-    it is powerable (every required input wired, at least one trigger, no
-    duplicate channels/tool names)."""
+    it is powerable (every trigger input and every required input wired, at
+    least one trigger node, no duplicate channels/tool names)."""
     return await _send("POST", "/api/validate", graph_json)
 
 

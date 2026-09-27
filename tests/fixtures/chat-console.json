@@ -153,6 +153,12 @@
     },
     {
       "src": "llm",
+      "src_port": "trigger",
+      "dst": "convo",
+      "dst_port": "reply_trigger"
+    },
+    {
+      "src": "llm",
       "src_port": "response",
       "dst": "convo",
       "dst_port": "reply"

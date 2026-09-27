@@ -873,10 +873,25 @@ async def validate_graph_now(graph: dict) -> list[dict]:
     return validate_graph(graph)
 
 
+def _trigger_wired(spec, node: dict, port, wired: set[str]) -> bool:
+    """Whether a wire lands on the trigger input `port` of `node`: on the port
+    itself or, for a growable trigger (Sync's `in`, a Queue's `in`), on any of
+    its sockets, found the way the runtime fires them (NodeSpec.growable_base)."""
+    if port.name in wired:
+        return True
+    if not port.growable:
+        return False
+    promoted = (node.get("config") or {}).get("promoted") or ()
+    return any(spec.growable_base(socket, promoted) == port for socket in wired)
+
+
 def validate_graph(graph: dict) -> list[dict]:
     """Pre-run validation: a graph cannot turn On if any node is broken."""
     problems: list[dict] = []
     edges_in = {(e["dst"], e["dst_port"]) for e in graph.get("edges", [])}
+    wired_into: dict[str, set[str]] = {}
+    for dst, port in edges_in:
+        wired_into.setdefault(dst, set()).add(port)
     has_trigger = False
     for n in graph.get("nodes", []):
         # a bypassed node never runs, so it cannot break the graph: skip every
@@ -891,6 +906,13 @@ def validate_graph(graph: dict) -> list[dict]:
         if spec.kind == Kind.TRIGGER:
             has_trigger = True
         for p in spec.inputs:
+            if p.trigger:
+                # a trigger is the only way a node runs, so every one must be
+                # wired, a growable one on at least one of its sockets.
+                if not _trigger_wired(spec, n, p, wired_into.get(n["id"], set())):
+                    problems.append({"node": n["id"], "kind": "missing-input",
+                                     "message": f"required trigger '{p.name}' is not connected"})
+                continue
             if p.optional or p.growable:
                 continue
             if (n["id"], p.name) not in edges_in and p.default is None:
