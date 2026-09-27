@@ -307,10 +307,14 @@ export interface StatusEvent {
   power: "on" | "off";
 }
 
-/** On was refused because the graph is invalid; the editor badges the nodes. */
+/** On was refused because the graph is invalid; the editor badges the nodes.
+ *  `resume`: the refusal came from a launch powering back a graph that was On
+ *  ("Resume workflows after launch"); the server replays it on connect until
+ *  the graph turns On or a person turns it Off. */
 export interface InvalidEvent {
   kind: "invalid";
   problems: Problem[];
+  resume?: boolean;
 }
 
 export interface NodeErrorEvent {
@@ -330,6 +334,8 @@ export interface NodeStatusEvent {
 export interface ErrorEvent {
   kind: "error";
   error: string;
+  /** a launch powering back a graph that was On failed to build it */
+  resume?: boolean;
 }
 
 /** The set of nodes/edges the live runtime was built from: the source of truth

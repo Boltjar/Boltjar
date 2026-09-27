@@ -205,17 +205,19 @@ export function useRunSocket(slug: string = "_default"): RunSocketState {
             setProblems([]);
           }
           break;
-        case "invalid":
+        case "invalid": {
           setProblems(evt.problems);
           setPower("off");
+          const count = `${evt.problems.length} problem${evt.problems.length === 1 ? "" : "s"}`;
           pushLine({
             ts: nowStamp(),
             level: "bad",
-            message: `cannot start: ${evt.problems.length} problem${evt.problems.length === 1 ? "" : "s"}`,
+            message: evt.resume ? `not resumed after the launch: ${count}` : `cannot start: ${count}`,
           });
           break;
+        }
         case "error":
-          pushLine({ ts: nowStamp(), level: "bad", message: evt.error });
+          pushLine({ ts: nowStamp(), level: "bad", message: evt.resume ? `not resumed after the launch: ${evt.error}` : evt.error });
           setPower("off");
           break;
         case "live_graph":
