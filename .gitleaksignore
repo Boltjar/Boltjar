@@ -4,3 +4,10 @@
 # tests/test_redaction.py KEY, a made-up key shaped like a real one; the line now
 # carries gitleaks:allow, this entry covers the commit that added it.
 3ab2a942e17c834cd1aaa0cfc2b12b0ff007d541:tests/test_redaction.py:generic-api-key:14
+
+# Terminal redaction tests: made-up keys and a made-up token, flagged in the
+# commits that added them; the lines now carry gitleaks:allow.
+6aefd61c894560b75d04ae72b470f43053dc7101:tests/test_console.py:generic-api-key:474
+5afb53a9f5e115b01136cb2311c9f9cbc9189463:tests/test_console.py:generic-api-key:475
+6aefd61c894560b75d04ae72b470f43053dc7101:tests/test_shutdown.py:generic-api-key:105
+6adcd638362909587820476bdda800b702a7f5c0:tests/test_terminal_tap.py:generic-api-key:32

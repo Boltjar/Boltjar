@@ -102,7 +102,7 @@ def test_a_graph_whose_stop_hangs_holds_up_none_of_the_others(hubs):
 def test_a_stop_that_fails_shows_no_key_in_the_terminal(hubs, monkeypatch):
     # a pack's store whose close raises with a resolved key in its message (an
     # httpx error URL, say): the terminal prints its token, never the key
-    key = "sk-test-0123456789abcdef"
+    key = "sk-test-0123456789abcdef"  # gitleaks:allow (made-up test value)
     monkeypatch.setitem(server._secrets._store, "SHUTDOWN_TEST_KEY", key)
     stream = io.StringIO()
     handler = logging.StreamHandler(stream)

@@ -523,7 +523,7 @@ def test_an_access_line_never_drives_the_terminal():
 def test_an_access_line_hides_the_token_of_the_editor_link():
     fmt = console.AccessFormatter(stream=FakeStream(tty=False))
     rec = logging.LogRecord("uvicorn.access", logging.INFO, __file__, 1, '%s - "%s %s HTTP/%s" %d',
-                            ("192.168.1.30:5000", "GET", "/?token=abcDEF123_-xyz", "1.1", 303), None)
+                            ("192.168.1.30:5000", "GET", "/?token=abcDEF123_-xyz", "1.1", 303), None)  # gitleaks:allow (made-up test value)
     out = fmt.format(rec)
     assert "abcDEF123" not in out and out.endswith(" 303 GET /?token=<token>")
 
@@ -543,7 +543,7 @@ def test_the_token_is_found_by_the_name_the_server_reads(path, shown):
 
 @pytest.mark.parametrize("verbose", [False, True])
 def test_a_log_line_shows_a_known_secret_as_its_token(monkeypatch, verbose):
-    key = "sk-test-0123456789abcdef"
+    key = "sk-test-0123456789abcdef"  # gitleaks:allow (made-up test value)
     monkeypatch.setitem(secrets._store, "CONSOLE_TEST_KEY", key)
     try:
         raise RuntimeError(f"401 for https://api.example.com/v1?key={key}")

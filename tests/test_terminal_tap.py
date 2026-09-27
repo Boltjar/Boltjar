@@ -29,7 +29,7 @@ def test_every_broadcast_passes_the_terminal_tap(monkeypatch):
 def test_a_failed_power_on_shows_no_key_to_the_editor_or_the_terminal(monkeypatch):
     # the error event is built by the Hub, not the runtime, so it must get the
     # runtime's redaction on its own
-    key = "sk-test-0123456789abcdef"
+    key = "sk-test-0123456789abcdef"  # gitleaks:allow (made-up test value)
     monkeypatch.setitem(server._secrets._store, "TAP_TEST_KEY", key)
     seen: list[dict] = []
     monkeypatch.setattr(server.GRAPH_LINES, "feed", seen.append)
