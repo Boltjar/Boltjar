@@ -95,9 +95,10 @@ _NOT_CHAT = re.compile(r"embed|tts|whisper|transcribe|dall-e|gpt-image|moderatio
                        r"audio|search|babbage|davinci|sora|computer-use", re.IGNORECASE)
 # api.openai.com lists every model the key reaches and reports no modalities, so
 # its list keeps the chat families (gpt-*, o<n>*, chatgpt-*) minus the models
-# POST /chat/completions refuses or no node here runs: legacy completions
-# (*-instruct), the Responses-only ones (*-pro, codex, deep research, computer
-# use), search, realtime, live voice, audio, speech, transcription, images.
+# POST /chat/completions refuses, legacy completions (*-instruct) and the
+# Responses-only ones (*-pro, codex, deep research, computer use), and the ones
+# that are no plain chat model: search, realtime, live voice, audio, speech,
+# transcription, images.
 _OPENAI_HOST = "api.openai.com"
 _OPENAI_CHAT = re.compile(r"^(gpt-|o\d|chatgpt-)", re.IGNORECASE)
 _OPENAI_NOT_CHAT = re.compile(r"instruct|(^|-)pro($|-)|codex|deep-research|search|realtime|"
@@ -666,11 +667,11 @@ async def confirm_missing(refs: list[tuple[str, str]]) -> None:
     snap = Snapshot.now()
     ask: set[str] = set()
     for model_id, kind in refs:
-        if model_problem(model_id, kind, snap) is None:
+        if not model_id or model_id == AUTO or model_id.startswith("mock/"):
             continue
         entry = _lookup(model_id, snap.rows)
-        if entry is not None and entry.manifest.kind != kind:
-            continue  # another family: asking again changes nothing
+        if entry is not None and (entry.manifest.kind != kind or not entry.unlisted):
+            continue  # listed, or of another family: asking again changes nothing
         provider = model_id.split("/", 1)[0] if "/" in model_id else ""
         listing = _state.get(provider)
         if provider in snap.view.usable and _age(listing.checked if listing else None) > RECHECK_AFTER:
