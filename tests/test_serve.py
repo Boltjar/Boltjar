@@ -164,6 +164,17 @@ def test_the_browser_opens_only_on_a_screen_in_front_of_the_user(platform, env, 
     assert serve.browser_can_open(platform, env) is opens
 
 
+@pytest.mark.parametrize("host", ["127.0.0.1", "localhost", "::1", "0.0.0.0", "::"])
+def test_a_loopback_or_wildcard_bind_opens_loopback_without_the_token(host):
+    assert serve.editor_url(host, 8770) == serve.local_url(host, 8770)
+    assert "token" not in serve.editor_url(host, 8770)
+
+
+def test_any_other_bind_opens_the_one_time_token_link():
+    from boltjar import security
+    assert serve.editor_url("192.168.1.20", 8770) ==         f"http://192.168.1.20:8770/?token={security.get_token()}"
+
+
 # ---------------------------------------------------------------- the port
 def test_a_busy_port_is_caught_before_anything_starts():
     holder = socket.socket()

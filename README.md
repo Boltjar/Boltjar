@@ -25,7 +25,7 @@ Arguments given to the start script pass through to `python -m boltjar serve`, f
 | `--port 8771` | listen on another port (the default is 8770) |
 | `--no-browser` | do not open the editor in a browser |
 | `--verbose` | also print the web server's own lines, every request and full tracebacks |
-| `--host 0.0.0.0 --allow-remote` | listen where other machines can reach it; any host but loopback is refused without `--allow-remote` |
+| `--host 0.0.0.0 --allow-remote` | listen where other machines can reach it; any host but loopback is refused without `--allow-remote`. Bound to one address (`--host 192.168.1.20`), it opens the editor through the one-time `/?token=` link it prints (see [SECURITY.md](SECURITY.md)) |
 
 ### Manual setup
 

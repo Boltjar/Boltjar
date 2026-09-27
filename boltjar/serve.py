@@ -149,6 +149,19 @@ def local_url(host: str, port: int) -> str:
     return f"http://{bare}:{port}"
 
 
+def editor_url(host: str, port: int) -> str:
+    """The address the ready line prints and the browser opens. A loopback or a
+    wildcard bind opens on loopback, where the editor is handed its cookie; a
+    browser reaching any other address gets the cookie only through the
+    one-time /?token=<token> link, so that bind opens the link (boltjar.security)."""
+    url = local_url(host, port)
+    if is_loopback(host) or host.strip().strip("[]") in WILDCARD_HOSTS:
+        return url
+    from boltjar import security
+
+    return f"{url}/?{security.LINK_PARAM}={security.get_token()}"
+
+
 def bind(host: str, port: int) -> socket.socket:
     """Bind the listening socket before anything else starts, so a busy port is
     reported plainly up front. uvicorn then serves on this very socket, so no
@@ -385,7 +398,7 @@ def _serve(out: console.Console, host: str, port: int, open_browser: bool,
 
     import uvicorn
 
-    url = local_url(host, port)
+    url = editor_url(host, port)
 
     def ready() -> None:
         # after the app's startup, so the providers line sees the keys it loaded.
