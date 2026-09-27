@@ -20,6 +20,7 @@ import { outputType, DATABASE_ID, KV_STORE_ID, GRAPH_FORMAT } from "./lib/graphA
 import { WIRELESS_IN_ID, WIRELESS_OUT_ID, ROUTER_ID, isGhostHandle, type WirelessChannelMap, type WirelessSocket } from "./lib/dynamicPorts";
 import { deadWireNotice, healDeadWires } from "./lib/deadWires";
 import { notifyStoreChanged } from "./lib/storeEvents";
+import { changedStores, declarationSignature, ensureDeclaredStores, ensureNotices } from "./lib/storeSchema";
 import { fetchServerGraph, serverError, unreadableNotice } from "./lib/serverGraph";
 import { mod } from "./lib/platform";
 import { DOCS_URL, FEEDBACK_URL, SPONSOR_URL, bugReportUrl, copyText, diagnosticsText, openExternal, osName } from "./lib/help";
@@ -331,6 +332,31 @@ export default function App() {
     }, 250);
     return () => window.clearTimeout(t);
   }, [toGraph, graphLoading]);
+
+  // ── declared stores: the tables a graph's store nodes declare (lib/storeSchema)
+  //    are created on the server when the graph opens here, and again when a
+  //    declaration changes (a pasted, duplicated or restored store node), so a
+  //    table picker finds them before anything fires. A column the database
+  //    cannot match is a console warning; a store that gained tables tells its
+  //    pickers to read their lists again. ──
+  const declSig = useMemo(() => declarationSignature(nodes, defs), [nodes, defs]);
+  const latestToGraph = useRef(toGraph);
+  latestToGraph.current = toGraph;
+  useEffect(() => {
+    if (graphLoading || !declSig) return;
+    let current = true;
+    const t = window.setTimeout(() => {
+      void ensureDeclaredStores(latestToGraph.current()).then((res) => {
+        if (!res) return;
+        for (const key of changedStores(res)) notifyStoreChanged("db", key);
+        if (current) for (const line of ensureNotices(res)) socket.notice(line, "warn");
+      });
+    }, 150);
+    return () => { current = false; window.clearTimeout(t); };
+  // re-run on open (graphLoading settles) and when a declaration changes; the
+  // graph itself is read at send time, so moving a node never re-sends it.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [declSig, graphLoading]);
 
 
   // node id -> typeId / config, used across the derivations below.

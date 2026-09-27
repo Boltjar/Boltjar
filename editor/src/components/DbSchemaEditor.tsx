@@ -7,9 +7,11 @@
 // window.prompt anywhere. Every mutation hits the REST endpoints on the shared
 // store (which return the fresh schema) and the editor adopts that result, so
 // the node's compact body and this editor stay in step; each one that succeeds
-// also tells the table pickers wired to the store (lib/storeEvents). There is
-// deliberately NO delete-database button: whole-DB delete is the normal
-// node-delete flow.
+// also tells the table pickers wired to the store (lib/storeEvents) and writes
+// the resulting tables into the node's declared schema (lib/storeSchema), so the
+// graph carries what was built here and the server can create it wherever the
+// graph is opened. There is deliberately NO delete-database button: whole-DB
+// delete is the normal node-delete flow.
 // ============================================================================
 import { useState, type CSSProperties } from "react";
 import type { DbColumn, DbTable } from "../types/protocol";
@@ -17,6 +19,7 @@ import { Icon } from "../lib/icons";
 import { typeColorVar } from "../lib/types";
 import { useDbSchema } from "../hooks/useDbSchema";
 import { notifyStoreChanged } from "../lib/storeEvents";
+import { declaredSchema, sameDeclaration, type DeclaredTable } from "../lib/storeSchema";
 import { Select } from "./canvas/Select";
 
 /** The column types offered in the dropdown -> the SQLite affinity sent to the
@@ -43,9 +46,13 @@ function typeChipColor(coltype: string): string {
 interface DbSchemaEditorProps {
   dbKey: string;
   disabled: boolean;
+  /** the node's declared schema as saved in the graph. */
+  declared?: unknown;
+  /** write the declaration after a change built here (absent: nothing is kept). */
+  onDeclare?: (tables: DeclaredTable[]) => void;
 }
 
-export function DbSchemaEditor({ dbKey, disabled }: DbSchemaEditorProps) {
+export function DbSchemaEditor({ dbKey, disabled, declared, onDeclare }: DbSchemaEditorProps) {
   const { tables, loading, error, refetch, setTables } = useDbSchema(dbKey);
   const [busy, setBusy] = useState(false);
   const [opError, setOpError] = useState<string | null>(null);
@@ -73,8 +80,12 @@ export function DbSchemaEditor({ dbKey, disabled }: DbSchemaEditorProps) {
       // the store changed: every table picker wired to it reads its list again
       notifyStoreChanged("db", dbKey);
       const json = (await res.json()) as { schema?: DbTable[] };
-      if (json.schema) setTables(json.schema);
-      else refetch();
+      if (json.schema) {
+        setTables(json.schema);
+        // the graph declares what now exists (a row-only change declares nothing new)
+        const next = declaredSchema(json.schema);
+        if (onDeclare && !sameDeclaration(declared, next)) onDeclare(next);
+      } else refetch();
       return true;
     } catch (err) {
       setOpError(err instanceof Error ? err.message : String(err));

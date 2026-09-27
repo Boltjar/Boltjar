@@ -173,6 +173,9 @@ export function useRunSocket(slug: string = "_default"): RunSocketState {
           }
           break;
         }
+        case "warning":
+          pushLine({ ts: nowStamp(), level: "warn", node: evt.node, message: evt.message });
+          break;
         case "node_error":
           pushLine({ ts: nowStamp(), level: "bad", node: evt.node, message: evt.error });
           setNodeStatus((p) => ({ ...p, [evt.node]: "error" }));

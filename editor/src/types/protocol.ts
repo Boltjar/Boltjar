@@ -27,7 +27,10 @@ export type WidgetKind =
   | "secret"
   | "color"
   /** A model picker: the LLM node's capability-driven model selector. */
-  | "model";
+  | "model"
+  /** A store's declared schema (tables + columns); kept by the node's schema
+   *  editor, never drawn as a knob (its surface is "hidden"). */
+  | "schema";
 
 /** A typed input or output socket on a node definition. */
 export interface Port {
@@ -61,8 +64,9 @@ export interface Widget {
   min?: number | null;
   max?: number | null;
   step?: number | null;
-  /** "body" (inline knob) | "modal" (opens the shared modal). */
-  surface?: "body" | "modal";
+  /** "body" (inline knob) | "modal" (opens the shared modal) | "hidden" (saved
+   *  with the graph, never drawn: a value one of the node's surfaces keeps). */
+  surface?: "body" | "modal" | "hidden";
   /** offer right-click "Convert to input" (promote knob to a typed port). */
   promotable?: boolean;
   /** the input port's type when this widget is promoted. */
@@ -284,6 +288,14 @@ export interface LogEvent {
   message: string;
 }
 
+/** Something the runtime could not make match but runs anyway, e.g. a declared
+ *  store column whose live type differs (power-on still goes ahead). */
+export interface WarningEvent {
+  kind: "warning";
+  node: string;
+  message: string;
+}
+
 /** The runtime power state (replaces the old run-once `running` flag). */
 export interface StatusEvent {
   kind: "status";
@@ -345,6 +357,7 @@ export interface ToolResultEvent {
 export type RunEvent =
   | ValueEvent
   | LogEvent
+  | WarningEvent
   | StatusEvent
   | InvalidEvent
   | NodeErrorEvent

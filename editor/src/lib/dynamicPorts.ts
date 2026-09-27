@@ -42,6 +42,13 @@ export function opVisible(
   return (d.op_values ?? []).includes(current);
 }
 
+/** Whether a widget draws as an inline knob on the node body: its surface is
+ *  "body" (the default), not "modal" (the shared modal) nor "hidden" (a value
+ *  the node keeps with the graph, such as a store's declared schema). */
+export function onBody(w: { surface?: string }): boolean {
+  return (w.surface ?? "body") === "body";
+}
+
 /** The Build JSON node id; each wired named input becomes a key in the json object. */
 export const BUILD_ID = "core.data.build";
 

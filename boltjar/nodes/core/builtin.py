@@ -1579,9 +1579,11 @@ def _db_friendly_error(exc: Exception, op: str):
     """Translate a raw sqlite error into the DB node's standard visible ValueError
     when it is actionable. The common first-run trap is writing to a table before
     its schema exists: sqlite raises `OperationalError: no such table: NAME`, an
-    opaque message. Surface the table name and tell the user to create it first;
-    we do NOT auto-create tables (an open design question). A statement the
-    store's authorizer refuses (ATTACH and friends) gets a named reason too.
+    opaque message. Surface the table name and say where tables come from: the
+    DB node never creates one itself, the Database node declares them (its schema
+    editor) and the server creates them when the graph opens or powers on. A
+    statement the store's authorizer refuses (ATTACH and friends) gets a named
+    reason too.
     Returns None for anything we don't specifically translate, so the caller
     re-raises the original (still visible via the runtime's node_error path)."""
     msg = str(exc)
@@ -1592,9 +1594,9 @@ def _db_friendly_error(exc: Exception, op: str):
     if isinstance(exc, sqlite3.OperationalError) and "no such table" in msg.lower():
         table = msg.split(":", 1)[1].strip() if ":" in msg else "?"
         return ValueError(
-            f"DB: no such table {table!r}. Create it first (via the Store panel or "
-            f"the db schema API) before this '{op}' runs; the DB node does not "
-            f"auto-create tables.")
+            f"DB: no such table {table!r}. Create it first: add it with Edit on the "
+            f"Database node, which saves it with the graph and creates it when the "
+            f"graph opens or powers on, before this '{op}' runs.")
     return None
 
 

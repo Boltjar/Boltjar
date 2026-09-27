@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { Icon } from "../../lib/icons";
 import { NodeModal } from "./NodeModal";
 import { DbSchemaEditor } from "../DbSchemaEditor";
+import type { DeclaredTable } from "../../lib/storeSchema";
 
 interface DbColumn { name: string; type: string; pk: boolean }
 interface DbInfo {
@@ -29,11 +30,14 @@ interface StoreBodyProps {
   nodeId: string;
   /** bypassed node: the schema editor renders read-only. */
   disabled?: boolean;
+  /** the node's declared schema (db only), kept in step by the schema editor. */
+  declared?: unknown;
+  onDeclare?: (tables: DeclaredTable[]) => void;
 }
 
 const POLL_MS = 4000;
 
-export function StoreBody({ kind, storeKey, nodeId, disabled = false }: StoreBodyProps) {
+export function StoreBody({ kind, storeKey, nodeId, disabled = false, declared, onDeclare }: StoreBodyProps) {
   const [info, setInfo] = useState<DbInfo | KvInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [schemaOpen, setSchemaOpen] = useState(false);
@@ -118,7 +122,7 @@ export function StoreBody({ kind, storeKey, nodeId, disabled = false }: StoreBod
             icon="albums-outline"
             onClose={() => setSchemaOpen(false)}
           >
-            <DbSchemaEditor dbKey={storeKey} disabled={disabled} />
+            <DbSchemaEditor dbKey={storeKey} disabled={disabled} declared={declared} onDeclare={onDeclare} />
           </NodeModal>
         )}
       </div>

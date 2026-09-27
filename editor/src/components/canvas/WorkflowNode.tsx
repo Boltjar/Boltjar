@@ -28,6 +28,7 @@ import {
   llmPromoted,
   modelWidgetOf,
   nodePromoted,
+  onBody,
   reservedInputNames,
   templateTags,
   DB_ID,
@@ -51,6 +52,7 @@ import { ModelPicker } from "./ModelPicker";
 import { ParamKnobs } from "./ParamKnobs";
 import { PreviewBody, previewTypeFor } from "./Preview";
 import { StoreBody } from "./StoreBody";
+import { schemaWidget } from "../../lib/storeSchema";
 import { StoreHints } from "./StoreHints";
 import { ToolHints } from "./ToolHints";
 import { StoreSelect } from "./StoreSelect";
@@ -217,6 +219,8 @@ function WorkflowNodeImpl({ id, data, selected }: NodeProps) {
   const storeKey = isStore
     ? String(nd.config[isDbStore ? "db_key" : "kv_key"] ?? id)
     : "";
+  // the hidden widget this store keeps its declared tables in (by kind, not id).
+  const declaredWidget = schemaWidget(def);
 
   const bodyRows = bodySummary(def, nd.config);
   const special = isChat || isPreview || isTemplate || isModelNode || isChatOut || isStore;
@@ -227,7 +231,7 @@ function WorkflowNodeImpl({ id, data, selected }: NodeProps) {
   // render their own surface, so they have no inline knob rows here.
   const promotedNames = new Set(nodePromoted(nd.config));
   const bodyWidgets = special ? [] : def.widgets.filter(
-    (w) => (w.surface ?? "body") !== "modal" && opVisible(w, nd.config) && !promotedNames.has(w.name),
+    (w) => onBody(w) && opVisible(w, nd.config) && !promotedNames.has(w.name),
   );
   const expandWidgets = bodyWidgets.filter((w) => w.expand);
   const fixedRows = bodyWidgets.length - expandWidgets.length;
@@ -427,7 +431,14 @@ function WorkflowNodeImpl({ id, data, selected }: NodeProps) {
 
       {isStore && (
         <div className="node-special">
-          <StoreBody kind={isDbStore ? "db" : "kv"} storeKey={storeKey} nodeId={id} disabled={disabled} />
+          <StoreBody
+            kind={isDbStore ? "db" : "kv"}
+            storeKey={storeKey}
+            nodeId={id}
+            disabled={disabled}
+            declared={declaredWidget ? nd.config[declaredWidget.name] : undefined}
+            onDeclare={declaredWidget ? (t) => updateConfig(id, declaredWidget.name, t) : undefined}
+          />
         </div>
       )}
 
@@ -731,10 +742,11 @@ function InlineKnobs({
 }) {
   // The body shows EVERY declared widget: there is no inspector and no per-id
   // INLINE_KNOBS subset. A widget is shown unless it is: surface="modal" (opens
-  // the shared modal instead), op-shaped and out of its op, or promoted to a port.
+  // the shared modal instead) or "hidden" (never drawn), op-shaped and out of its
+  // op, or promoted to a port.
   const promoted = new Set(nodePromoted(config));
   const widgets = def.widgets.filter(
-    (w) => (w.surface ?? "body") !== "modal" && opVisible(w, config) && !promoted.has(w.name),
+    (w) => onBody(w) && opVisible(w, config) && !promoted.has(w.name),
   );
 
   if (widgets.length === 0) {

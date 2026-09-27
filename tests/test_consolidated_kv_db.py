@@ -483,7 +483,8 @@ def test_db_insert_without_fields_raises(tmp_path, monkeypatch):
 def test_db_insert_into_missing_table_raises_friendly_error(tmp_path, monkeypatch):
     """Writing to a table that doesn't exist yet surfaces the node's actionable
     error (table name + how to create it), NOT a raw sqlite OperationalError, and
-    does NOT auto-create the table (a pending design decision)."""
+    does NOT create the table itself (tables come from the Database node's
+    declared schema)."""
     store = _db(tmp_path, monkeypatch)
 
     rt = Runtime()
@@ -499,8 +500,8 @@ def test_db_insert_into_missing_table_raises_friendly_error(tmp_path, monkeypatc
     inst = rt.nodes["ins"]
     with pytest.raises(ValueError, match="no such table 'chat_history'"):
         asyncio.run(rt._fire(inst, "trigger", "go", rt.new_turn()))
-    # the actionable hint (create it first) is part of the message.
-    with pytest.raises(ValueError, match="Create it first"):
+    # the actionable hint (create it first, on the Database node) is part of the message.
+    with pytest.raises(ValueError, match="Create it first: add it with Edit on the Database node"):
         asyncio.run(rt._fire(inst, "trigger", "go", rt.new_turn()))
     # NOT auto-created: the table still does not exist.
     assert store.query(
