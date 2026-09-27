@@ -239,6 +239,11 @@ ROWS = [
 ]
 
 
+HEADING = "v0.1.0  Catch the spark. Keep it running."
+# the widest window that still leaves the flask out (its last column stays free)
+NO_FLASK = 2 + max(map(len, banner_art.FLASK)) + console.ART_GAP + len(HEADING)
+
+
 def banner(width: int, rows=ROWS, caps: Caps | None = None) -> list[str]:
     out = Console(FakeStream(tty=False), caps or Caps(unicode=True), width=width)
     return out.banner_lines("0.1.0", rows)
@@ -260,9 +265,8 @@ def test_a_wide_window_shows_the_flask_beside_the_word_and_the_checklist():
     assert any(line.endswith("v0.1.0  Catch the spark. Keep it running.") for line in lines)
     assert any(line.endswith("✓ Python     3.12.9  .venv") for line in lines)
     assert any(line.endswith("✓ Packs      core (63 nodes)") for line in lines)
-    # the column beside the flask is centred on it: flask rows above and below
-    beside = [i for i, line in enumerate(lines) if "Catch the spark" in line or "✓" in line]
-    assert 1 < beside[0] and beside[-1] < len(banner_art.FLASK)
+    # the flask and the word start on the same row, under the blank that opens the banner
+    assert lines[1].startswith("  " + banner_art.FLASK[0]) and lines[1].endswith(banner_art.WORD[0].rstrip())
 
 
 def test_the_word_is_followed_by_a_blank_the_version_a_blank_and_the_checklist():
@@ -278,7 +282,7 @@ def test_the_word_is_followed_by_a_blank_the_version_a_blank_and_the_checklist()
 
 
 def test_a_window_too_narrow_for_the_flask_keeps_the_word_and_the_checklist():
-    lines = banner(80)
+    lines = banner(NO_FLASK)
     assert not any(banner_art.FLASK[5].strip() in line for line in lines)
     assert "  " + banner_art.WORD[3] in lines
     assert "  ✓ Editor     bundle ready" in lines
@@ -320,15 +324,14 @@ def test_a_command_wider_than_the_column_breaks_at_its_spaces():
 
 def test_the_flask_needs_room_for_the_whole_column_beside_it():
     flask = max(map(len, banner_art.FLASK))
-    beside = len("v0.1.0  Catch the spark. Keep it running.")
-    fits = 2 + flask + console.ART_GAP + beside + 1  # the last column stays free
+    fits = 2 + flask + console.ART_GAP + len(HEADING) + 1  # the last column stays free
     assert any(banner_art.FLASK[5] in line for line in banner(fits))
     assert not any(banner_art.FLASK[5] in line for line in banner(fits - 1))
 
 
 def test_a_checklist_row_aligns_and_carries_its_fixes():
     rows = [Row("Port", "8770 is in use", "bad", fixes=("use another port: --port 8771",))]
-    assert banner(80, rows)[-3:] == [
+    assert banner(NO_FLASK, rows)[-3:] == [
         "  ✗ Port       8770 is in use",
         "               fix: use another port: --port 8771",
         "",
@@ -337,7 +340,18 @@ def test_a_checklist_row_aligns_and_carries_its_fixes():
 
 def test_an_aside_that_does_not_fit_takes_its_own_line():
     rows = [Row("Packs", "core; failed: " + "x" * 40, "warn", aside="(63 nodes)")]
-    assert banner(80, rows)[-3:] == [f"  ! Packs      core; failed: {'x' * 40}", "               (63 nodes)", ""]
+    assert banner(NO_FLASK, rows)[-3:] == [f"  ! Packs      core; failed: {'x' * 40}", "               (63 nodes)", ""]
+
+
+def test_the_flask_steps_aside_before_a_link_beside_it_would_break():
+    link = "http://studio.example:9001/?token=<token>"
+    rows = [*ROWS, Row("Remote", "0.0.0.0:9001", "warn", fixes=(f"open {link} there",))]
+    beside = 2 + max(map(len, banner_art.FLASK)) + console.ART_GAP + 2 + console.LABEL_WIDTH
+    narrow = beside + len(link)  # one column short of room for the link beside the flask
+    for width in (narrow, narrow + 1):
+        lines = banner(width, rows)
+        assert any(link in line for line in lines)
+        assert any(banner_art.FLASK[5] in line for line in lines) == (width > narrow)
 
 
 def test_asides_and_fixes_are_dim_and_the_version_bold_soft_white():

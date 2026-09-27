@@ -428,6 +428,16 @@ def _wrap(text: str, width: int) -> list[str]:
     return lines
 
 
+def _longest_word(rows: Sequence[Row]) -> int:
+    """The widest run a checklist row can not break: a word, a link, an
+    unbroken() command, an aside (which moves down whole)."""
+    runs = [row.aside for row in rows]
+    for row in rows:
+        for text in (row.detail, *(f"fix: {fix}" for fix in row.fixes)):
+            runs += text.split(" ")
+    return max(map(len, runs), default=0)
+
+
 def next_bar(style: Style) -> str:
     """The bar for the next line of the open block (call under _SCREEN)."""
     global _block_line
@@ -478,8 +488,10 @@ class Console:
         heading = f"{s(f'v{version}', 'soft', bold=True)}  {s(TAGLINE, dim=True)}"
         need = max(max(map(len, banner_art.WORD)), visible_len(heading))
         flask_width = max(map(len, banner_art.FLASK))
-        if width >= 2 + flask_width + ART_GAP + need:
-            room = width - 2 - flask_width - ART_GAP
+        room = width - 2 - flask_width - ART_GAP
+        # the flask is decoration: it steps aside before a link or a command
+        # beside it would have to break
+        if room >= need and _longest_word(rows) <= room - 2 - LABEL_WIDTH:
             right = self._word() + ["", heading, ""] + self._checklist(rows, room)
             return ["", *self._beside(s.art(banner_art.FLASK, banner_art.FLASK_RGB), right), ""]
         if width >= 2 + need:
@@ -496,16 +508,14 @@ class Console:
 
     @staticmethod
     def _beside(left: list[str], right: list[str]) -> list[str]:
-        """`left` (the flask) with `right` beside it, centred on its height."""
+        """`left` (the flask) with `right` beside it, both from the top row, so
+        the flask sits level with the word however long the checklist runs."""
         flask_width = max(map(len, banner_art.FLASK))
-        height = max(len(left), len(right))
-        top = (height - len(right)) // 2
         lines = []
-        for i in range(height):
+        for i in range(max(len(left), len(right))):
             art = left[i] if i < len(left) else ""
             shown = banner_art.FLASK[i] if i < len(banner_art.FLASK) else ""
-            j = i - top
-            beside = right[j] if 0 <= j < len(right) else ""
+            beside = right[i] if i < len(right) else ""
             pad = " " * (flask_width - len(shown) + ART_GAP)
             lines.append(f"  {art}{pad}{beside}".rstrip() if beside else f"  {art}".rstrip())
         return lines
