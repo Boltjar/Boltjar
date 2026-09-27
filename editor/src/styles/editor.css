@@ -241,10 +241,14 @@ button{font-family:inherit;}
   z-index:6; display:flex; align-items:center; gap:7px; pointer-events:none;
   font-family:var(--font-mono); font-size:var(--fs-micro); color:var(--ink-dim);
   background:rgba(13,20,29,0.82); border:1px solid var(--line-2); border-radius:var(--radius-pill);
-  padding:5px 12px; transition:opacity var(--dur-4) var(--ease-out);
+  padding:5px 12px; transition:opacity var(--dur-4) var(--ease-out); white-space:nowrap;
 }
 .pan-hint svg{width:14px; height:14px; color:var(--accent);}
 .pan-hint.hide{opacity:0;}
+/* the pill stays one line, so its measured width is its real width; Canvas
+   slides it clear of the credit and the zoom cluster (lib/panHint) and a canvas
+   too narrow for it between them hides it. */
+.pan-hint.no-room{visibility:hidden;}
 
 .canvas-loading{position:absolute; inset:0; display:grid; place-items:center; z-index:6; pointer-events:none;
   font-family:var(--font-mono); font-size:var(--fs-xs); color:var(--ink-faint); letter-spacing:var(--tr-label);}

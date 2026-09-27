@@ -4,7 +4,7 @@
 // the bottom-right zoom cluster. Owns the connection-derivation maps (which
 // handles are wired, growable counts) that the node renderer reads via context.
 // ============================================================================
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   Background,
   BackgroundVariant,
@@ -27,6 +27,7 @@ import { Icon } from "../../lib/icons";
 import { functionColorVar } from "../../lib/kinds";
 import { typeColorVar } from "../../lib/types";
 import { mod } from "../../lib/platform";
+import { panHintCenter } from "../../lib/panHint";
 import type { NodeDef } from "../../types/protocol";
 
 const nodeTypes: NodeTypes = { workflow: WorkflowNode };
@@ -184,6 +185,38 @@ export function Canvas(props: CanvasProps) {
   useEffect(() => {
     const t = window.setTimeout(() => setHintHidden(true), 2800);
     return () => window.clearTimeout(t);
+  }, []);
+
+  // the pan hint shares the bottom row with the React Flow credit and the zoom
+  // cluster: it sits in the free stretch between them (lib/panHint), measured
+  // again whenever the canvas or the pill changes size, and hides when a narrow
+  // canvas leaves it no room. null centre = no room.
+  const hintRef = useRef<HTMLDivElement>(null);
+  const zoomRef = useRef<HTMLDivElement>(null);
+  const [hintX, setHintX] = useState<number | null | undefined>(undefined);
+  useLayoutEffect(() => {
+    const canvas = wrapperRef.current;
+    const hint = hintRef.current;
+    const zoom = zoomRef.current;
+    if (!canvas || !hint || !zoom) return;
+    const place = () => {
+      const box = canvas.getBoundingClientRect();
+      const credit = canvas.querySelector(".react-flow__attribution")?.getBoundingClientRect();
+      const tokens = getComputedStyle(canvas);
+      setHintX(panHintCenter({
+        width: box.width,
+        hint: hint.offsetWidth,
+        left: credit ? credit.right - box.left : 0,
+        right: zoom.getBoundingClientRect().left - box.left,
+        gap: parseFloat(tokens.getPropertyValue("--space-3")) || 0,
+        inset: parseFloat(tokens.getPropertyValue("--space-4")) || 0,
+      }));
+    };
+    place();
+    const ro = new ResizeObserver(place);
+    ro.observe(canvas);
+    ro.observe(hint);
+    return () => ro.disconnect();
   }, []);
 
   // fit to the graph once it first loads
@@ -500,7 +533,11 @@ export function Canvas(props: CanvasProps) {
         </div>
       )}
 
-      <div className={`pan-hint ${hintHidden ? "hide" : ""}`}>
+      <div
+        ref={hintRef}
+        className={`pan-hint ${hintHidden ? "hide" : ""} ${hintX === null ? "no-room" : ""}`}
+        style={typeof hintX === "number" ? { left: hintX } : undefined}
+      >
         <Icon name="hand-left-outline" /> drag to pan · scroll to zoom
       </div>
 
@@ -510,7 +547,7 @@ export function Canvas(props: CanvasProps) {
         </div>
       )}
 
-      <div className="zoom-ctrl">
+      <div className="zoom-ctrl" ref={zoomRef}>
         <button className="icon-btn" title="Zoom in" onClick={zoomIn}>
           <Icon name="add-outline" />
         </button>
