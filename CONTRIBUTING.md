@@ -73,6 +73,8 @@ boltjar/                 the Python package
   runtime.py             the engine: triggers push events, fired nodes pull their data
   sdk.py                 the node contract: @node, Kind, Port, Widget
   models.py              loads the model manifests
+  model_discovery.py     the live model list: asks each connected provider which models exist
+  endpoints.py           OpenAI and custom OpenAI-compatible endpoints
   secrets.py             secrets store and provider keys
   *_store.py             SQLite, key-value, vector and sandboxed file stores
   mcp_server.py          MCP server, so an AI assistant can drive the runtime
@@ -120,7 +122,9 @@ A few things to know:
 - Core ids start with `core.` (`core.text.strip`). Saved graphs store the id, so it stays fixed once shipped.
 - Add a test in `tests/`. `tests/test_split_node.py` is a short one to copy.
 
-A new model from a provider Boltjar already supports needs no code. Copy the closest TOML manifest in `boltjar/nodes/core/models/`, edit it and restart the server. The LLM node reshapes its inputs, outputs and knobs to the selected model's manifest.
+A new model from a provider Boltjar already supports needs no code and no file: once the provider lists it (Ollama has it installed, or your key's account offers it), it shows up in the model picker with knobs from its reported capabilities. A TOML manifest in `boltjar/nodes/core/models/` is optional enrichment: copy the closest one to give a model its own label, knobs or capabilities, and restart the server. The LLM node reshapes its inputs, outputs and knobs to the selected model.
+
+A node that calls a model declares its picker as a widget, `model("tts", "xai/tts")` (the family it lists, then the default), and gets the same picker and per-model knobs as the LLM node.
 
 ### A node pack
 

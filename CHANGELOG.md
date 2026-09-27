@@ -16,6 +16,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/).
 - The Webhook trigger can require a shared secret in the `X-Webhook-Secret` header.
 - An LLM node that reshapes its ports and knobs to the selected model, with tool calling through Tool and Tool Args.
 - Model manifests as TOML files, one per model: chat models from xAI, Anthropic and Ollama, plus voice, embedding and rerank models.
+- A live model list: the picker shows the models your Ollama has installed and your keys can run, asked from each provider when the server starts, on Refresh and every few hours, and kept offline in a cache. A manifest enriches the model it names, and one its provider no longer lists is marked unavailable.
+- OpenAI and custom OpenAI-compatible endpoints (OpenRouter, Groq, LM Studio, llama.cpp, vLLM) in the LLM node, with tools and images where the model reports them.
+- An `auto` model for the LLM node: the first installed Ollama chat model, else the first chat model of a provider with a key, else a reply that says how to connect one.
+- Validation names a saved model that vanished and the closest one available.
 - A mock mode: without a key, a cloud model in the LLM node answers with a mock reply, so the chat example replies out of the box. Its TTS node still needs a key.
 - TTS and STT nodes for xAI, Fish Audio and ElevenLabs. Each needs its provider's API key.
 - Retrieval nodes: Chunk, Sentences, Embed, Vector Store, Vectors and Rerank.
