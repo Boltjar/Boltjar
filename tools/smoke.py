@@ -21,7 +21,7 @@ print("validate:", client.post("/api/validate", json=graph).json()["problems"] o
 events = []
 with client.websocket_connect("ws://127.0.0.1:8770/ws") as ws:
     ws.send_json({"action": "on", "graph": graph})
-    for _ in range(12):
+    for _ in range(40):
         e = ws.receive_json()
         events.append(e)
         if e.get("kind") == "log":
