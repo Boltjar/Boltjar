@@ -64,10 +64,16 @@ class ModelManifest:
     def param_defaults(self) -> dict:
         return {p.name: p.default for p in self.params}
 
-    def as_dict(self) -> dict:
+    def as_dict(self, probe: bool = True) -> dict:
+        """The manifest as the picker reads it. `available` says whether the
+        provider is usable right now, which checks its key or pings Ollama; with
+        probe=False nothing is checked and it is None (an offline reader such as
+        a docs generator)."""
         # Lazy import to avoid a circular dependency at module load time.
         from boltjar.secrets import provider_connected, PROVIDERS
-        if self.provider in PROVIDERS:
+        if not probe:
+            available = None
+        elif self.provider in PROVIDERS:
             available = provider_connected(self.provider)
         else:
             available = True  # unknown providers are treated as available
@@ -168,6 +174,7 @@ def get(model_id: str) -> ModelManifest | None:
     return MODELS.get(model_id)
 
 
-def catalog() -> list[dict]:
-    """All manifests as plain dicts, sorted for a stable picker order."""
-    return [m.as_dict() for m in sorted(MODELS.values(), key=lambda m: (m.provider, m.id))]
+def catalog(probe: bool = True) -> list[dict]:
+    """All manifests as plain dicts, sorted for a stable picker order. probe=False
+    skips the availability check (no key lookup, no Ollama ping)."""
+    return [m.as_dict(probe) for m in sorted(MODELS.values(), key=lambda m: (m.provider, m.id))]

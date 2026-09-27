@@ -9,6 +9,7 @@ import asyncio
 import json
 import sys
 
+from boltjar import secrets
 from boltjar.runtime import Runtime
 import boltjar.nodes.core  # noqa: F401  (registers the core nodes)
 
@@ -16,6 +17,7 @@ import boltjar.nodes.core  # noqa: F401  (registers the core nodes)
 async def _run(path: str, seconds: float) -> None:
     with open(path, "r", encoding="utf-8") as fh:
         graph = json.load(fh)
+    secrets.ensure_loaded()  # the graph's nodes read provider keys from os.environ
     runtime = Runtime(observer=lambda e: print(json.dumps(e)))
     runtime.build(graph)
     await runtime.run()

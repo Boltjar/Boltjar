@@ -24,6 +24,7 @@ Run:  uvicorn boltjar.server:app --port 8770
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import datetime
 import json
 import pathlib
@@ -236,7 +237,15 @@ def get_hub(slug: str) -> Hub:
     return hub
 
 
-app = FastAPI(title="Boltjar")
+@contextlib.asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    # the user's secrets load when the server starts, not when the registry is
+    # imported: nodes read provider keys from os.environ once a graph runs.
+    _secrets.ensure_loaded()
+    yield
+
+
+app = FastAPI(title="Boltjar", lifespan=_lifespan)
 
 
 # --------------------------------------------------------------- edge validation

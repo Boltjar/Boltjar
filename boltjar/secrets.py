@@ -4,6 +4,10 @@ boltjar.secrets: a server-managed secrets store.
 User secrets persist to user/data/secrets.json (a flat {name: value} JSON).
 Curated provider env keys are surfaced as read-only 'env' sources.
 
+Nothing is read at import: the file is loaded (and mirrored into os.environ) on
+first use or when the server starts (`ensure_loaded`), so importing the node
+registry offline, e.g. to generate docs, never touches the user's keys.
+
 Nodes can later reference {{secret.NAME}} tokens; the resolver replaces
 them with the resolved value, or leaves the literal token intact when the
 secret is unknown (fail visibly, never silently empty).
@@ -54,8 +58,9 @@ _OLLAMA_CACHE_TTL = 4.0  # seconds
 # ---------------------------------------------------------------------------
 _PATH: pathlib.Path = pathlib.Path(__file__).resolve().parent.parent / "user" / "data" / "secrets.json"
 
-# In-memory dict of user-managed secrets.
+# In-memory dict of user-managed secrets, and whether _PATH has been read yet.
 _store: dict[str, str] = {}
+_loaded = False
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -75,7 +80,8 @@ def _load() -> None:
     Also syncs every stored secret into os.environ so providers pick them
     up without a restart.
     """
-    global _store
+    global _store, _loaded
+    _loaded = True
     try:
         text = _PATH.read_text(encoding="utf-8").strip()
         _store = json.loads(text) if text else {}
@@ -96,8 +102,12 @@ def _persist() -> None:
     tmp.replace(_PATH)
 
 
-# Load at import time.
-_load()
+def ensure_loaded() -> None:
+    """Load the user secrets once: the first call reads _PATH, later calls do
+    nothing. Every public function here calls it, and the server calls it at
+    startup so nodes reading provider keys from os.environ see them."""
+    if not _loaded:
+        _load()
 
 # ---------------------------------------------------------------------------
 # Public API
@@ -110,6 +120,7 @@ def list_secrets() -> list[dict]:
     - Every user secret appears with source 'user'.
     - Values are NEVER included.
     """
+    ensure_loaded()
     entries: list[dict] = []
     for name in _ENV_KEYS:
         if name in os.environ:
@@ -121,6 +132,7 @@ def list_secrets() -> list[dict]:
 
 def get_secret(name: str) -> str | None:
     """Resolve a secret: user dict first, then os.environ."""
+    ensure_loaded()
     if name in _store:
         return _store[name]
     return os.environ.get(name)
@@ -136,6 +148,7 @@ def set_secret(name: str, value: str) -> None:
             f"Secret name {name!r} is invalid: only uppercase letters, digits, "
             "and underscores are allowed (^[A-Z0-9_]+$)"
         )
+    ensure_loaded()  # never persist over secrets that were not read yet
     _store[name] = value
     os.environ[name] = value
     _persist()
@@ -148,6 +161,7 @@ def delete_secret(name: str) -> bool:
     Returns True on success.  Only user secrets (those in _store) are removed
     from os.environ; env-only keys are not touched.
     """
+    ensure_loaded()
     if name not in _store:
         return False
     del _store[name]
@@ -166,6 +180,7 @@ def provider_connected(provider: str) -> bool:
     - "ollama": pings the local Ollama API (cached for a few seconds).
     - Others: True iff their env var is set to a non-empty string.
     """
+    ensure_loaded()
     env_var = PROVIDERS.get(provider)
     if provider == "ollama":
         return _ollama_connected()
