@@ -117,7 +117,7 @@ class Upper:
 
 A few things to know:
 
-- `pulled=True` makes a data node. It runs on demand, when a fired node needs its value. A node that does work takes an input with `trigger=True` instead: it fires when an event arrives and pulls its other inputs at that moment.
+- `pulled=True` makes a data node. It runs on demand, when a fired node needs its value, so keep it free of side effects. A node that does work takes an input with `trigger=True` instead: it fires when an event arrives and pulls its other inputs at that moment. A pulled node can take a trigger too, as the Template does: each fire runs it and passes the trigger on, and a node that reads it in the same turn gets that fire's value.
 - A trigger fires the node and must be wired. A graph with an unwired trigger input does not turn On, and `@node` refuses a trigger declared `optional=True`, naming the node, so the pack is skipped with that reason. `optional=True` is for data inputs that may stay unwired.
 - Knobs are annotated class attributes (`seconds: float = 2.0`) or `Widget` values from `boltjar.sdk` (`select`, `slider`, `code`). In the editor, a right-click turns a knob into an input, unless its `Widget` sets `promotable=False`.
 - Put behavior on the `Port` and `Widget` declarations (`growable`, `optional`, `op_field` and the rest). The editor reads those generically.

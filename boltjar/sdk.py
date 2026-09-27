@@ -18,9 +18,14 @@ editor renders as inspector widgets. Its execution surface is chosen by its
     Kind.OUTPUT     def deliver(self, value, ctx, inputs=None)
 
 A node that does work declares an input with ``trigger=True``: an event landing
-there fires it, and it pulls its other inputs at that moment. A node with a
-trigger runs only when one fires, so every trigger input must be wired (a graph
-with an unwired one does not turn On) and can never be ``optional``.
+there fires it, and it pulls its other inputs at that moment. A trigger fires
+its node, so every trigger input must be wired (a graph with an unwired one does
+not turn On) and can never be ``optional``.
+
+A ``pulled=True`` node is data: it runs whenever a fired node reads it, so it
+keeps no side effects. One that also declares a trigger (the Template) runs on
+each fire as well and passes the trigger on; a read in the same turn gets that
+fire's value, and only a fire passes the trigger on.
 
 Nothing here imports a runtime; the SDK is the pure contract so node packs and
 the server can be reasoned about in isolation.
@@ -336,7 +341,7 @@ class NodeSpec:
     inputs: list[Port] = field(default_factory=list)
     outputs: list[Port] = field(default_factory=list)
     widgets: list[Widget] = field(default_factory=list)
-    pulled: bool = False     # a data node: evaluated on demand, not fired
+    pulled: bool = False     # a data node: evaluated on demand (and fired, if it has a trigger)
     volatile: bool = False   # re-read on every pull (Sensors); else memoized per turn
     # a fired node that opens a FRESH turn (epoch) for each emit, so the body it
     # drives re-pulls every time instead of reading the incoming turn's memoized

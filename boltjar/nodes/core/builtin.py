@@ -2,8 +2,9 @@
 boltjar.nodes.core.builtin: the core node pack.
 
 Lean nodes: content is a node, the engine is lean. Data nodes are `pulled`
-(evaluated on demand, never fired); work/actor nodes fire on a trigger input
-(marked `trigger=True`) and pull their data inputs (see boltjar.runtime).
+(evaluated on demand; the Template also fires on its trigger); work/actor nodes
+fire on a trigger input (marked `trigger=True`) and pull their data inputs (see
+boltjar.runtime).
 """
 from __future__ import annotations
 

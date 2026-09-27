@@ -1,6 +1,6 @@
 # Boltjar
 
-Boltjar is a visual, node-based builder for always-on systems. Every trigger, model, store, transform, conditional and output is a typed node, and you build behaviour by wiring them together on one canvas: think **ComfyUI** (a typed node graph you can rewire) crossed with **n8n** (triggers and always-on automation). A workflow is a live server you turn **On / Off / Restart**, not a one-shot run: triggers push events, and the nodes they fire pull their data inputs on demand. A node with a trigger input runs only when that trigger fires, so every trigger input must be wired before a graph turns On. The backend is Python (FastAPI + asyncio), the editor is React + React Flow, and the LLM node answers in mock mode until you add a provider key, so a chat graph works out of the box.
+Boltjar is a visual, node-based builder for always-on systems. Every trigger, model, store, transform, conditional and output is a typed node, and you build behaviour by wiring them together on one canvas: think **ComfyUI** (a typed node graph you can rewire) crossed with **n8n** (triggers and always-on automation). A workflow is a live server you turn **On / Off / Restart**, not a one-shot run: triggers push events, and the nodes they fire pull their data inputs on demand. A trigger input fires its node, so every trigger input must be wired before a graph turns On. The backend is Python (FastAPI + asyncio), the editor is React + React Flow, and the LLM node answers in mock mode until you add a provider key, so a chat graph works out of the box.
 
 ## Quick start
 
