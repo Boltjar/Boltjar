@@ -31,6 +31,7 @@ import {
   updatedLine,
 } from "../../lib/modelMeta";
 import { useEditor } from "../../lib/editorContext";
+import { placePopover } from "../../lib/popover";
 
 interface ModelPickerProps {
   /** every model the server lists; the picker keeps the runnable ones of `kind`. */
@@ -54,7 +55,12 @@ interface TriggerRect {
 }
 
 const PANEL_MIN_W = 264;
+/** the panel's own cap (the .mp-panel max-height); a longer list scrolls. */
 const PANEL_MAX_H = 340;
+/** below this much room on both sides, the panel may cover its trigger. */
+const PANEL_MIN_H = 160;
+const PANEL_GAP = 5;
+const VIEWPORT_MARGIN = 8;
 
 export function ModelPicker({
   manifests,
@@ -131,6 +137,24 @@ export function ModelPicker({
     return () => cancelAnimationFrame(raf);
   }, [open]);
 
+  // the panel's natural height (its content, up to its own cap), measured after
+  // every render before paint, so a short list (Auto and "Add a connection")
+  // opens against the trigger instead of where a full-height panel would sit.
+  // The list scrolls when the panel is held shorter, so its full height is the
+  // panel's height minus what the list shows plus all the list holds.
+  const [panelH, setPanelH] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    if (!open) {
+      if (panelH !== null) setPanelH(null);
+      return;
+    }
+    const panel = panelRef.current;
+    const list = panel?.querySelector<HTMLElement>(".mp-list");
+    if (!panel || !list) return;
+    const natural = Math.min(PANEL_MAX_H, panel.offsetHeight - list.clientHeight + list.scrollHeight);
+    if (panelH === null || Math.abs(natural - panelH) > 0.5) setPanelH(natural);
+  });
+
   const runnable = useMemo(() => runnableModels(manifests, kind), [manifests, kind]);
   const groups = useMemo(() => pickerGroups(manifests, kind, query), [manifests, kind, query]);
   const flat = useMemo(() => groups.flatMap((g) => g.models), [groups]);
@@ -180,28 +204,31 @@ export function ModelPicker({
   }
   const autoNote = modelStatus(AUTO_MODEL, models, modelsMeta).note;
 
-  // screen-space placement for the portaled panel: prefer below the trigger,
-  // flip above when it would not fit, and clamp to the viewport otherwise.
+  // screen-space placement for the portaled panel (lib/popover): against the
+  // trigger, below it when the panel's measured height fits there, above it
+  // otherwise, clamped to the viewport. Until the panel has been measured once
+  // it is laid out hidden at its largest height, and measured before it paints.
   let panelStyle: CSSProperties | undefined;
   let dropClass: "down" | "up" = "down";
   if (rect) {
-    const width = Math.max(rect.width, PANEL_MIN_W);
-    const left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8));
-    const below = rect.bottom + 5;
-    const above = rect.top - PANEL_MAX_H - 5;
-    let top: number;
-    if (below + PANEL_MAX_H <= window.innerHeight - 8) {
-      top = below;
-    } else if (above >= 8) {
-      top = above;
-      dropClass = "up";
-    } else {
-      top = Math.max(8, window.innerHeight - PANEL_MAX_H - 8);
-    }
+    const place = placePopover({
+      trigger: rect,
+      height: panelH ?? PANEL_MAX_H,
+      minWidth: PANEL_MIN_W,
+      minHeight: PANEL_MIN_H,
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+      gap: PANEL_GAP,
+      margin: VIEWPORT_MARGIN,
+    });
+    dropClass = place.side;
     // the panel is portaled to <body> and fully positioned here via top/left, so
     // override the legacy .up/.down CSS that sets bottom/top (a leaked `bottom`
     // from .mp-panel.up would push a fixed panel above the viewport = invisible).
-    panelStyle = { position: "fixed", left, width, top, right: "auto", bottom: "auto" };
+    panelStyle = {
+      position: "fixed", left: place.left, width: place.width, top: place.top,
+      right: "auto", bottom: "auto", maxHeight: place.maxHeight,
+      visibility: panelH === null ? "hidden" : undefined,
+    };
   }
 
   return (
