@@ -385,12 +385,13 @@ class Runtime:
         """The (source node, source port) of every wire into a socket of the
         growable input `base` of `node_id`, in the graph's edge order.
 
-        A socket is known by what its wire carries, never by its name: the editor
-        names the sockets it mints (`tool0`, `tool1` for the LLM's `tools`), a
-        hand-written graph may use the base's own name, and a pack may pick any
-        other. So a socket of `base` is any wired input the node does not declare
-        and did not promote from a knob, fed by an output whose type fits the
-        base's type."""
+        A socket is never known by its name alone: the editor names the sockets
+        it mints (`tool0`, `tool1` for the LLM's `tools`), a hand-written graph
+        may use the base's own name, and a pack may pick any other. So a socket
+        of `base` is a wired input that NodeSpec.growable_base gives to `base`
+        (the one rule validation and firing use), fed by an output whose type
+        fits the base's type: an LLM's model-shaped inputs (an image, audio)
+        are wired sockets too, and only the type tells them from a tool."""
         inst = self.nodes.get(node_id)
         if inst is None:
             return []
@@ -399,10 +400,9 @@ class Runtime:
             return []
         cfg = getattr(inst.obj, "_node_cfg", None) or {}
         promoted = cfg.get("promoted") if isinstance(cfg.get("promoted"), (list, tuple)) else []
-        other = {p.name for p in inst.spec.inputs if p.name != base} | set(promoted)
         found: list[tuple[str, str]] = []
         for (dst, port), (src, src_port) in self.edges_into.items():
-            if dst != node_id or port in other:
+            if dst != node_id or inst.spec.growable_base(port, promoted) is not grow:
                 continue
             src_inst = self.nodes.get(src)
             if src_inst is None:
