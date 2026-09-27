@@ -21,7 +21,7 @@ from boltjar.sdk import NODE_REGISTRY, Kind, Port, Widget, node
 CORE_WIDGET_KINDS = {
     "core.ai.embed": {"model": "model"},
     "core.ai.llm": {"model": "model"},
-    "core.ai.rerank": {"model": "model", "url": "text"},
+    "core.ai.rerank": {"model": "model"},
     "core.ai.stt": {"model": "model"},
     "core.ai.tool": {"name": "text", "description": "code", "schema_mode": "select", "schema": "code"},
     "core.ai.tool_args": {"fields": "text"},

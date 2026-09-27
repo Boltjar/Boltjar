@@ -81,18 +81,45 @@ def test_rerank_empty_candidates_is_a_no_op(monkeypatch):
     assert asyncio.run(r.run(query="x", candidates=[])) == {"results": [], "trigger": True}
 
 
-def test_rerank_url_knob_is_passed_to_the_backend(monkeypatch):
-    # the `url` knob (not a buried constant) is the endpoint the node calls.
-    seen = {}
+def _rerank_spy(monkeypatch) -> dict:
+    seen: dict = {}
 
     async def spy(manifest, q, docs, endpoint):
         seen["endpoint"] = endpoint
-        return [1.0]
+        return [float(len(docs) - i) for i in range(len(docs))]
     monkeypatch.setattr(builtin, "_rerank_model", spy)
+    return seen
+
+
+def test_rerank_calls_the_endpoint_its_body_shows(monkeypatch):
+    # the editor draws a model node's picker and its model's settings only, so
+    # the manifest's `endpoint` setting is the address the node calls.
+    seen = _rerank_spy(monkeypatch)
+    r = _node("core.ai.rerank", {"model": "rerank/bge-v2-m3"})
+    asyncio.run(r.run(query="x", candidates=[{"text": "a"}]))
+    assert seen["endpoint"] == "http://localhost:8181/rerank"  # the manifest default
     r = _node("core.ai.rerank", {"model": "rerank/bge-v2-m3",
-                                 "url": "http://box:9999/rerank"})
+                                 "params": {"endpoint": "http://box:9999/rerank"}})
     asyncio.run(r.run(query="x", candidates=[{"text": "a"}]))
     assert seen["endpoint"] == "http://box:9999/rerank"
+
+
+def test_rerank_settings_converted_to_inputs_take_their_wires(monkeypatch):
+    seen = _rerank_spy(monkeypatch)
+    r = _node("core.ai.rerank", {"model": "rerank/bge-v2-m3",
+                                 "params": {"endpoint": "http://box:9999/rerank", "keep": 5},
+                                 "promoted": ["endpoint", "keep"]})
+    out = asyncio.run(r.run(query="x", candidates=[{"text": t} for t in "abcd"],
+                            endpoint="http://wired:7000/rerank", keep=2))
+    assert seen["endpoint"] == "http://wired:7000/rerank"
+    assert [c["text"] for c in out["results"]] == ["a", "b"]
+
+
+def test_rerank_without_an_endpoint_says_so(monkeypatch):
+    _rerank_spy(monkeypatch)
+    r = _node("core.ai.rerank", {"model": "rerank/bge-v2-m3", "params": {"endpoint": " "}})
+    with pytest.raises(builtin.RerankUnavailable, match="set its `endpoint` setting"):
+        asyncio.run(r.run(query="x", candidates=[{"text": "a"}]))
 
 
 def test_rerank_model_raises_naming_the_url(monkeypatch):

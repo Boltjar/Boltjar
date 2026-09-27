@@ -1047,9 +1047,9 @@ def _widget_default(obj, name: str):
 
 
 def _node_model(obj, kind: str):
-    """The manifest a TTS / STT node calls: config.model, else the model widget's
-    declared default. An unknown id, or a manifest of another kind (an LLM picked
-    on a TTS node), raises and names it: no fallback to some other model."""
+    """The manifest a TTS, STT or Rerank node calls: config.model, else the model
+    widget's declared default. An unknown id, or a manifest of another kind (an LLM
+    picked on a TTS node), raises and names it: no fallback to some other model."""
     cfg = getattr(obj, "_node_cfg", None) or {}
     model_id = cfg.get("model") or _widget_default(obj, "model")
     manifest = models.get(model_id) if isinstance(model_id, str) else None
@@ -1407,48 +1407,45 @@ class Embed:
 
 
 @node(id="core.ai.rerank", name="Rerank", kind=Kind.TRANSFORM, category="AI",
-      summary="A cross-encoder precision pass: score each candidate against the "
-              "query and keep the best. Picks a rerank model (an HTTP service at the "
-              "`url` knob). When no rerank service answers, the node fails with an "
-              "error instead of passing the candidates on unranked.")
+      summary="A cross-encoder precision pass: score each candidate against the query "
+              "and keep the best. Picks a rerank model, served over HTTP at the address "
+              "in its `endpoint` setting. When no rerank service answers, the node fails "
+              "with an error instead of passing the candidates on unranked.")
 class Rerank:
-    # a model node like the LLM: the picker + the manifest's params (keep) render in
-    # the body. `keep` (how many to return) is a manifest param; the doc text is the
-    # memory-set's `text` key. The rerank `url` is its own first-class knob so it is
-    # visible and editable on the node (and named in the error when the backend is down).
-    # With nothing picked the node runs the declared default model, which the picker
-    # therefore shows (the TTS/STT precedent).
+    # a model node like the LLM: the body draws the picker and the picked
+    # manifest's params, and nothing else. So the service's address is the
+    # manifest's `endpoint` param, the one field the editor shows for it, and
+    # `keep` (how many to return) is a param too; either can be converted to an
+    # input. The doc text is the memory-set's `text` key. With nothing picked the
+    # node runs the declared default model, which the picker therefore shows
+    # (the TTS/STT precedent).
     model: Widget = model("rerank", "rerank/bge-v2-m3")
-    url: Widget = Widget(kind="text", default="http://localhost:8181/rerank",
-                         label="rerank url", port_type="text")
     inputs = [Port("trigger", "event", trigger=True),
               Port("query", "text"),
               Port("candidates", "memory-set")]
     outputs = [Port("results", "memory-set"), Port("trigger", "event")]
 
-    async def run(self, query=None, candidates=None, **_):
-        cfg = getattr(self, "_node_cfg", {}) or {}
+    async def run(self, query=None, candidates=None, **kw):
         items = list(candidates) if isinstance(candidates, list) else []
         if not items:
             return {"results": [], "trigger": True}
-        manifest = models.get(cfg.get("model") or _widget_default(self, "model"))
-        params = manifest.param_defaults() if manifest else {}
-        params.update({k: v for k, v in (cfg.get("params") or {}).items() if v is not None})
+        manifest = _node_model(self, "rerank")
+        # manifest defaults, then the saved settings, then a wired value.
+        params = _model_params(self, manifest, kw)
         keep = max(1, int(params.get("keep") or 5))
-        # the url knob wins; fall back to the model manifest's endpoint param, then
-        # to the documented default. The 8181 default lives in the knob/manifest,
-        # not buried in the failure path.
-        endpoint = str(cfg.get("url") or params.get("endpoint")
-                       or "http://localhost:8181/rerank").strip()
+        endpoint = str(params.get("endpoint") or "").strip()
+        if not endpoint:
+            raise RerankUnavailable(f"rerank model {manifest.id!r} has no endpoint: "
+                                    "set its `endpoint` setting")
         docs = [str((it.get("text") if isinstance(it, dict) else it) or "") for it in items]
         # FAIL LOUD: a down/error/malformed backend raises out of here (the runtime
         # turns the node red and reports it via node_error), never a silent identity
-        # pass-through. Fix by starting a rerank service or repointing the `url` knob.
+        # pass-through. Fix by starting a rerank service or repointing `endpoint`.
         scores = await _rerank_model(manifest, str(query or ""), docs, endpoint)
         if len(scores) != len(items):
             raise RerankUnavailable(
                 f"rerank backend at {endpoint!r} returned {len(scores)} scores for "
-                f"{len(items)} candidates; refusing to guess an order (check the 'url' knob)"
+                f"{len(items)} candidates; refusing to guess an order (check `endpoint`)"
             )
         order = sorted(range(len(items)), key=lambda i: -scores[i])
         ranked = [items[i] for i in order]

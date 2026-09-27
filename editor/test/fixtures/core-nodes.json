@@ -715,12 +715,6 @@
     "kind": "model",
     "label": "Model",
     "default": "rerank/bge-v2-m3"
-   },
-   {
-    "name": "url",
-    "kind": "text",
-    "label": "rerank url",
-    "default": "http://localhost:8181/rerank"
    }
   ]
  },
