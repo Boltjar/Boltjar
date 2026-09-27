@@ -419,19 +419,36 @@ SUBLINE_PLACEHOLDER = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)((?:\|[a-z]+(?::[^|
 #   model   a model id as "provider · model"
 #   tags    how many {tags} a template text holds, as "N tags"
 SUBLINE_FILTERS = frozenset({"clip", "or", "bool", "model", "tags"})
+# every {...} in a subline is read as a placeholder, so each must be one
+_SUBLINE_BRACES = re.compile(r"\{[^}]*\}")
+# clip's length: a whole number of characters above zero
+_CLIP_LENGTH = re.compile(r"[1-9][0-9]*")
 
 
 def _check_subline(node_id: str, subline: str, widgets: list[Widget]) -> None:
-    """Refuse a subline that names a field the node does not have or a filter
-    the editor does not know, so a typo fails where the node is declared."""
+    """Refuse a subline with a placeholder the editor would draw literally or
+    fill wrongly: one that is not {field|filter|filter:arg}, names a field the
+    node does not have or a filter the editor does not know, gives clip a
+    length that is not a whole number, or gives an argument to a filter that
+    takes none. So a typo fails where the node is declared."""
     names = {w.name for w in widgets}
-    for m in SUBLINE_PLACEHOLDER.finditer(subline):
+    for braces in _SUBLINE_BRACES.findall(subline):
+        m = SUBLINE_PLACEHOLDER.fullmatch(braces)
+        if m is None:
+            raise ValueError(f"{node_id}: subline placeholder {braces!r} is not "
+                             f"{{field}} or {{field|filter|filter:arg}}")
         if m.group(1) not in names:
             raise ValueError(f"{node_id}: subline names {m.group(1)!r}, which is not a field of the node")
         for f in m.group(2).split("|")[1:]:
-            if f.split(":", 1)[0] not in SUBLINE_FILTERS:
+            name, colon, arg = f.partition(":")
+            if name not in SUBLINE_FILTERS:
                 raise ValueError(f"{node_id}: subline filter {f!r} is not one of "
                                  f"{', '.join(sorted(SUBLINE_FILTERS))}")
+            if name == "clip" and colon and not _CLIP_LENGTH.fullmatch(arg):
+                raise ValueError(f"{node_id}: subline filter {f!r} needs a whole number "
+                                 f"of characters above zero, as in clip:16")
+            if colon and name not in ("clip", "or"):
+                raise ValueError(f"{node_id}: subline filter {name!r} takes no argument")
 
 
 def node(*, id: str, name: str, kind: Kind, category: str,

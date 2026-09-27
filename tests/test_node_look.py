@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import os
 import pathlib
+import re
 
 import pytest
 
@@ -81,17 +82,43 @@ def test_a_pack_node_declares_its_look_the_same_way():
         NODE_REGISTRY.pop("test.look.pack", None)
 
 
+NOT_A_PLACEHOLDER = "is not {field} or {field|filter|filter:arg}"
+
+
 @pytest.mark.parametrize("subline, error", [
     ("every · {secs}s", "subline names 'secs', which is not a field of the node"),
     ("every · {seconds|round}s", "subline filter 'round' is not one of"),
+    # the editor would draw each of these literally
+    ("every {seconds|Clip}s", f"subline placeholder '{{seconds|Clip}}' {NOT_A_PLACEHOLDER}"),
+    ("every {seconds|clip3}s", f"subline placeholder '{{seconds|clip3}}' {NOT_A_PLACEHOLDER}"),
+    ("every {seconds }s", f"subline placeholder '{{seconds }}' {NOT_A_PLACEHOLDER}"),
+    ("every {}s", f"subline placeholder '{{}}' {NOT_A_PLACEHOLDER}"),
+    # and would fill these with something other than what is written
+    ("every {seconds|clip:x}s", "subline filter 'clip:x' needs a whole number of characters"),
+    ("every {seconds|clip:0}s", "subline filter 'clip:0' needs a whole number of characters"),
+    ("every {seconds|clip:}s", "subline filter 'clip:' needs a whole number of characters"),
+    ("every {seconds|bool:yes}s", "subline filter 'bool' takes no argument"),
 ])
 def test_a_subline_that_names_nothing_real_is_refused(subline, error):
-    with pytest.raises(ValueError, match=error):
+    with pytest.raises(ValueError, match=re.escape(error)):
         @node(id="test.look.bad", name="Bad", kind=Kind.TRIGGER, category="Triggers",
               subline=subline)
         class Bad:
             seconds: float = 1.0
     assert "test.look.bad" not in NODE_REGISTRY
+
+
+def test_a_well_formed_subline_is_accepted():
+    @node(id="test.look.good", name="Good", kind=Kind.TRIGGER, category="Triggers",
+          subline="{seconds|clip|clip:8|or:none|or:} · {on|bool} {not a placeholder")
+    class Good:
+        seconds: float = 1.0
+        on: bool = False
+
+    try:
+        assert "test.look.good" in NODE_REGISTRY
+    finally:
+        NODE_REGISTRY.pop("test.look.good", None)
 
 
 def test_the_filters_are_the_ones_the_editor_applies():
