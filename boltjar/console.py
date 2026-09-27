@@ -595,8 +595,10 @@ class GraphLines:
         elif kind == "node_error":
             node = event.get("node")
             self._limited((slug, node, kind), "bad", f"{node}: {summarize(event.get('error'), 200)}")
-        elif kind == "log" and event.get("echo") is not None:
-            self._limited((slug, event.get("node"), kind), "info", summarize(event["echo"], 200))
+        elif kind == "log" and event.get("echo") is True:
+            # summarized from the message as broadcast, never from the raw value:
+            # what the server keeps out of a live event stays out of the terminal.
+            self._limited((slug, event.get("node"), kind), "info", summarize(event.get("message"), 200))
 
     def _limited(self, key: tuple, tone: str, text: str) -> None:
         now = self.clock()

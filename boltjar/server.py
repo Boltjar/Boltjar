@@ -10,7 +10,7 @@ WS protocol (the editor is the client):
     <- { kind: "status",  power: "on"|"off" }
     <- { kind: "invalid", problems: [...] }   On rejected (broken graph)
     <- { kind: "value",   node, port, value } live value on a wire
-    <- { kind: "log",     node, message, echo? }   echo: the Log node's terminal line
+    <- { kind: "log",     node, message, echo? }   echo: true when the terminal prints it too
     <- { kind: "node_error", node, error }
 
 Power persistence: the live runtime lives in a module-level Hub singleton, not in

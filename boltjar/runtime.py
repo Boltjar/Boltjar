@@ -52,10 +52,10 @@ class Ctx:
     async def sleep(self, seconds: float) -> None:
         await asyncio.sleep(seconds)
 
-    def log(self, *args: Any, echo: Optional[str] = None) -> None:
-        """A log line for the editor console. `echo` is the line the server's
-        terminal prints for it (the Log node passes a media-summarized copy);
-        without one the line stays in the editor."""
+    def log(self, *args: Any, echo: bool = False) -> None:
+        """A log line for the editor console. With `echo` the server's terminal
+        prints it too (the Log node does), summarized from this same message, so
+        whatever the server keeps out of a live event stays out of the terminal."""
         self._rt.log(self.node_id, " ".join(str(a) for a in args), echo=echo)
 
     def emit(self, port: str, value: Any) -> None:
@@ -522,10 +522,10 @@ class Runtime:
             if inst.spec.kind in (Kind.SERVICE, Kind.STORE) and hasattr(inst.obj, "close"):
                 await _aw(inst.obj.close())
 
-    def log(self, node_id: str, msg: str, echo: Optional[str] = None) -> None:
+    def log(self, node_id: str, msg: str, echo: bool = False) -> None:
         event = {"kind": "log", "node": node_id, "message": msg}
-        if echo is not None:
-            event["echo"] = echo
+        if echo:
+            event["echo"] = True
         self._notify(event)
 
     def _notify(self, event: dict) -> None:

@@ -297,13 +297,20 @@ def test_wire_values_are_never_printed(lines):
     assert seen() == []
 
 
-def test_a_log_node_echo_prints_summarized(lines):
+def test_a_log_node_echo_prints_its_message_summarized(lines):
     graph, _clock, seen = lines
-    graph.feed({"kind": "log", "node": "log1", "message": "x", "slug": "chat",
-                "echo": "log: " + "y" * 500})
+    graph.feed({"kind": "log", "node": "log1", "message": "log: " + "y" * 500, "slug": "chat",
+                "echo": True})
     (tag, tone, text), = seen()
     assert (tag, tone) == ("chat", "info")
     assert text.startswith("log: yyy") and text.endswith("chars)") and len(text) <= 200
+
+
+def test_only_a_true_echo_prints(lines):
+    graph, _clock, seen = lines
+    for echo in ("log: a copy of the value", 1, None):
+        graph.feed({"kind": "log", "node": "log1", "message": "log: x", "slug": "chat", "echo": echo})
+    assert seen() == []
 
 
 def test_repeats_are_rate_limited_and_counted(lines):
