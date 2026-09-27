@@ -1,4 +1,5 @@
 {
+  "format": 1,
   "name": "demo",
   "nodes": [
     { "id": "sys",  "type": "core.value.text",       "config": { "text": "You are a friendly, concise assistant." }, "pos": [80, 120] },
