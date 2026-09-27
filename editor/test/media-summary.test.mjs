@@ -97,6 +97,24 @@ const lines = [
 check("no console line carries the payload", lines.every((l) => !l.includes("AAAAAAAA") && l.length < 120), true);
 check("the payload shows as its size", lines[0], "audio/wav · 2 MB");
 
+// ---- a value the runtime already cut. runtime._preview sends a value whole
+// only when it starts with data:/blob:/http; anything else (a Python repr, a
+// JSON string) arrives cut to 8000 chars plus one "…", so a clip inside it
+// lost its tail and its size is unknown.
+function preview(s) {
+  const head = s.slice(0, 5).toLowerCase();
+  if (["data:", "blob:", "http:", "https"].some((p) => head.startsWith(p))) return s;
+  return s.length <= 8000 ? s : `${s.slice(0, 8000)}…`;
+}
+const reprDict = preview(`{'reply': 'ok', 'audio': '${big}'}`);
+check("the runtime cut the repr dict", reprDict.length, 8001);
+check("a clip the runtime cut shows no size",
+  `tool result -> ${consoleText(reprDict, 60)}`, "tool result -> {'reply': 'ok', 'audio': 'audio/wav · cut…");
+check("a whole clip before the cut keeps its size",
+  summarizeDataUrls(preview(`['data:image/png;base64,${b64(3)}', '${big}']`)), "['image/png · 3 B', 'audio/wav · cut…");
+check("a clip the runtime sent whole keeps its size", consoleText(preview(big)), "audio/wav · 2 MB");
+check("an ellipsis is never payload", summarizeDataUrls("data:,abc… more"), "text/plain · 3 B… more");
+
 if (failures) {
   console.log(`\n${failures} media summary check${failures === 1 ? "" : "s"} failed`);
   process.exit(1);
