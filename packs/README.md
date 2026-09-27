@@ -9,7 +9,7 @@ A pack is a folder with two files at its top:
 
 Model manifests the pack ships go in a `models/` folder inside it, one `.toml` per model.
 
-A pack that fails to load (a missing or invalid `pack.toml`, an import error, a node id outside its own namespace, a `min_boltjar` newer than this install) is skipped with an error in the server log; the server and every other pack still load. `GET /api/packs` lists the packs that loaded and the ones that were skipped, with the reason.
+A pack that fails to load (a missing or invalid `pack.toml`, an import error, a node id outside its own namespace, a node or pipe type that redefines one already registered, a `min_boltjar` newer than this install) is skipped with an error in the server log; the server and every other pack still load. `GET /api/packs` lists the packs that loaded and the ones that were skipped, with the reason.
 
 `examples/packs/hello/` is a minimal working pack: copy that folder here to try it. A full guide to writing packs will be on the docs site.
 

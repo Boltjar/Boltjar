@@ -238,6 +238,46 @@ def test_a_pack_cannot_redefine_a_core_node(root):
     assert NODE_REGISTRY["core.value.text"] is core_text
 
 
+@pytest.mark.parametrize("register", [
+    'types.register("text", "#c9d6e3", parent="json")',  # a new parent rewires every text port
+    'types.register("event", "#000000")',               # a new colour recolours every trigger
+])
+def test_a_pack_cannot_redefine_a_core_type(root, register):
+    core = {name: dict(meta) for name, meta in types.meta.items()}
+    add_pack(root, "retype", f"""
+        from boltjar.sdk import types
+        from . import nodes
+        {register}
+    """, files={"nodes.py": node_source("retype.thing")})
+    report = packs.load_all(root)
+    assert "redefines types that are already registered" in failed(report)["retype"]
+    assert types.meta == core
+    assert "retype.thing" not in NODE_REGISTRY
+
+
+def test_a_pack_may_add_a_type_and_register_a_core_one_unchanged(root):
+    text = dict(types.meta["text"])
+    add_pack(root, "typed", f"""
+        from boltjar.sdk import types
+        from . import nodes
+        types.register("text", {text["color"]!r}, parent={text["parent"]!r})
+        types.register("typed-signal", "#123456", parent="event")
+    """, files={"nodes.py": node_source("typed.thing")})
+    report = packs.load_all(root)
+    assert "typed" in loaded(report)
+    assert types.meta["text"] == text
+    assert types.meta["typed-signal"] == {"color": "#123456", "parent": "event"}
+
+
+def test_a_pack_cannot_redefine_another_packs_type(root):
+    add_pack(root, "first", 'from boltjar.sdk import types\ntypes.register("first-signal", "#111111")')
+    add_pack(root, "second", 'from boltjar.sdk import types\ntypes.register("first-signal", "#222222")')
+    report = packs.load_all(root)
+    assert "first" in loaded(report)
+    assert "first-signal" in failed(report)["second"]
+    assert types.meta["first-signal"]["color"] == "#111111"
+
+
 def test_a_pack_cannot_redefine_another_packs_node(root):
     add_pack(root, "first", node_source("first.thing"))
     add_pack(root, "second", node_source("first.thing", "Copy"))

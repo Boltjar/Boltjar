@@ -10,10 +10,10 @@ manifests load from ``packs/<id>/models/*.toml``. The user's own manifests in
 A pack imports under a private module namespace (``_boltjar_packs.<id>``), so
 its name never collides with anything on sys.path and nothing is added to it;
 relative imports inside the pack work as usual. Every node id a pack registers
-must start with ``<pack id>.``, and no pack may redefine a node another pack (or
-the core) registered. A pack that breaks any rule, fails to import or needs a
-newer Boltjar is rolled back and skipped with a logged error: one broken pack
-never stops the server from booting.
+must start with ``<pack id>.``, and no pack may redefine a node or a pipe type
+another pack (or the core) registered. A pack that breaks any rule, fails to
+import or needs a newer Boltjar is rolled back and skipped with a logged error:
+one broken pack never stops the server from booting.
 
 pack.toml::
 
@@ -145,6 +145,11 @@ def _load_folder(folder: pathlib.Path) -> None:
         outside = [nid for nid in added if not nid.startswith(pack.id + ".")]
         if outside:
             raise PackError(f"node ids must start with '{pack.id}.': {', '.join(outside)}")
+        # a new pipe type is fine, and so is registering one again unchanged; a new
+        # colour or parent would recolour or rewire every node that uses it.
+        redefined = [name for name, meta in types_before.items() if types.meta.get(name) != meta]
+        if redefined:
+            raise PackError(f"redefines types that are already registered: {', '.join(redefined)}")
         models.load_models(folder / "models", replace=False)
     except (Exception, SystemExit) as exc:
         # roll the pack back completely: no half-registered nodes, types or models.
