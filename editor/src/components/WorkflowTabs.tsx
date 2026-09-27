@@ -5,7 +5,7 @@
 // via the per-tab ws, then drop from the open list).
 //
 // To add a new workflow the user opens the Saved Workflows panel via the
-// BOLTJAR brand (there is no '+' here, by design; the panel carries an
+// brand logo (there is no '+' here, by design; the panel carries an
 // explicit "New workflow" affordance instead).
 //
 // Overflow + drag-and-drop:

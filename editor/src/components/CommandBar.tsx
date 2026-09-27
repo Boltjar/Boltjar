@@ -14,6 +14,7 @@ import { Icon } from "../lib/icons";
 import { mod } from "../lib/platform";
 import { WorkflowTabs, type WorkflowTab } from "./WorkflowTabs";
 import type { Power } from "../hooks/useRunSocket";
+import logoUrl from "../assets/boltjar-logo-dark.svg";
 
 export type PowerPhase = "off" | "on" | "draft" | "invalid";
 
@@ -137,10 +138,10 @@ export function CommandBar(props: CommandBarProps) {
         className="brand brand-btn"
         data-rail-open={libraryRailOpen}
         onClick={onBrandClick}
-        title={libraryRailOpen ? "BOLTJAR" : "Open library"}
+        title={libraryRailOpen ? "Boltjar" : "Open library"}
+        aria-label="Boltjar"
       >
-        <span className="dia">◇</span>
-        BOLTJAR
+        <img className="brand-logo" src={logoUrl} alt="" draggable={false} />
       </button>
       {/* workflow tabs sit inside the bar, right after the brand: each open
           workflow as a browser-like tab, the active one brighter. There is no

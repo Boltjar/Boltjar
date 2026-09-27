@@ -890,7 +890,7 @@ export default function App() {
   }, [setRails]);
 
   // ── rail callbacks ──
-  // The brand BOLTJAR button no longer toggles a mode: both Workflows and
+  // The brand logo button no longer toggles a mode: both Workflows and
   // Node Library always render together. Click opens the rail when closed.
   const handleBrandClick = useCallback(() => {
     setRails((prev) => prev.library === "open" ? prev : { ...prev, library: "open" });

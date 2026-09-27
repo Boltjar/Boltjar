@@ -75,12 +75,7 @@ button{font-family:inherit;}
   background:var(--surface-glass); backdrop-filter:blur(10px);
   border-bottom:1px solid var(--line-2); box-shadow:var(--highlight-top);
 }
-.brand{
-  display:flex; align-items:center; gap:8px;
-  font-family:var(--font-mono); font-weight:700; font-size:var(--fs-sm);
-  color:var(--accent); letter-spacing:var(--tr-label); white-space:nowrap; user-select:none;
-}
-.brand .dia{font-size:13px; transform:translateY(0.5px);}
+.brand{display:flex; align-items:center; flex:none; user-select:none;}
 .bar-divider{width:1px; height:20px; background:var(--line-2);}
 .crumb{display:flex; align-items:center; gap:8px; font-size:var(--fs-sm); color:var(--ink-dim); white-space:nowrap; min-width:0;}
 .crumb b{color:var(--ink); font-weight:600; max-width:220px; overflow:hidden; text-overflow:ellipsis;}
@@ -1235,16 +1230,15 @@ button{font-family:inherit;}
    BRAND BUTTON (CommandBar): interactive toggle for saved workflows
    ========================================================================== */
 .brand-btn{
-  display:flex; align-items:center; gap:8px;
-  font-family:var(--font-mono); font-weight:700; font-size:var(--fs-sm);
-  color:var(--accent); letter-spacing:var(--tr-label); white-space:nowrap; user-select:none;
   background:none; border:none; cursor:pointer;
   padding:4px 7px; border-radius:var(--radius-xs);
-  transition:color var(--dur-1), background var(--dur-1);
+  transition:background var(--dur-1);
 }
-.brand-btn:hover{ background:rgba(var(--accent-rgb),0.09); color:var(--ink-bright); }
-.brand-btn.brand-active{ background:rgba(var(--accent-rgb),0.12); color:var(--ink-bright); }
-.brand-btn .dia{ font-size:13px; transform:translateY(0.5px); }
+.brand-btn:hover{ background:rgba(var(--accent-rgb),0.09); }
+.brand-btn.brand-active{ background:rgba(var(--accent-rgb),0.12); }
+/* the logo fills the 17px line box the mono wordmark it replaced had (13px
+   JetBrains Mono at line-height normal), so the button keeps its 25px height. */
+.brand-logo{ display:block; height:17px; width:auto; pointer-events:none; }
 .brand-chev{ font-size:13px; color:var(--accent); opacity:0.8; }
 
 /* ============================================================================
