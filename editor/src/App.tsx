@@ -15,7 +15,7 @@ import { useRunSocket } from "./hooks/useRunSocket";
 import { useTabsStatus } from "./hooks/useTabsStatus";
 import { useGraph } from "./hooks/useGraph";
 import { EditorProvider, type InboundWire } from "./lib/editorContext";
-import { outputType, DATABASE_ID, KV_STORE_ID } from "./lib/graphAdapter";
+import { outputType, DATABASE_ID, KV_STORE_ID, GRAPH_FORMAT } from "./lib/graphAdapter";
 import { WIRELESS_IN_ID, WIRELESS_OUT_ID, ROUTER_ID, isGhostHandle, type WirelessChannelMap, type WirelessSocket } from "./lib/dynamicPorts";
 import { deadWireNotice, healDeadWires } from "./lib/deadWires";
 import { mod } from "./lib/platform";
@@ -750,7 +750,7 @@ export default function App() {
       try {
         localStorage.setItem(
           `boltjar:draft:${slug}:v2`,
-          JSON.stringify({ name: slug, nodes: [], edges: [] }),
+          JSON.stringify({ format: GRAPH_FORMAT, name: slug, nodes: [], edges: [] }),
         );
       } catch { /* ignore */ }
       return { open: [...prev.open, slug], active: slug };

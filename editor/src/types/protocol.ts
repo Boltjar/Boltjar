@@ -215,6 +215,9 @@ export interface NodeGroup {
 
 /** The serialised graph exchanged with the backend. */
 export interface Graph {
+  /** the saved-graph format version (boltjar/graph_format.py). The server
+   *  migrates what it loads to its current format and stamps it on save. */
+  format?: number;
   name?: string;
   nodes: GraphNode[];
   edges: GraphEdge[];

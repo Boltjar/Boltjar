@@ -8,7 +8,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test": "node test/types-compat.test.mjs && node test/model-switch.test.mjs && node test/template-ports.test.mjs && node test/dead-wires.test.mjs && node test/rename.test.mjs && node test/knob-bool.test.mjs"
+    "test": "node test/types-compat.test.mjs && node test/model-switch.test.mjs && node test/template-ports.test.mjs && node test/dead-wires.test.mjs && node test/rename.test.mjs && node test/knob-bool.test.mjs && node test/graph-format.test.mjs"
   },
   "dependencies": {
     "@xyflow/react": "^12.3.5",

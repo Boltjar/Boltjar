@@ -159,6 +159,11 @@ export function projectGraph(
   };
 }
 
+/** The graph format this editor writes: the shape serializeGraph produces. It
+ *  equals the server's CURRENT_FORMAT (boltjar/graph_format.py, which a test
+ *  checks), and the server migrates every graph it serves to that format. */
+export const GRAPH_FORMAT = 1;
+
 /** Reconstruct a backend Graph from the live React Flow state. */
 export function serializeGraph(
   name: string | undefined,
@@ -168,6 +173,7 @@ export function serializeGraph(
   groups: import("../types/protocol").NodeGroup[] = [],
 ): Graph {
   return {
+    format: GRAPH_FORMAT,
     name,
     ...(groups.length ? { groups: groups.map((g) => ({ ...g, members: [...g.members] })) } : {}),
     nodes: nodes.map<GraphNode>((n) => ({
