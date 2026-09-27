@@ -28,6 +28,14 @@ CURATED_MODEL_IDS = {
     "ollama/qwen3.5:4b",
     "ollama/qwen3:14b",
     "ollama/devstral",
+    # OpenAI chat completions (its model list reports no capabilities)
+    "openai/gpt-4o",
+    "openai/gpt-4o-mini",
+    "openai/gpt-4.1",
+    "openai/gpt-4.1-mini",
+    "openai/gpt-5",
+    "openai/gpt-5-mini",
+    "openai/gpt-5-nano",
     # TTS / STT (same picker as the LLM, filtered by kind)
     "fish/s2",
     "fish/asr",

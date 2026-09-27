@@ -297,7 +297,10 @@ def test_openai_compatible_endpoints_read_what_they_report(fresh, vendor_http, m
     qwen = got["lmstudio/qwen2.5-7b-instruct"]
     assert qwen["tools"] is False and qwen["inputs"] == ["text"], "nothing reported, nothing claimed"
     assert "lmstudio/text-embedding-nomic-embed-text-v1.5" not in got
-    assert set(m for m in got if m.startswith("openai/")) == {"openai/gpt-5"}
+    # api.openai.com lists gpt-5 (a manifest enriches it) and three non-chat models.
+    listed = {m for m in got if m.startswith("openai/") and got[m]["source"] != "manifest"}
+    assert listed == {"openai/gpt-5"}
+    assert got["openai/gpt-5"]["source"] == "both"
     by_url = {str(r.url): r for r in vendor_http.requests}
     assert by_url["https://openrouter.ai/api/v1/models"].headers["authorization"] == \
         "Bearer test-openrouter-key"
@@ -325,6 +328,35 @@ def test_the_openai_list_keeps_only_chat_completions_models(fresh, vendor_http, 
                           "gpt-5-chat-latest", "o3", "o4-mini", "chatgpt-4o-latest"])
     # the same names from another OpenAI-compatible server are its own chat models.
     assert md.openai_manifest("lmstudio", {"id": "qwen2.5-7b-instruct"}) is not None
+
+
+def test_listed_openai_models_get_images_and_tools_from_their_manifests(fresh, vendor_http,
+                                                                      monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
+    listed = {"object": "list", "data": [{"id": i, "object": "model"} for i in
+                                         ("gpt-4o", "gpt-4.1-mini", "gpt-5", "gpt-4o-2024-08-06")]}
+    vendor_http.reply = vendors(ollama=False, openai=listed, chat=COMPLETION)
+    refresh()
+    got = rows()
+    for mid in ("openai/gpt-4o", "openai/gpt-4.1-mini", "openai/gpt-5"):
+        m = got[mid]
+        assert m["source"] == "both" and m["available"] is True, mid
+        assert m["inputs"] == ["text", "image"] and m["tools"] is True and m["json"] is True, mid
+    assert got["openai/gpt-4o"]["context"] == 128000
+    # a snapshot no manifest names stays as listed: nothing reported, nothing claimed.
+    assert got["openai/gpt-4o-2024-08-06"]["tools"] is False
+    # GPT-5 reasons: an effort knob with its own levels, no empty reasoning output
+    # and no sampling knobs it would refuse.
+    gpt5 = got["openai/gpt-5"]
+    assert gpt5["thinking"] is False
+    think = [p for p in gpt5["params"] if p["name"] == "think"]
+    assert [(p["options"], p["default"]) for p in think] == [
+        (["minimal", "low", "medium", "high"], "medium")]
+    assert not {"temperature", "top_p"} & {p["name"] for p in gpt5["params"]}
+    assert _run_llm("openai/gpt-5")["response"] == "Hello!"
+    sent = vendor_http.last_json()
+    assert sent["model"] == "gpt-5" and sent["reasoning_effort"] == "medium"
+    assert "temperature" not in sent
 
 
 # ---------------------------------------------------------- cache + offline

@@ -1,0 +1,39 @@
+# OpenAI GPT-4.1 mini over Chat Completions. Needs OPENAI_API_KEY.
+# Model page (developers.openai.com/api/docs/models/gpt-4.1-mini, read 2026-09-27):
+# text and image in, text out, function calling and structured outputs,
+# 1,047,576 token context, 32,768 max output tokens, Chat Completions supported.
+# api.openai.com's model list reports none of this, so this file supplies it.
+id = "openai/gpt-4.1-mini"
+provider = "openai"
+model = "gpt-4.1-mini"
+label = "GPT-4.1 mini"
+summary = "Multimodal chat (text, image), tool-calls and JSON output. Needs OPENAI_API_KEY."
+context = 1047576
+inputs = ["text", "image"]
+outputs = ["text"]
+tools = true
+thinking = false
+json = true
+
+[[params]]
+name = "temperature"
+type = "float"
+default = 1.0
+min = 0.0
+max = 2.0
+step = 0.05
+
+[[params]]
+name = "top_p"
+type = "float"
+default = 1.0
+min = 0.0
+max = 1.0
+step = 0.05
+
+[[params]]
+name = "max_completion_tokens"
+type = "int"
+default = 4096
+min = 1
+max = 32768

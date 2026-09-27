@@ -1,0 +1,35 @@
+# OpenAI GPT-5 over Chat Completions. Needs OPENAI_API_KEY.
+# Model page (developers.openai.com/api/docs/models/gpt-5, read 2026-09-27):
+# text and image in, text out, function calling and structured outputs,
+# 400,000 token context, 128,000 max output tokens, Chat Completions supported.
+# A reasoning model: reasoning_effort takes minimal, low, medium or high. Chat
+# Completions returns no reasoning text, so the manifest declares the effort
+# knob itself and leaves `thinking` off: the node grows no reasoning output
+# that would stay empty. Temperature and top_p are not declared, so they are
+# never sent. Reasoning tokens count toward max_completion_tokens, hence the
+# roomy default.
+id = "openai/gpt-5"
+provider = "openai"
+model = "gpt-5"
+label = "GPT-5"
+summary = "Reasoning chat (text, image), tool-calls and JSON output. Needs OPENAI_API_KEY."
+context = 400000
+inputs = ["text", "image"]
+outputs = ["text"]
+tools = true
+thinking = false
+json = true
+
+[[params]]
+name = "think"
+type = "select"
+default = "medium"
+options = ["minimal", "low", "medium", "high"]
+label = "reasoning effort"
+
+[[params]]
+name = "max_completion_tokens"
+type = "int"
+default = 32768
+min = 1
+max = 128000
