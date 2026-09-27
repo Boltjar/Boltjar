@@ -79,15 +79,35 @@ def test_opaque_and_lookalike_origins_are_rejected(client, origin):
     assert client.post("/api/validate", json={}, headers={"origin": origin}).status_code == 403
 
 
-@pytest.mark.parametrize("origin", [None, DEV, "http://127.0.0.1:8770", "http://[::1]:9000", "https://localhost"])
-def test_loopback_or_absent_origin_passes(client, origin):
-    headers = {"origin": origin} if origin else {}
+@pytest.mark.parametrize("origin, host", [
+    (None, "127.0.0.1:8770"),
+    ("http://127.0.0.1:8770", "127.0.0.1:8770"),
+    ("http://[::1]:8770", "[::1]:8770"),
+    ("http://localhost", "localhost"),  # the scheme's default port on both sides
+    (DEV, "localhost:5173"),  # the Vite dev proxy passes the page's own Host on
+])
+def test_the_pages_own_or_an_absent_origin_passes(client, origin, host):
+    headers = {"host": host, **({"origin": origin} if origin else {})}
     assert client.post("/api/validate", json={}, headers=headers).status_code == 200
 
 
-def test_allowed_host_origin_passes(client, monkeypatch):
+@pytest.mark.parametrize("origin", [
+    "http://127.0.0.1:3000", DEV, "http://localhost:8770", "http://[::1]:8770", "https://127.0.0.1",
+])
+def test_a_page_from_another_local_address_is_rejected(client, origin):
+    # the cookie ignores ports, so a page another local server serves (a dev
+    # server, a notebook, an app's web UI) sends it too: its Origin gives it away.
+    r = client.post("/api/validate", json={}, headers={"host": "127.0.0.1:8770", "origin": origin})
+    assert r.status_code == 403
+
+
+@pytest.mark.parametrize("origin, host", [
+    ("http://box.lan:8770", "box.lan:8770"),
+    ("https://box.lan", "box.lan"),  # behind a TLS proxy that passes the Host on
+])
+def test_allowed_host_origin_passes(client, monkeypatch, origin, host):
     monkeypatch.setenv("BOLTJAR_ALLOWED_HOSTS", "box.lan")
-    r = client.post("/api/validate", json={}, headers={"host": "box.lan:8770", "origin": "http://box.lan:8770"})
+    r = client.post("/api/validate", json={}, headers={"host": host, "origin": origin})
     assert r.status_code == 200
 
 
@@ -108,8 +128,17 @@ def test_websocket_from_another_site_is_rejected(client):
     HUBS.pop("guard-ws", None)
 
 
-def test_websocket_from_the_editor_connects(client):
-    with client.websocket_connect("/ws?slug=guard-ws", headers={"origin": DEV}) as ws:
+def test_websocket_from_another_local_port_is_rejected(client):
+    with pytest.raises(WebSocketDenialResponse) as denied:
+        with client.websocket_connect("/ws?slug=guard-ws", headers={"origin": "http://127.0.0.1:3000"}):
+            pass
+    assert denied.value.status_code == 403
+    HUBS.pop("guard-ws", None)
+
+
+@pytest.mark.parametrize("origin, host", [("http://127.0.0.1:8770", "127.0.0.1:8770"), (DEV, "localhost:5173")])
+def test_websocket_from_the_editor_connects(client, origin, host):
+    with client.websocket_connect("/ws?slug=guard-ws", headers={"origin": origin, "host": host}) as ws:
         assert ws.receive_json()["kind"] == "status"
     HUBS.pop("guard-ws", None)
 
@@ -160,7 +189,7 @@ def test_session_cookie_then_authorises_api_and_websocket(anon):
     # the editor's boot sequence: GET /api/session, then everything else.
     anon.get("/api/session")
     assert anon.get("/api/graphs").status_code == 200
-    with anon.websocket_connect("/ws?slug=guard-ws", headers={"origin": DEV}) as ws:
+    with anon.websocket_connect("/ws?slug=guard-ws", headers={"origin": BASE_URL}) as ws:
         assert ws.receive_json()["kind"] == "status"
     HUBS.pop("guard-ws", None)
 

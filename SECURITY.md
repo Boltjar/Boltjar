@@ -9,7 +9,9 @@ listens on `127.0.0.1` by default, and every request has to pass three checks:
   `[::1]`, plus any names in `BOLTJAR_ALLOWED_HOSTS`). This stops DNS
   rebinding, where a web page re-points its own domain at your loopback address.
 - **Origin**: WebSockets and every request that changes something must come
-  from the editor's own origin, or from a client that is not a browser.
+  from a page served at the address the request was sent to (same host name
+  and port), or from a client that is not a browser. A page another local
+  server serves on its own port is refused.
 - **Token**: `/api`, `/ws`, `/stream` and `/audio` need the per-install token
   in `user/data/token`, created on first start. A browser holds it as an
   `HttpOnly`, `SameSite=Strict` cookie. Other local clients (the MCP server, your
@@ -25,6 +27,10 @@ Together these keep web pages you visit and other machines away from the API.
 They do not keep out other accounts on this machine: anyone who can connect to
 `127.0.0.1` can ask for the cookie. Do not run Boltjar on a machine you share
 with people you do not trust.
+
+Browsers send a cookie to every port of the host that set it, so every local web
+server your browser visits at `127.0.0.1` or `localhost` receives the Boltjar
+cookie. A server that keeps it can call the API with the editor's full access.
 
 ## A graph is code
 

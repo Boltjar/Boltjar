@@ -9,8 +9,10 @@ applied by one ASGI middleware (`LocalGuard`) to HTTP and WebSocket alike:
             BOLTJAR_ALLOWED_HOSTS). This is what stops DNS rebinding, where a
             page on evil.example re-resolves its own name to 127.0.0.1.
   - Origin: a browser stamps every WebSocket and every state-changing request
-            with the page it came from. Only the editor's own origins pass; a
-            request with no Origin is a non-browser client and passes.
+            with the page it came from. Only a page from the address the
+            request was sent to passes (same host name and port), so a page
+            another local server serves on its own port is refused; a request
+            with no Origin is a non-browser client and passes.
   - Token:  a random per-install token (user/data/token) is required on /api,
             /ws, /stream and /audio, from a cookie (the editor) or a Bearer
             header (any other local client, e.g. the MCP server).
@@ -44,6 +46,7 @@ TOKEN_PATH = ROOT / "user" / "data" / "token"
 COOKIE_NAME = "boltjar_token"
 LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "[::1]"})
 STATE_CHANGING = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+_DEFAULT_PORTS = {"http": 80, "https": 443}
 # The endpoint a browser calls once at boot to receive its cookie.
 SESSION_PATH = "/api/session"
 # The query parameter of the one-time link, /?token=<token>.
@@ -142,16 +145,30 @@ def host_allowed(host: str | None) -> bool:
     return bool(host) and _host_name(host) in allowed_hosts()
 
 
-def origin_allowed(origin: str | None) -> bool:
-    """No Origin means a non-browser client. Otherwise the page must be served
-    from an allowed host, on any port (the Vite dev server runs on its own).
-    An opaque origin ('null', a sandboxed frame or a file://) never passes."""
+def _address(netloc: str, scheme: str) -> tuple[str, int] | None:
+    """(host name, port) of a netloc, the scheme's default port when it names
+    none, or None when the port is not a port."""
+    try:
+        parts = urlsplit(f"{scheme}://{netloc}")
+        port = parts.port
+    except ValueError:
+        return None
+    return parts.hostname or "", port or _DEFAULT_PORTS[scheme]
+
+
+def origin_allowed(origin: str | None, host: str | None) -> bool:
+    """No Origin means a non-browser client. Otherwise the page must come from
+    the address the request was sent to, `host` (the Host header): the same
+    host name and port, the page's scheme supplying a port the Host leaves out.
+    The Vite dev server passes because its proxy keeps the page's Host. An
+    opaque origin ('null', a sandboxed frame or a file://) never passes."""
     if origin is None:
         return True
     parts = urlsplit(origin.strip())
-    if parts.scheme not in ("http", "https"):
+    if parts.scheme not in _DEFAULT_PORTS:
         return False
-    return _host_name(parts.netloc) in allowed_hosts()
+    page = _address(parts.netloc, parts.scheme)
+    return page is not None and page == _address(host or "", parts.scheme)
 
 
 def _loopback_address(address: str) -> bool:
@@ -218,7 +235,7 @@ class LocalGuard:
             return
         # the session endpoint hands out the cookie, so it gets the Origin check too.
         checks_origin = kind == "websocket" or method in STATE_CHANGING or path == SESSION_PATH
-        if checks_origin and not origin_allowed(headers.get("origin")):
+        if checks_origin and not origin_allowed(headers.get("origin"), headers.get("host")):
             await _deny(scope, receive, send, 403, "origin not allowed")
             return
         secure = scope.get("scheme") == "https"
