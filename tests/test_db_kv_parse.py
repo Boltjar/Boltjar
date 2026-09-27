@@ -56,15 +56,20 @@ def kv(tmp_path, monkeypatch):
 
 def _run(graph: dict, *fire: str) -> Runtime:
     """Build and start the graph, fire each named node's `trigger` in order
-    (the runtime pulls its wired inputs, then calls run), then stop it."""
+    (the runtime pulls its wired inputs, then calls run), then stop it, all on
+    one event loop, as the server runs a graph."""
     rt = Runtime()
     rt.build(graph)
-    asyncio.run(rt.run())
-    try:
-        for node_id in fire:
-            asyncio.run(rt._fire(rt.nodes[node_id], "trigger", "go", rt.new_turn()))
-    finally:
-        asyncio.run(rt.stop())
+
+    async def drive() -> None:
+        await rt.run()
+        try:
+            for node_id in fire:
+                await rt._fire(rt.nodes[node_id], "trigger", "go", rt.new_turn())
+        finally:
+            await rt.stop()
+
+    asyncio.run(drive())
     return rt
 
 

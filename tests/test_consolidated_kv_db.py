@@ -39,9 +39,19 @@ def _db(tmp_path, monkeypatch):
     return store
 
 
-def _fire(rt, node_id, port="trigger", payload="go"):
+@pytest.fixture
+def loop():
+    """One event loop for the whole test, as the server has: a Runtime is run,
+    fired and stopped on the loop that owns its consumer tasks. An asyncio.run()
+    per step closes that loop after run() (cancelling every consumer), and stop()
+    then gathers tasks of a closed loop, which Python 3.11 refuses."""
+    with asyncio.Runner() as runner:
+        yield runner
+
+
+def _fire(loop, rt, node_id, port="trigger", payload="go"):
     """Fire a triggering port (the runtime pulls inputs + invokes run())."""
-    asyncio.run(rt._fire(rt.nodes[node_id], port, payload, rt.new_turn()))
+    loop.run(rt._fire(rt.nodes[node_id], port, payload, rt.new_turn()))
 
 
 # ----------------------------------------------------------------- type registry
@@ -101,7 +111,7 @@ def test_database_pulls_its_handle():
 
 
 # ============================================================== KV per-op tests
-def test_kv_set_then_get_roundtrip(tmp_path, monkeypatch):
+def test_kv_set_then_get_roundtrip(tmp_path, monkeypatch, loop):
     """The headline lifecycle: set a value with op=set, then read it back with
     op=get. Both invocations go through the same `core.kv` node id."""
     store = _kv(tmp_path, monkeypatch)
@@ -115,10 +125,10 @@ def test_kv_set_then_get_roundtrip(tmp_path, monkeypatch):
         ],
         "edges": [{"src": "mykv", "src_port": "kv", "dst": "set", "dst_port": "kv"}],
     })
-    asyncio.run(rt.run())
-    _fire(rt, "set")
+    loop.run(rt.run())
+    _fire(loop, rt, "set")
     assert store.get("mykv", "name") == "Ada"
-    asyncio.run(rt.stop())
+    loop.run(rt.stop())
 
     # round-trip: a get op against the same store reads it back through `value`.
     rt2 = Runtime()
@@ -130,14 +140,14 @@ def test_kv_set_then_get_roundtrip(tmp_path, monkeypatch):
         ],
         "edges": [{"src": "mykv", "src_port": "kv", "dst": "get", "dst_port": "kv"}],
     })
-    asyncio.run(rt2.run())
-    _fire(rt2, "get")
+    loop.run(rt2.run())
+    _fire(loop, rt2, "get")
     assert rt2.nodes["get"].out_latch.get("value") == "Ada"
     assert rt2.nodes["get"].out_latch.get("trigger") is True
-    asyncio.run(rt2.stop())
+    loop.run(rt2.stop())
 
 
-def test_kv_get_missing_returns_none(tmp_path, monkeypatch):
+def test_kv_get_missing_returns_none(tmp_path, monkeypatch, loop):
     """A get against an absent key reads as None (lean: never raises)."""
     _kv(tmp_path, monkeypatch)
 
@@ -150,13 +160,13 @@ def test_kv_get_missing_returns_none(tmp_path, monkeypatch):
         ],
         "edges": [{"src": "mykv", "src_port": "kv", "dst": "get", "dst_port": "kv"}],
     })
-    asyncio.run(rt.run())
-    _fire(rt, "get")
+    loop.run(rt.run())
+    _fire(loop, rt, "get")
     assert rt.nodes["get"].out_latch.get("value") is None
-    asyncio.run(rt.stop())
+    loop.run(rt.stop())
 
 
-def test_kv_delete_then_has_is_false(tmp_path, monkeypatch):
+def test_kv_delete_then_has_is_false(tmp_path, monkeypatch, loop):
     """Delete -> has=false: the delete op removes the key (idempotent under
     the hood), and a follow-up has op confirms it on the `ok` output."""
     store = _kv(tmp_path, monkeypatch)
@@ -176,15 +186,15 @@ def test_kv_delete_then_has_is_false(tmp_path, monkeypatch):
             {"src": "mykv", "src_port": "kv", "dst": "has", "dst_port": "kv"},
         ],
     })
-    asyncio.run(rt.run())
-    _fire(rt, "del")
+    loop.run(rt.run())
+    _fire(loop, rt, "del")
     assert store.has("mykv", "doomed") is False
-    _fire(rt, "has")
+    _fire(loop, rt, "has")
     assert rt.nodes["has"].out_latch.get("ok") is False
-    asyncio.run(rt.stop())
+    loop.run(rt.stop())
 
 
-def test_kv_delete_is_idempotent(tmp_path, monkeypatch):
+def test_kv_delete_is_idempotent(tmp_path, monkeypatch, loop):
     """Deleting an absent key never raises (the underlying KvStore.delete
     is a no-op on a miss)."""
     _kv(tmp_path, monkeypatch)
@@ -198,12 +208,12 @@ def test_kv_delete_is_idempotent(tmp_path, monkeypatch):
         ],
         "edges": [{"src": "mykv", "src_port": "kv", "dst": "del", "dst_port": "kv"}],
     })
-    asyncio.run(rt.run())
-    _fire(rt, "del")  # must not raise
-    asyncio.run(rt.stop())
+    loop.run(rt.run())
+    _fire(loop, rt, "del")  # must not raise
+    loop.run(rt.stop())
 
 
-def test_kv_has_reflects_presence(tmp_path, monkeypatch):
+def test_kv_has_reflects_presence(tmp_path, monkeypatch, loop):
     """has=true when the key is there, false when it isn't."""
     store = _kv(tmp_path, monkeypatch)
     store.set("mykv", "here", 1)
@@ -222,15 +232,15 @@ def test_kv_has_reflects_presence(tmp_path, monkeypatch):
             {"src": "mykv", "src_port": "kv", "dst": "nope", "dst_port": "kv"},
         ],
     })
-    asyncio.run(rt.run())
-    _fire(rt, "has")
-    _fire(rt, "nope")
+    loop.run(rt.run())
+    _fire(loop, rt, "has")
+    _fire(loop, rt, "nope")
     assert rt.nodes["has"].out_latch.get("ok") is True
     assert rt.nodes["nope"].out_latch.get("ok") is False
-    asyncio.run(rt.stop())
+    loop.run(rt.stop())
 
 
-def test_kv_keys_with_prefix(tmp_path, monkeypatch):
+def test_kv_keys_with_prefix(tmp_path, monkeypatch, loop):
     """`keys` lists every stored key; the `prefix` knob filters that list to
     the keys starting with the prefix (composes with downstream JSON Get)."""
     store = _kv(tmp_path, monkeypatch)
@@ -252,15 +262,15 @@ def test_kv_keys_with_prefix(tmp_path, monkeypatch):
             {"src": "mykv", "src_port": "kv", "dst": "users", "dst_port": "kv"},
         ],
     })
-    asyncio.run(rt.run())
-    _fire(rt, "all")
-    _fire(rt, "users")
+    loop.run(rt.run())
+    _fire(loop, rt, "all")
+    _fire(loop, rt, "users")
     assert sorted(rt.nodes["all"].out_latch.get("keys")) == ["session.id", "user.age", "user.name"]
     assert sorted(rt.nodes["users"].out_latch.get("keys")) == ["user.age", "user.name"]
-    asyncio.run(rt.stop())
+    loop.run(rt.stop())
 
 
-def test_kv_persistence_across_fresh_store(tmp_path, monkeypatch):
+def test_kv_persistence_across_fresh_store(tmp_path, monkeypatch, loop):
     """A KV set survives a cold restart: a brand-new KvStore reads the
     persisted value off disk."""
     _kv(tmp_path, monkeypatch)
@@ -274,9 +284,9 @@ def test_kv_persistence_across_fresh_store(tmp_path, monkeypatch):
         ],
         "edges": [{"src": "mykv", "src_port": "kv", "dst": "set", "dst_port": "kv"}],
     })
-    asyncio.run(rt.run())
-    _fire(rt, "set")
-    asyncio.run(rt.stop())
+    loop.run(rt.run())
+    _fire(loop, rt, "set")
+    loop.run(rt.stop())
 
     # a fresh in-memory KvStore (cold cache) reloads from disk.
     assert KvStore(root=tmp_path).get("mykv", "count") == "7"
@@ -301,7 +311,7 @@ def test_kv_no_store_wired_raises(tmp_path, monkeypatch):
 
 
 # ============================================================== DB per-op tests
-def test_db_exec_writes_then_query_reads(tmp_path, monkeypatch):
+def test_db_exec_writes_then_query_reads(tmp_path, monkeypatch, loop):
     """The lean SQL-shaped path: exec a DDL + INSERT, then query reads back
     the rows. Both run through the same `core.db` node id."""
     store = _db(tmp_path, monkeypatch)
@@ -325,19 +335,19 @@ def test_db_exec_writes_then_query_reads(tmp_path, monkeypatch):
             {"src": "mydb", "src_port": "db", "dst": "q", "dst_port": "db"},
         ],
     })
-    asyncio.run(rt.run())
-    _fire(rt, "create")
-    _fire(rt, "ins")
-    _fire(rt, "q")
+    loop.run(rt.run())
+    _fire(loop, rt, "create")
+    _fire(loop, rt, "ins")
+    _fire(loop, rt, "q")
     assert rt.nodes["q"].out_latch.get("rows") == [{"fact": "hello"}]
     # exec emits `affected`; INSERT counts as one change.
     assert rt.nodes["ins"].out_latch.get("affected") == 1
-    asyncio.run(rt.stop())
+    loop.run(rt.stop())
     # the row really landed in the underlying store.
     assert store.query("mydb", "SELECT fact FROM facts") == [{"fact": "hello"}]
 
 
-def test_db_insert_emits_row_id(tmp_path, monkeypatch):
+def test_db_insert_emits_row_id(tmp_path, monkeypatch, loop):
     """The structured insert path: parse "col=value" lines into a bound
     INSERT; the lastrowid comes back on the `row_id` output."""
     store = _db(tmp_path, monkeypatch)
@@ -353,17 +363,17 @@ def test_db_insert_emits_row_id(tmp_path, monkeypatch):
         ],
         "edges": [{"src": "mydb", "src_port": "db", "dst": "ins", "dst_port": "db"}],
     })
-    asyncio.run(rt.run())
-    _fire(rt, "ins")
+    loop.run(rt.run())
+    _fire(loop, rt, "ins")
     assert rt.nodes["ins"].out_latch.get("row_id") == 1
     assert rt.nodes["ins"].out_latch.get("trigger") is True
-    asyncio.run(rt.stop())
+    loop.run(rt.stop())
     # SQLite column affinity coerces the bound TEXT "36" into the INTEGER column,
     # so the stored value comes back as an int. V1 is fine with this.
     assert store.query("mydb", "SELECT name, age FROM people") == [{"name": "Ada", "age": 36}]
 
 
-def test_db_find_filters_by_where(tmp_path, monkeypatch):
+def test_db_find_filters_by_where(tmp_path, monkeypatch, loop):
     """find: optional where filters by equality on each "col=value" line."""
     store = _db(tmp_path, monkeypatch)
     store.execute("mydb", "CREATE TABLE people(id INTEGER PRIMARY KEY, name TEXT)")
@@ -384,18 +394,18 @@ def test_db_find_filters_by_where(tmp_path, monkeypatch):
             {"src": "mydb", "src_port": "db", "dst": "ada", "dst_port": "db"},
         ],
     })
-    asyncio.run(rt.run())
-    _fire(rt, "all")
-    _fire(rt, "ada")
+    loop.run(rt.run())
+    _fire(loop, rt, "all")
+    _fire(loop, rt, "ada")
     assert rt.nodes["all"].out_latch.get("rows") == [
         {"id": 1, "name": "Ada"},
         {"id": 2, "name": "Bob"},
     ]
     assert rt.nodes["ada"].out_latch.get("rows") == [{"id": 1, "name": "Ada"}]
-    asyncio.run(rt.stop())
+    loop.run(rt.stop())
 
 
-def test_db_update_returns_affected_count(tmp_path, monkeypatch):
+def test_db_update_returns_affected_count(tmp_path, monkeypatch, loop):
     """update sets each field; the affected-row count comes back on `affected`."""
     store = _db(tmp_path, monkeypatch)
     store.execute("mydb", "CREATE TABLE people(id INTEGER PRIMARY KEY, name TEXT, age INTEGER)")
@@ -411,17 +421,17 @@ def test_db_update_returns_affected_count(tmp_path, monkeypatch):
         ],
         "edges": [{"src": "mydb", "src_port": "db", "dst": "upd", "dst_port": "db"}],
     })
-    asyncio.run(rt.run())
-    _fire(rt, "upd")
+    loop.run(rt.run())
+    _fire(loop, rt, "upd")
     assert rt.nodes["upd"].out_latch.get("affected") == 1
     assert rt.nodes["upd"].out_latch.get("trigger") is True
-    asyncio.run(rt.stop())
+    loop.run(rt.stop())
     # the stored row really updated (the bound TEXT "37" coerces into the
     # INTEGER column via SQLite affinity rules).
     assert store.query("mydb", "SELECT name, age FROM people") == [{"name": "Ada", "age": 37}]
 
 
-def test_db_delete_returns_affected_count(tmp_path, monkeypatch):
+def test_db_delete_returns_affected_count(tmp_path, monkeypatch, loop):
     """delete drops rows matching the where; affected reflects the count."""
     store = _db(tmp_path, monkeypatch)
     store.execute("mydb", "CREATE TABLE people(id INTEGER PRIMARY KEY, name TEXT)")
@@ -437,11 +447,11 @@ def test_db_delete_returns_affected_count(tmp_path, monkeypatch):
         ],
         "edges": [{"src": "mydb", "src_port": "db", "dst": "del", "dst_port": "db"}],
     })
-    asyncio.run(rt.run())
-    _fire(rt, "del")
+    loop.run(rt.run())
+    _fire(loop, rt, "del")
     assert rt.nodes["del"].out_latch.get("affected") == 1
     assert rt.nodes["del"].out_latch.get("trigger") is True
-    asyncio.run(rt.stop())
+    loop.run(rt.stop())
     assert store.query("mydb", "SELECT name FROM people") == [{"name": "Bob"}]
 
 
@@ -535,7 +545,7 @@ def test_db_query_missing_table_raises_friendly_error(tmp_path, monkeypatch):
 # The headline of the consolidation: every knob is a template. Wiring a source
 # into the growable `tag` port mints a named socket (the dst_port name IS the
 # tag, like HTTP), and {tag} in a knob substitutes that source's live value.
-def test_kv_tag_substitutes_into_key(tmp_path, monkeypatch):
+def test_kv_tag_substitutes_into_key(tmp_path, monkeypatch, loop):
     """A {tag} in the `key` knob is substituted with the wired source's value
     before the KV op runs. The wired port is named after the source, mirroring
     HTTP's `tag` growable port."""
@@ -556,13 +566,13 @@ def test_kv_tag_substitutes_into_key(tmp_path, monkeypatch):
             {"src": "uid", "src_port": "out", "dst": "set", "dst_port": "uid"},
         ],
     })
-    asyncio.run(rt.run())
-    _fire(rt, "set")
+    loop.run(rt.run())
+    _fire(loop, rt, "set")
     assert store.get("mykv", "session:user-42") == "hello"
-    asyncio.run(rt.stop())
+    loop.run(rt.stop())
 
 
-def test_db_tag_substitutes_into_fields_and_where(tmp_path, monkeypatch):
+def test_db_tag_substitutes_into_fields_and_where(tmp_path, monkeypatch, loop):
     """A {tag} in the DB node's `fields` and `where` knobs is substituted with
     the wired source's value. Same template grammar as KV and HTTP."""
     store = _db(tmp_path, monkeypatch)
@@ -592,13 +602,13 @@ def test_db_tag_substitutes_into_fields_and_where(tmp_path, monkeypatch):
             {"src": "who", "src_port": "out", "dst": "find", "dst_port": "who"},
         ],
     })
-    asyncio.run(rt.run())
-    _fire(rt, "ins")
-    _fire(rt, "find")
+    loop.run(rt.run())
+    _fire(loop, rt, "ins")
+    _fire(loop, rt, "find")
     rows = rt.nodes["find"].out_latch.get("rows")
     assert [r["body"] for r in rows] == ["seed", "second"]
     assert all(r["owner"] == "ada" for r in rows)
-    asyncio.run(rt.stop())
+    loop.run(rt.stop())
 
 
 def test_db_exec_attach_is_refused_with_a_reason(tmp_path, monkeypatch):
