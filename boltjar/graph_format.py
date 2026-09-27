@@ -7,9 +7,10 @@ format into the new one is added to _STEPS. migrate() runs every step a graph
 is behind, in order, so a graph saved by any earlier Boltjar still loads. A
 graph without the field predates it and is format 0.
 
-The server migrates every graph it loads (GET, power, validate) and stamps the
-current format on every save; the editor writes the same number (GRAPH_FORMAT
-in editor/src/lib/graphAdapter.ts).
+The server migrates every graph it loads (GET, power, validate), stamps the
+current format on every save and never saves over a graph whose format it
+cannot read; the editor writes the same number (GRAPH_FORMAT in
+editor/src/lib/graphAdapter.ts).
 """
 from __future__ import annotations
 
@@ -35,9 +36,8 @@ _STEPS: dict[int, Callable[[dict], dict]] = {
 }
 
 
-def migrate(graph: dict) -> dict:
-    """The graph in CURRENT_FORMAT, with `format` stamped as its first key. The
-    input is never modified. Raises GraphFormatError for a graph from a newer
+def format_of(graph: dict) -> int:
+    """The graph's format number. Raises GraphFormatError for a graph from a newer
     Boltjar (loading it here could silently drop what this version does not
     know) or with a `format` that is not a whole number."""
     version = graph.get("format", 0)
@@ -47,6 +47,14 @@ def migrate(graph: dict) -> dict:
         raise GraphFormatError(
             f"the graph was saved by a newer Boltjar (format {version}); "
             f"this one reads formats up to {CURRENT_FORMAT}, update Boltjar to open it")
+    return version
+
+
+def migrate(graph: dict) -> dict:
+    """The graph in CURRENT_FORMAT, with `format` stamped as its first key. The
+    input is never modified. Raises GraphFormatError for a graph this Boltjar
+    cannot read (see format_of)."""
+    version = format_of(graph)
     out = copy.deepcopy(graph)
     while version < CURRENT_FORMAT:
         out = _STEPS[version](out)

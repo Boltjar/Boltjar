@@ -137,6 +137,31 @@ def test_a_newer_graph_is_neither_saved_nor_loaded(dirs):
     assert r.status_code == 422 and "newer Boltjar" in r.json()["error"]
 
 
+@pytest.mark.parametrize("fmt, error", [(CURRENT_FORMAT + 1, "newer Boltjar"), ("2", "not a format number")])
+def test_a_saved_graph_this_boltjar_cannot_read_is_never_saved_over(dirs, tmp_path, fmt, error):
+    # the editor opens nothing from such a file, so a save under its slug (an
+    # empty canvas, a stale draft) would replace a graph it never read.
+    user, _ = dirs
+    _write(user, "future", {**GRAPH, "format": fmt})
+    before = (user / "future.json").read_text(encoding="utf-8")
+    r = client.put("/api/graphs/future", json={"nodes": [], "edges": []})
+    assert r.status_code == 409
+    assert "the saved graph is kept" in r.json()["error"] and error in r.json()["error"]
+    assert (user / "future.json").read_text(encoding="utf-8") == before
+    assert not (tmp_path / "user" / "autosave" / "future").exists()
+    # deleting it is a deliberate act, and then the slug saves as usual.
+    assert client.delete("/api/graphs/future").json() == {"ok": True}
+    assert client.put("/api/graphs/future", json=GRAPH).json() == {"ok": True}
+
+
+def test_a_saved_file_that_is_not_a_graph_is_saved_over(dirs):
+    user, _ = dirs
+    user.mkdir(parents=True)
+    (user / "broken.json").write_text("{not json", encoding="utf-8")
+    assert client.put("/api/graphs/broken", json=GRAPH).json() == {"ok": True}
+    assert json.loads((user / "broken.json").read_text(encoding="utf-8"))["nodes"] == GRAPH["nodes"]
+
+
 def test_validate_reports_a_graph_it_cannot_read():
     problems = client.post("/api/validate", json={**GRAPH, "format": CURRENT_FORMAT + 1}).json()["problems"]
     assert [p["kind"] for p in problems] == ["format"]

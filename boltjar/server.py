@@ -54,7 +54,7 @@ from boltjar.sqlite_store import SqliteStore
 from boltjar.file_store import FileStore
 from boltjar.kv_store import KvStore
 from boltjar.vector_store import VectorStore
-from boltjar.graph_format import GraphFormatError, migrate
+from boltjar.graph_format import GraphFormatError, format_of, migrate
 from boltjar import __version__, models
 from boltjar import packs as _packs
 import boltjar.secrets as _secrets
@@ -604,6 +604,23 @@ def _snapshot_graph(name: str, graph: dict) -> None:
         pass  # backups are best-effort; never break a save
 
 
+def _unreadable_saved_graph(name: str) -> GraphFormatError | None:
+    """Why this Boltjar cannot read the user's saved graph `name` (one saved by a
+    newer Boltjar, or with a broken `format`), or None when it can. No file, or a
+    file that is not a graph at all, is None: there is nothing a Boltjar reads."""
+    try:
+        saved = json.loads((GRAPHS_DIR / f"{_safe(name)}.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(saved, dict):
+        return None
+    try:
+        format_of(saved)
+    except GraphFormatError as exc:
+        return exc
+    return None
+
+
 @app.put("/api/graphs/{name}")
 async def put_graph(name: str, graph: dict):
     # every save is stamped with the current format (a graph from an older
@@ -612,6 +629,14 @@ async def put_graph(name: str, graph: dict):
         graph = migrate(graph)
     except GraphFormatError as exc:
         return JSONResponse({"error": str(exc)}, status_code=422)
+    # nor is a saved graph this Boltjar cannot read ever saved over: nothing here
+    # could open it, so whatever is sent in its place is not an edit of it.
+    unreadable = _unreadable_saved_graph(name)
+    if unreadable is not None:
+        return JSONResponse(
+            {"error": f"the saved graph is kept, this Boltjar cannot read it: {unreadable}"},
+            status_code=409,
+        )
     # always a user copy: an example is never overwritten, only overridden.
     GRAPHS_DIR.mkdir(parents=True, exist_ok=True)
     (GRAPHS_DIR / f"{_safe(name)}.json").write_text(json.dumps(graph, indent=2), encoding="utf-8")
