@@ -132,8 +132,12 @@ class Listing:
     ok: bool                       # the last attempt succeeded
     checked: str                   # UTC time of the last attempt
     updated: str | None = None     # UTC time of the last success (the list's age)
-    error: str | None = None       # why the last attempt failed
+    error: str | None = None       # why the last attempt failed (the provider's words)
     models: list[ModelManifest] = field(default_factory=list)
+    # what kind of failure it was, for a plain line in the picker: not_running
+    # (a server on this computer refused the connection), unreachable (a remote
+    # one did), timeout, key_refused (401 or 403) or error (anything else).
+    failure: str | None = None
 
     @property
     def known(self) -> bool:
@@ -142,7 +146,8 @@ class Listing:
 
     def to_cache(self) -> dict:
         return {"ok": self.ok, "checked": self.checked, "updated": self.updated,
-                "error": self.error, "models": [m.to_cache() for m in self.models]}
+                "error": self.error, "failure": self.failure,
+                "models": [m.to_cache() for m in self.models]}
 
     @classmethod
     def from_cache(cls, data: dict) -> "Listing":
@@ -153,7 +158,8 @@ class Listing:
             except (KeyError, TypeError, ValueError):
                 continue
         return cls(ok=bool(data.get("ok")), checked=str(data.get("checked") or ""),
-                   updated=data.get("updated"), error=data.get("error"), models=found)
+                   updated=data.get("updated"), error=data.get("error"), models=found,
+                   failure=data.get("failure"))
 
 
 _state: dict[str, Listing] = {}
@@ -387,9 +393,45 @@ def _ollama_base() -> str:
     return os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
 
 
+class ProviderError(RuntimeError):
+    """A provider answered with an HTTP error."""
+
+    def __init__(self, vendor: str, status: int, text: str) -> None:
+        super().__init__(f"{vendor} {status}: {text[:200]}")
+        self.status = status
+
+
 def _check(resp: httpx.Response, vendor: str) -> None:
     if not resp.is_success:
-        raise RuntimeError(f"{vendor} {resp.status_code}: {resp.text[:200]}")
+        raise ProviderError(vendor, resp.status_code, resp.text)
+
+
+_LOOPBACK = {"localhost", "127.0.0.1", "::1"}
+
+
+def _base_url(provider: str) -> str:
+    """Where discovery asks `provider` (for telling a local server from a remote one)."""
+    if provider == "ollama":
+        return _ollama_base()
+    if provider == "xai":
+        return XAI_MODELS_URL
+    if provider == "anthropic":
+        return ANTHROPIC_MODELS_URL
+    endpoint = endpoints.resolve(provider)
+    return endpoint.base_url if endpoint is not None else ""
+
+
+def failure_kind(exc: BaseException, provider: str) -> str:
+    """What kind of failure `exc` is (see Listing.failure)."""
+    if isinstance(exc, httpx.TimeoutException):
+        return "timeout"
+    if isinstance(exc, httpx.ConnectError):
+        host = (urlsplit(_base_url(provider)).hostname or "").lower()
+        local = host in _LOOPBACK or host.endswith(".localhost")
+        return "not_running" if local else "unreachable"
+    if isinstance(exc, ProviderError) and exc.status in (401, 403):
+        return "key_refused"
+    return "error"
 
 
 async def _discover_ollama(client: httpx.AsyncClient) -> list[ModelManifest]:
@@ -500,7 +542,8 @@ async def _refresh(only: frozenset[str] | set[str] | None = None) -> None:
             _state[name] = Listing(ok=False, checked=checked,
                                    updated=before.updated if before else None,
                                    error=_short_error(result),
-                                   models=before.models if before else [])
+                                   models=before.models if before else [],
+                                   failure=failure_kind(result, name))
         else:
             _state[name] = Listing(ok=True, checked=checked, updated=checked, models=result)
     usable = set(_usable_names())  # read again: a key may have gone while asking
@@ -932,7 +975,7 @@ def payload() -> dict:
             continue
         providers[name] = {"ok": listing.ok, "checked": listing.checked,
                            "updated": listing.updated, "error": listing.error,
-                           "count": len(listing.models)}
+                           "failure": listing.failure, "count": len(listing.models)}
     updated = max((p["updated"] for p in providers.values() if p["updated"]), default=None)
     auto = resolve_auto(snap)
     return {"models": catalog(snap.rows), "auto": auto.id if auto else None,

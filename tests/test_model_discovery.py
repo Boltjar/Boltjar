@@ -394,6 +394,38 @@ def test_no_provider_answering_never_breaks_the_list(fresh, vendor_http):
     assert body["auto"] is None
 
 
+def test_each_failure_says_what_kind_it_was(fresh, vendor_http, monkeypatch):
+    monkeypatch.setenv("XAI_API_KEY", "test-xai-key")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-anthropic-key")
+    endpoints.save("lmstudio", "http://localhost:1234")
+    endpoints.save("groq", "https://api.groq.com/openai/v1")
+
+    def reply(request: httpx.Request) -> httpx.Response:
+        if request.url.port in (11434, 1234):
+            raise OFFLINE                            # nothing listens on this computer
+        if request.url.host == "api.groq.com":
+            raise httpx.ConnectError("name not resolved")
+        if str(request.url).startswith(md.XAI_MODELS_URL):
+            return httpx.Response(401, text="Incorrect API key provided")
+        raise httpx.ReadTimeout("read timed out")    # Anthropic
+    vendor_http.reply = reply
+    refresh()
+    got = {n: p["failure"] for n, p in client.get("/api/models").json()["providers"].items()}
+    assert got == {"ollama": "not_running", "lmstudio": "not_running", "groq": "unreachable",
+                   "xai": "key_refused", "anthropic": "timeout"}
+    # an Ollama on another machine that does not answer is unreachable, not stopped.
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://gpu-box:11434")
+    refresh()
+    assert md.payload()["providers"]["ollama"]["failure"] == "unreachable"
+    # the kind survives a restart (the cache).
+    md.reset()
+    assert md.payload()["providers"]["xai"]["failure"] == "key_refused"
+    # a provider that answers has none.
+    vendor_http.reply = vendors(ollama=True)
+    refresh()
+    assert md.payload()["providers"]["ollama"]["failure"] is None
+
+
 def test_a_removed_key_takes_its_models_out(fresh, vendor_http, monkeypatch):
     monkeypatch.setenv("XAI_API_KEY", "test-xai-key")
     vendor_http.reply = vendors(ollama=False, xai=XAI_MODELS)

@@ -171,8 +171,14 @@ export interface ProviderListing {
   checked: string;
   updated: string | null;
   error: string | null;
+  /** what kind of failure the last attempt was (null when it answered). */
+  failure?: ProviderFailure | null;
   count: number;
 }
+
+/** not_running: a server on this computer refused the connection; unreachable:
+ *  a remote one did; key_refused: a 401 or 403; error: anything else. */
+export type ProviderFailure = "not_running" | "unreachable" | "timeout" | "key_refused" | "error";
 
 /** GET /api/models (and POST /api/models/refresh) payload: the live list. */
 export interface ModelsInfo {

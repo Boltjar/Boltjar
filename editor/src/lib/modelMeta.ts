@@ -4,7 +4,7 @@
 // modality reads as. Kept separate so the picker, the node body and the
 // inspector all describe a model the same way.
 // ============================================================================
-import type { ModelManifest } from "../types/protocol";
+import type { ModelManifest, ProviderListing } from "../types/protocol";
 
 /** A compact human label for a context window (8192 → "8K", 200000 → "200K"). */
 export function formatContext(context: number): string {
@@ -86,7 +86,7 @@ export interface ModelsMeta {
   auto: string | null;
   updated: string | null;
   refreshing: boolean;
-  providers: Record<string, { ok: boolean; updated: string | null; error: string | null }>;
+  providers: Record<string, Pick<ProviderListing, "ok" | "checked" | "updated" | "error" | "failure">>;
 }
 
 /** How long ago an ISO UTC time was, in words ("just now", "5 min ago"). */
@@ -100,15 +100,36 @@ export function ago(iso: string, nowMs: number): string {
   return `${Math.floor(hours / 24)} days ago`;
 }
 
-/** The picker's "last updated" line: the age of the newest successful refresh,
- *  plus each provider that did not answer the last time it was asked. */
+/** How the picker words a provider's failed attempt, by its kind. */
+const FAILURE_WORDS: Record<string, string> = {
+  not_running: "not running",
+  unreachable: "unreachable",
+  timeout: "timed out",
+  key_refused: "refused the key",
+  error: "failed",
+};
+
+/** The picker's "last updated" line: the age of the newest successful refresh
+ *  (or of the last attempt, when no provider ever answered), plus each provider
+ *  whose last attempt failed and why. Ollama is always asked, so one that never
+ *  answered is a setup without it, not news, and is left out. */
 export function updatedLine(meta: ModelsMeta, nowMs: number): string {
   if (meta.refreshing) return "refreshing…";
-  const head = meta.updated ? `updated ${ago(meta.updated, nowMs)}` : "not checked yet";
-  const down = Object.entries(meta.providers)
-    .filter(([, p]) => !p.ok)
-    .map(([name]) => providerLabel(name));
-  return down.length ? `${head} · ${down.join(", ")} unreachable` : head;
+  const listings = Object.entries(meta.providers);
+  const checked = listings
+    .map(([, p]) => p.checked)
+    .filter(Boolean)
+    .sort()
+    .pop();
+  const head = meta.updated
+    ? `updated ${ago(meta.updated, nowMs)}`
+    : checked
+      ? `checked ${ago(checked, nowMs)}`
+      : "not checked yet";
+  const down = listings
+    .filter(([name, p]) => !p.ok && !(name === "ollama" && !p.updated))
+    .map(([name, p]) => `${providerLabel(name)} ${FAILURE_WORDS[p.failure ?? "error"] ?? FAILURE_WORDS.error}`);
+  return down.length ? `${head} · ${down.join(", ")}` : head;
 }
 
 /** What the picker's button says about the picked model: `ok`, `auto` (with

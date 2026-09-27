@@ -84,13 +84,44 @@ check("seconds read as just now", updatedLine(meta({ updated: "2026-09-27T11:59:
 check("minutes", updatedLine(meta({ updated: "2026-09-27T11:55:00Z" }), now), "updated 5 min ago");
 check("hours", ago("2026-09-27T09:00:00Z", now), "3 h ago");
 check("days", ago("2026-09-24T12:00:00Z", now), "3 days ago");
-check("a provider that did not answer is named",
+const listing = (extra = {}) => ({
+  ok: true, checked: "2026-09-27T11:55:00Z", updated: "2026-09-27T11:55:00Z", error: null,
+  failure: null, ...extra,
+});
+check("an Ollama that never answered is a setup without it, not news",
   updatedLine(meta({
     updated: "2026-09-27T11:55:00Z",
-    providers: { ollama: { ok: false, updated: null, error: "refused" },
-                 xai: { ok: true, updated: "2026-09-27T11:55:00Z", error: null } },
+    providers: { ollama: listing({ ok: false, updated: null, error: "refused", failure: "not_running" }),
+                 xai: listing() },
   }), now),
-  "updated 5 min ago · Ollama unreachable");
+  "updated 5 min ago");
+check("an Ollama that answered before and stopped is not running",
+  updatedLine(meta({
+    updated: "2026-09-27T11:55:00Z",
+    providers: { ollama: listing({ ok: false, updated: "2026-09-27T09:00:00Z", failure: "not_running" }) },
+  }), now),
+  "updated 5 min ago · Ollama not running");
+check("a refused key reads as refused, not unreachable",
+  updatedLine(meta({
+    updated: "2026-09-27T11:55:00Z",
+    providers: { ollama: listing(),
+                 xai: listing({ ok: false, updated: null, error: "xAI 401", failure: "key_refused" }),
+                 anthropic: listing({ ok: false, updated: null, failure: "timeout" }),
+                 groq: listing({ ok: false, updated: null, failure: "unreachable" }) },
+  }), now),
+  "updated 5 min ago · xAI refused the key, Anthropic timed out, Groq unreachable");
+check("asked but nothing ever answered: checked, not 'not checked yet'",
+  updatedLine(meta({
+    providers: { ollama: listing({ ok: false, checked: "2026-09-27T11:58:00Z", updated: null, failure: "not_running" }),
+                 lmstudio: listing({ ok: false, checked: "2026-09-27T11:58:00Z", updated: null, failure: "not_running" }) },
+  }), now),
+  "checked 2 min ago · Lmstudio not running");
+check("a failure of no known kind (an older cache) failed",
+  updatedLine(meta({
+    updated: "2026-09-27T11:55:00Z",
+    providers: { xai: listing({ ok: false, failure: undefined }) },
+  }), now),
+  "updated 5 min ago · xAI failed");
 
 // ---- what the button says about the picked model
 const byId = new Map(served.map((m) => [m.id, m]));
