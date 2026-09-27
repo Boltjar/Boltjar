@@ -1020,9 +1020,11 @@ def test_the_launch_asks_the_local_providers_beside_a_slow_cloud_refresh(fresh, 
             raise httpx.ConnectError("connection refused")
         return []
 
+    release = None  # the cloud answers only once the launch's refresh is back
+
     async def cloud(client):
         asked.append("xai")
-        await asyncio.sleep(1.0)  # a slow network at login
+        await release.wait()  # a slow network at login
         return []
 
     monkeypatch.setattr(md, "_discoverers", lambda listed=None: {"ollama": ollama, "xai": cloud})
@@ -1030,18 +1032,20 @@ def test_the_launch_asks_the_local_providers_beside_a_slow_cloud_refresh(fresh, 
                         else md.XAI_MODELS_URL)
 
     async def scenario():
-        loop = asyncio.get_running_loop()
+        nonlocal release
+        release = asyncio.Event()
         md.schedule_refresh()  # the lifespan's boot refresh
-        await asyncio.sleep(0.05)
-        began = loop.time()
-        await server.refresh_local_models()
-        took = loop.time() - began
+        while len(asked) < 2:  # until it has asked both providers
+            await asyncio.sleep(0.005)
+        # the cloud is still held, so this returning at all proves it never waits for it
+        await asyncio.wait_for(server.refresh_local_models(), timeout=10)
+        cloud_pending = md.refreshing()
+        release.set()
         while md.refreshing():  # the boot refresh ends after it
             await asyncio.sleep(0.01)
-        return took
+        return cloud_pending
 
-    took = asyncio.run(scenario())
-    assert took < 0.5
+    assert asyncio.run(scenario()) is True
     assert asked == ["ollama", "xai", "ollama"]
     assert md._state["ollama"].ok is True
     assert md._state["xai"].ok is True
