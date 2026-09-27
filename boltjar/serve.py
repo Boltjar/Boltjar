@@ -43,6 +43,11 @@ LOOPBACK_NAMES = ("localhost", "127.0.0.1", "::1")
 WILDCARD_HOSTS = ("0.0.0.0", "::", "")
 PYTHON_RANGE = ((3, 11), (3, 13))
 START = "start.bat" if os.name == "nt" else "./start.sh"
+# The editor's one-time link and the file its token lives in, as another machine
+# needs them: boltjar.security.LINK_PARAM and TOKEN_PATH, named again here since
+# security imports starlette and the checklist prints before any requirement is.
+_TOKEN_QUERY = "token"
+_TOKEN_FILE = "user/data/token"
 # How long each stage of an exit may wait: the graphs stopping (a node whose
 # close hangs is left behind after this), then anything still open once they
 # have (an Ollama model pull mid-download) before uvicorn cancels it. So an exit
@@ -237,10 +242,17 @@ def port_row(host: str, port: int, hosts: list[str]) -> console.Row:
     if is_loopback(host):
         return console.Row("Port", f"{port} free")
     # the host check answers to these names only, so another machine uses one
-    names = ", ".join(name for name in hosts if not is_loopback(name))
+    names = [name for name in hosts if not is_loopback(name)]
+    fixes = ["to use another name, add it to BOLTJAR_ALLOWED_HOSTS (a comma list)"]
+    if host.strip().strip("[]") in WILDCARD_HOSTS:
+        # the ready line opens loopback, where the editor gets its cookie; a
+        # browser on another machine gets it only through the token link, and
+        # the token stays off the screen
+        name = names[0] if names else "<this machine>"
+        link = f"http://{f'[{name}]' if ':' in name else name}:{port}/?{_TOKEN_QUERY}=<token>"
+        fixes.insert(0, f"from another machine, open {link} with the token from {_TOKEN_FILE}")
     return console.Row("Port", f"{host or '0.0.0.0'}:{port}, reachable from other machines"
-                       + (f" as {names}" if names else ""), "warn",
-                       fixes=("to use another name, add it to BOLTJAR_ALLOWED_HOSTS (a comma list)",))
+                       + (f" as {', '.join(names)}" if names else ""), "warn", fixes=tuple(fixes))
 
 
 def packs_row(report: dict | None = None) -> console.Row:

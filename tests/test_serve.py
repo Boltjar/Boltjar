@@ -259,6 +259,26 @@ def test_port_row():
     assert row.tone == "warn" and row.detail == "0.0.0.0:8770, reachable from other machines as studio"
 
 
+def test_a_wildcard_bind_says_how_another_machine_opens_the_editor():
+    # the ready line opens loopback; without the token link, another machine
+    # would get the page and a 401 from /api/session
+    from boltjar import security
+
+    row = serve.port_row("0.0.0.0", 8770, ["localhost", "127.0.0.1", "::1", "studio", "192.168.1.20"])
+    assert row.fixes[0] == ("from another machine, open http://studio:8770/?token=<token> "
+                            "with the token from user/data/token")
+    assert security.get_token() not in " ".join(row.fixes)
+    assert serve._TOKEN_QUERY == security.LINK_PARAM
+    ipv6 = serve.port_row("::", 8770, ["localhost", "127.0.0.1", "::1", "fd00::5"])
+    assert "http://[fd00::5]:8770/?token=<token>" in ipv6.fixes[0]
+
+
+def test_a_bind_to_one_address_needs_no_token_fix():
+    # its ready line already prints the whole link, which any machine can open
+    row = serve.port_row("192.168.1.20", 8770, ["localhost", "127.0.0.1", "::1", "192.168.1.20"])
+    assert not any("token" in fix for fix in row.fixes)
+
+
 def test_packs_row_counts_the_nodes_of_every_pack():
     report = {"loaded": [{"id": "core", "nodes": 63}, {"id": "hello", "nodes": 2}], "failed": []}
     assert serve.packs_row(report) == console.Row("Packs", "core, hello", aside="(65 nodes)")
@@ -438,6 +458,7 @@ def test_a_remote_bind_lists_the_names_it_answers_to(boot, monkeypatch, capsys):
     shown = " ".join(capsys.readouterr().out.split())
     assert "0.0.0.0:9001" in shown
     assert "reachable from other machines as proxy.example, studio, 192.168.1.20" in shown
+    assert "from another machine, open http://proxy.example:9001/?token=<token> with the token" in shown
     assert "add it to BOLTJAR_ALLOWED_HOSTS" in shown
 
 
@@ -524,6 +545,15 @@ def test_a_lan_bind_prints_the_token_link(boot, monkeypatch, capsys):
     from boltjar import security
     ready_boot(boot, monkeypatch, host="192.168.1.20", allow_remote=True)
     assert f"http://192.168.1.20:9001/?token={security.get_token()}" in capsys.readouterr().out
+
+
+def test_a_wildcard_bind_shows_the_link_for_other_machines_without_the_token(boot, monkeypatch, capsys):
+    from boltjar import security
+    monkeypatch.setattr(serve, "_machine_names", lambda: ["studio"])
+    ready_boot(boot, monkeypatch, host="0.0.0.0", allow_remote=True)
+    out = capsys.readouterr().out
+    assert "Ready  →  http://127.0.0.1:9001\n" in out
+    assert "http://studio:9001/?token=<token>" in out and security.get_token() not in out
 
 
 def test_ctrl_c_prints_the_shutdown_steps_and_bye(boot, monkeypatch, capsys):
