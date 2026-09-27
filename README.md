@@ -37,4 +37,4 @@ npm test --prefix editor
 
 ## License
 
-MIT, see [LICENSE](LICENSE).
+AGPL-3.0-or-later with a node pack exception: use Boltjar for anything, share your changes to Boltjar itself, and license your own packs and graphs however you want. Details in [LICENSE-EXCEPTION.md](LICENSE-EXCEPTION.md); the name and logo in [TRADEMARK.md](TRADEMARK.md).
