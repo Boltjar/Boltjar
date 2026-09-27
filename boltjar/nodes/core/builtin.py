@@ -1594,11 +1594,94 @@ def _parse_kv_lines(text: str, resolve=None) -> dict:
     return out
 
 
+_SQL_TAG_RE = re.compile(r"\{([A-Za-z_]\w*)\}")
+
+
+def _sql_quoted_end(sql: str, start: int, quote: str) -> int:
+    """The index just past the quote that closes the one opened at `start` (a
+    doubled quote is an escaped one), or -1 when it never closes."""
+    k = start + 1
+    while True:
+        k = sql.find(quote, k)
+        if k == -1:
+            return -1
+        if sql.startswith(quote, k + 1):
+            k += 2
+            continue
+        return k + 1
+
+
+def _bind_sql_tags(sql: str, tags: dict) -> tuple[str, dict]:
+    """Turn the wired {tag}s of a raw SQL template into bound parameters, so a
+    wired value (a webhook body, an LLM reply) is always data, never SQL: it can
+    never add a clause or name a table or column. By where the tag sits, read the
+    way SQLite's own tokenizer reads the text:
+      - bare, `id = {row_id}`: one parameter holding the value as wired;
+      - in quotes, `name = '{name}'`, `"{name}"` or `'%{q}%'`: the quoted text
+        becomes its pieces joined to text parameters with ||, the same string
+        the old pasted template spelled out (a double-quoted one included, which
+        SQLite read as a string once no column matched);
+      - in a comment, a [bracketed] or `backticked` name: left alone.
+    A tag with no wired value stays literal text. Returns (sql, params)."""
+    out: list[str] = []
+    params: dict = {}
+
+    def bind(value) -> str:
+        name = f"_tag{len(params)}"
+        params[name] = value
+        return ":" + name
+
+    def pieces(text: str) -> list[tuple[bool, str]]:
+        """(is_tag, text) runs of `text`, split at its wired tags."""
+        runs, last = [], 0
+        for m in _SQL_TAG_RE.finditer(text):
+            if m.group(1) in tags:
+                runs += [(False, text[last:m.start()]), (True, m.group(1))]
+                last = m.end()
+        return runs + [(False, text[last:])]
+
+    i, n = 0, len(sql)
+    while i < n:
+        c = sql[i]
+        if c in "'\"`":
+            end = _sql_quoted_end(sql, i, c)
+            if end == -1:  # unterminated: SQLite rejects it, never substitute
+                out.append(sql[i:])
+                break
+            runs = pieces(sql[i + 1:end - 1].replace(c * 2, c))
+            if c == "`" or len(runs) == 1:
+                out.append(sql[i:end])
+            else:
+                terms = [bind(str(tags[t])) if is_tag else "'" + t.replace("'", "''") + "'"
+                         for is_tag, t in runs if is_tag or t]
+                out.append(terms[0] if len(terms) == 1 else "(" + " || ".join(terms) + ")")
+            i = end
+            continue
+        if c == "[" or sql.startswith(("--", "/*"), i):
+            # a [name] or a comment runs to its closer, left as-is.
+            closer = {"[": "]", "-": "\n", "/": "*/"}[c]
+            end = sql.find(closer, i + 1 if c == "[" else i + 2)
+            end = n if end == -1 else end + len(closer)
+            out.append(sql[i:end])
+            i = end
+            continue
+        m = _SQL_TAG_RE.match(sql, i) if c == "{" else None
+        if m is not None and m.group(1) in tags:
+            value = tags[m.group(1)]
+            out.append(bind(value if isinstance(value, (str, int, float, bytes)) else str(value)))
+            i = m.end()
+            continue
+        out.append(c)
+        i += 1
+    return "".join(out), params
+
+
 @node(id="core.db", name="DB", kind=Kind.TRANSFORM, category="Store",
       summary="Read/write a SQLite store. The 'operation' knob reshapes the "
               "knobs and outputs. Knobs are templates: {tag} pulls from a "
-              "wired source, {{secret.X}} resolves a secret. INSERT/UPDATE "
-              "with a data: URL value saves the data URL as TEXT (V1).")
+              "wired source, {{secret.X}} resolves a secret. In SQL a wired "
+              "{tag} is bound as a parameter: always a value, never SQL. "
+              "INSERT/UPDATE with a data: URL value saves the data URL as TEXT (V1).")
 class DBNode:
     # op-shaped: each field declares which operations it belongs to (replaces the
     # frontend dbKnobNamesFor table). The editor reads op_field/op_values.
@@ -1656,12 +1739,12 @@ class DBNode:
                     raise friendly from exc
                 raise
 
-        if op == "query":
-            sql = resolve(str(cfg.get("sql") or ""))
-            return {"rows": await _do(store.query, db, sql), "trigger": True}
-        if op == "exec":
-            sql = resolve(str(cfg.get("sql") or ""))
-            r = await _do(store.execute, db, sql)
+        if op in ("query", "exec"):
+            # raw SQL: a wired {tag} binds as a parameter, never pasted as text.
+            sql, params = _bind_sql_tags(resolve_secrets(str(cfg.get("sql") or "")), tag_kwargs)
+            if op == "query":
+                return {"rows": await _do(store.query, db, sql, params), "trigger": True}
+            r = await _do(store.execute, db, sql, params)
             return {"affected": r["changes"], "trigger": True}
         # insert / find / update / delete: parse the "col=value" lines, then map
         # to the SqliteStore engine. A value that looks like a data: URL stays a
