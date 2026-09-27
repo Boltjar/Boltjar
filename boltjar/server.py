@@ -900,9 +900,12 @@ async def api_delete_provider_key(provider: str) -> dict:
 # onto its data ports, then fire `trigger` LAST so a downstream graph sees data
 # already latched before the fan-out. Returns 200 immediately (fire-and-forget).
 
-# Headers we never echo back into the graph (a webhook payload should not carry
-# session cookies or auth tokens to a downstream LLM / Log / HTTP node).
-_WEBHOOK_HEADER_DENYLIST = frozenset({"cookie", "authorization"})
+# Headers we never echo back into the graph: a webhook payload must not carry
+# session cookies, auth tokens or the webhook's own shared secret to a downstream
+# LLM / Log / HTTP node (the headers port is also cached and served by /state).
+_WEBHOOK_HEADER_DENYLIST = frozenset({
+    "cookie", "authorization", "proxy-authorization", "x-api-key", "x-webhook-secret",
+})
 
 
 def _find_webhook(runtime, path: str, method: str):

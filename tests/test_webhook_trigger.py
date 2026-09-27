@@ -208,6 +208,24 @@ def test_200_when_secret_matches():
         _close(ws)
 
 
+def test_secret_headers_never_reach_the_graph():
+    slug = "wh-secret-headers"
+    ws = _power_on(slug, _graph(secret="s3cret"))
+    try:
+        resp = client.post(f"/hook/{slug}/foo", json={},
+                           headers={"X-Webhook-Secret": "s3cret", "X-Api-Key": "k-123",
+                                    "Proxy-Authorization": "Basic cHJveHk=", "X-Custom": "kept"})
+        assert resp.status_code == 200
+        headers = _wait_for_value(ws, "hook", "headers")["value"]
+        assert "x-custom" in headers
+        for secret in ("s3cret", "k-123", "cHJveHk="):
+            assert secret not in headers
+        # nor does the cached wire state the /state endpoint serves.
+        assert "s3cret" not in client.get(f"/api/runtime/{slug}/state").text
+    finally:
+        _close(ws)
+
+
 # ---------------------------------------------------------------------------
 # Method filter: a node with method=GET rejects a POST with 404
 # ---------------------------------------------------------------------------
