@@ -38,6 +38,9 @@ export function SavedWorkflowsPanel({
   openSlugs = [], onCloseRail, refreshKey = 0,
 }: SavedWorkflowsPanelProps) {
   const [names, setNames] = useState<string[]>([]);
+  // workflows that live in a file elsewhere on this computer (Open... / Save
+  // as... through the system dialog): slug -> the path, home folder as ~
+  const [files, setFiles] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tick, setTick] = useState(0); // bump to refetch after a rename/delete
@@ -52,8 +55,10 @@ export function SavedWorkflowsPanel({
     setError(null);
     fetch("/api/graphs")
       .then((r) => r.json())
-      .then((d: { graphs: string[] }) => {
-        if (!cancelled) setNames(d.graphs ?? []);
+      .then((d: { graphs: string[]; files?: { slug: string; path: string }[] }) => {
+        if (cancelled) return;
+        setNames(d.graphs ?? []);
+        setFiles(Object.fromEntries((d.files ?? []).map((f) => [f.slug, f.path])));
       })
       .catch((e) => {
         if (!cancelled) setError(String(e?.message ?? e));
@@ -97,6 +102,7 @@ export function SavedWorkflowsPanel({
         )}
         {!loading && !error && names.map((name) => {
           const isOpen = openSet.has(name);
+          const filePath = files[name];
           const renaming = renamingSlug === name;
           const deleting = deletingSlug === name;
           return (
@@ -109,10 +115,10 @@ export function SavedWorkflowsPanel({
                 e.stopPropagation();
                 setCtxMenu({ x: e.clientX, y: e.clientY, slug: name });
               }}
-              title={isOpen ? `Activate "${name}"` : `Open "${name}"`}
+              title={`${isOpen ? "Activate" : "Open"} "${name}"${filePath ? ` · ${filePath}` : ""}`}
             >
               <div className="swf-row-ico">
-                <Icon name="git-network-outline" />
+                <Icon name={filePath ? "document-outline" : "git-network-outline"} />
               </div>
               <div className="swf-row-text">
                 {renaming ? (
@@ -141,12 +147,15 @@ export function SavedWorkflowsPanel({
                     onBlur={() => setRenamingSlug(null)}
                   />
                 ) : (
-                  <div className="swf-row-name">{name}</div>
+                  <>
+                    <div className="swf-row-name">{name}</div>
+                    {filePath && <div className="swf-row-path">{filePath}</div>}
+                  </>
                 )}
               </div>
               {deleting ? (
                 <span className="wf-tab-confirm" onClick={(e) => e.stopPropagation()}>
-                  <span className="wf-tab-confirm-label">Delete?</span>
+                  <span className="wf-tab-confirm-label">{filePath ? "Remove? The file stays" : "Delete?"}</span>
                   <button type="button" className="wf-tab-confirm-btn danger"
                     onClick={(e) => { e.stopPropagation(); setDeletingSlug(null); onDeleteWorkflow(name); window.setTimeout(refetch, 200); }}>Yes</button>
                   <button type="button" className="wf-tab-confirm-btn"
@@ -167,7 +176,12 @@ export function SavedWorkflowsPanel({
         <ContextMenu
           x={ctxMenu.x}
           y={ctxMenu.y}
-          items={[
+          items={files[ctxMenu.slug] ? [
+            // a file elsewhere on this computer: renaming would move it out of
+            // its file, so it is cloned or removed from the list, never deleted
+            { id: "clone", label: "Clone", icon: "copy-outline", run: () => { onCloneWorkflow(ctxMenu.slug); setCtxMenu(null); window.setTimeout(refetch, 200); } },
+            { id: "delete", label: "Remove from list", icon: "close-circle-outline", run: () => { setDeletingSlug(ctxMenu.slug); setCtxMenu(null); } },
+          ] : [
             { id: "rename", label: "Rename", icon: "create-outline", run: () => { setRenameDraft(ctxMenu.slug); setRenamingSlug(ctxMenu.slug); setCtxMenu(null); } },
             { id: "clone", label: "Clone", icon: "copy-outline", run: () => { onCloneWorkflow(ctxMenu.slug); setCtxMenu(null); window.setTimeout(refetch, 200); } },
             { id: "delete", label: "Delete", icon: "trash-outline", run: () => { setDeletingSlug(ctxMenu.slug); setCtxMenu(null); } },

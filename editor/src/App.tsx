@@ -598,7 +598,38 @@ export default function App() {
   // draft or saved graph uses, so it never replaces a saved workflow; the
   // usual load then heals its dead wires. Models and {{secret.NAME}}
   // references come through as the file has them.
-  const openWorkflowFile = useCallback((): void => { fileInputRef.current?.click(); }, []);
+  // First this computer's own Open dialog, shown by the server: the file is
+  // remembered by its path, listed after a restart and saved back in place.
+  // Where no dialog can be shown (another machine through the token link, no
+  // display), the browser's picker opens it as an unsaved copy instead.
+  const openWorkflowFile = useCallback(async (): Promise<void> => {
+    let res: Response;
+    try {
+      res = await fetch("/api/files/open", { method: "POST" });
+    } catch {
+      fileInputRef.current?.click();
+      return;
+    }
+    if (res.status === 403 || res.status === 409) {
+      const body = await res.json().catch(() => ({}));
+      if (res.status === 409 && body.error) {
+        socket.notice(`did not open a file: ${body.error}`, "bad");
+        return;
+      }
+      fileInputRef.current?.click();
+      return;
+    }
+    const body = await res.json().catch(() => null);
+    if (!res.ok || !body) {
+      socket.notice(`did not open the file: ${body?.error ?? res.statusText}`, "bad");
+      return;
+    }
+    if (body.cancelled) return;
+    try { localStorage.removeItem(draftKey(body.slug)); } catch { /* storage unavailable */ }
+    setTabsState((prev) => withTabOpened(prev, body.slug));
+    setSavedListKey((n) => n + 1);
+    socket.notice(`opened ${body.path} as ${body.slug}`, "ok");
+  }, [socket.notice, setTabsState]);
   const onWorkflowFilePicked = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const input = e.currentTarget;
     const file = input.files?.[0];
@@ -677,6 +708,59 @@ export default function App() {
     socket.notice(`saved a copy of ${original} as ${slug}`, "ok");
     return null;
   }, [activeSlug, tabsState.open, tabsState.unsaved, toGraph, loadGraph, setTabsState, socket.notice]);
+
+  // Save as through this computer's own dialog: the copy is written to the
+  // file picked, remembered by its path, and takes over the canvas in its own
+  // tab. Where no dialog can be shown, the name dialog saves it in Boltjar.
+  const saveWorkflowAsFile = useCallback(async (): Promise<void> => {
+    const original = activeSlug;
+    if (!original) return;
+    const g: Graph = toGraph();
+    let res: Response;
+    try {
+      res = await fetch("/api/files/save-as", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ graph: g, name: original }),
+      });
+    } catch {
+      setSaveAsOpen(true);
+      return;
+    }
+    if (res.status === 403 || res.status === 409) {
+      const body = await res.json().catch(() => ({}));
+      if (res.status === 409 && body.error) {
+        socket.notice(`did not save: ${body.error}`, "bad");
+        return;
+      }
+      setSaveAsOpen(true);
+      return;
+    }
+    const body = await res.json().catch(() => null);
+    if (!res.ok || !body) {
+      socket.notice(`did not save: ${body?.error ?? res.statusText}`, "bad");
+      return;
+    }
+    if (body.cancelled) return;
+    const slug: string = body.slug;
+    const copy: Graph = { ...g, name: slug };
+    const originalUnsaved = tabsState.unsaved.includes(original);
+    try {
+      localStorage.setItem(draftKey(slug), JSON.stringify(copy));
+      localStorage.removeItem(draftKey(original));
+    } catch { /* storage unavailable: the copy is in its file */ }
+    loadedSlugRef.current = slug;
+    loadGraph(copy);
+    setLastSaved(Date.now());
+    setTabsState((prev) => {
+      const next = originalUnsaved && !prev.open.includes(slug)
+        ? withTabRenamed(prev, original, slug)
+        : withTabOpened(prev, slug);
+      return withTabSaved(next, slug);
+    });
+    setSavedListKey((n) => n + 1);
+    socket.notice(`saved ${original} to ${body.path} as ${slug}`, "ok");
+  }, [activeSlug, tabsState.unsaved, toGraph, loadGraph, setTabsState, socket.notice]);
 
   // Export: download the workflow as the editor holds it, unsaved edits
   // included, in the saved-file format. It carries no secret values: a knob
@@ -1135,10 +1219,10 @@ export default function App() {
     return [
       { id: "file-open", label: "Open...", hint: "open a workflow file in a new tab", icon: "folder-open-outline", enabled: true, run: openWorkflowFile },
       { id: "save", label: "Save", hint: "save the open workflow", icon: "save-outline", kbd: mod("S"), enabled: open, run: () => void putGraph() },
-      { id: "file-save-as", label: "Save as...", hint: "save a copy under a new name", icon: "duplicate-outline", enabled: open, run: () => setSaveAsOpen(true) },
+      { id: "file-save-as", label: "Save as...", hint: "save a copy to a file you pick", icon: "duplicate-outline", enabled: open, run: () => { void saveWorkflowAsFile(); } },
       { id: "file-export", label: "Export", hint: activeSlug ? `download ${exportFileName(activeSlug)}` : "download the workflow", icon: "download-outline", enabled: open, run: exportWorkflow },
     ];
-  }, [activeSlug, openWorkflowFile, putGraph, exportWorkflow]);
+  }, [activeSlug, openWorkflowFile, saveWorkflowAsFile, putGraph, exportWorkflow]);
 
   const fileActions: PaletteAction[] = useMemo(
     () => fileCommands.filter((c) => c.enabled).map(({ enabled: _e, ...c }) => ({ ...c, group: "File" as const })),

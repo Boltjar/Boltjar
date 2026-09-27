@@ -1348,6 +1348,7 @@ button{font-family:inherit;}
 }
 .swf-row-ico svg{width:14px; height:14px; color:var(--accent);}
 .swf-row-text{ min-width:0; flex:1; }
+.swf-row-path{ font-family:var(--font-mono); font-size:var(--fs-micro); color:var(--ink-ghost); letter-spacing:var(--tr-mono); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .swf-row-name{
   font-family:var(--font-mono); font-size:var(--fs-sm); color:var(--ink); font-weight:500;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
