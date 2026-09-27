@@ -21,6 +21,7 @@ import { typeColorVar, typesCompatible } from "../../lib/types";
 import { Icon, hasIcon } from "../../lib/icons";
 import { bodySummary, defaultOf, headerSubline } from "../../lib/nodeMeta";
 import { useDraft } from "../../lib/useDraft";
+import { convertAction } from "../../lib/knobOptions";
 import {
   concreteInputs,
   concreteOutputs,
@@ -834,7 +835,7 @@ function InlineWidget({
   // promotes the WHOLE value to one typed input (the {tag} mechanism is an
   // additive inline-composition feature, not a reason to hide the menu item).
   const resetToDefault = () => onChange(widget.default);
-  const promoteHandler = (widget.promotable ?? true) ? onPromote : undefined;
+  const promoteHandler = convertAction(widget.promotable, onPromote);
 
   // a field declaring options_from ("db.tables") is a live dropdown sourced from
   // the wired store. It renders in the SAME knob-row layout as every other
@@ -931,7 +932,7 @@ function InlineWidget({
       step={widget.step}
       options={effectiveOptions}
       onChange={onChange}
-      onConvert={onPromote}
+      onConvert={promoteHandler}
       onReset={() => onChange(widget.default)}
     />
   );

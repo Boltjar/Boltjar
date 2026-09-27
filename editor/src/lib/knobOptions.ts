@@ -27,3 +27,10 @@ export function knobBool(value: unknown, fallback?: unknown): boolean {
   if (typeof v === "string") return ["true", "1", "yes", "on"].includes(v.trim().toLowerCase());
   return Boolean(v);
 }
+
+/** The Convert to input action a knob offers: `onPromote`, or none when its
+ *  widget declares promotable=false. Every knob path (Knob, a code field, a
+ *  secret-aware text, a store dropdown) reads the flag through this one call. */
+export function convertAction<T>(promotable: boolean | undefined, onPromote: T): T | undefined {
+  return promotable === false ? undefined : onPromote;
+}
