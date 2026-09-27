@@ -14,7 +14,7 @@
 // ============================================================================
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ModelManifest, ModelsInfo } from "../types/protocol";
-import type { ModelsMeta } from "../lib/modelMeta";
+import { listState, type ModelsMeta } from "../lib/modelMeta";
 
 /** How often the list is read again while the server is refreshing it. */
 const POLL_MS = 2000;
@@ -37,8 +37,9 @@ export interface ModelsState {
   refresh: () => Promise<void>;
 }
 
-function metaOf(info: ModelsInfo | null): ModelsMeta {
+function metaOf(info: ModelsInfo | null, loading: boolean, error: string | null): ModelsMeta {
   return {
+    list: listState(info !== null, loading, error),
     auto: info?.auto ?? null,
     updated: info?.updated ?? null,
     refreshing: info?.refreshing ?? false,
@@ -117,9 +118,9 @@ export function useModels(): ModelsState {
   }, [data]);
 
   const meta = useMemo(() => {
-    const m = metaOf(data);
+    const m = metaOf(data, loading, error);
     return refreshing ? { ...m, refreshing: true } : m;
-  }, [data, refreshing]);
+  }, [data, loading, error, refreshing]);
 
   return {
     loading,

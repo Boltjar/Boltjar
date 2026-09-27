@@ -81,12 +81,23 @@ export function pickerGroups(
   return groupByProvider(searchModels(runnableModels(manifests, kind), query));
 }
 
-/** The live list's state, as GET /api/models reports it (times are ISO UTC). */
+/** The live list's state, as GET /api/models reports it (times are ISO UTC).
+ *  `list` says whether a list was read at all: "loading" before the first
+ *  answer, "failed" when GET /api/models failed and none was ever read, "ready"
+ *  once one was (a later failed read keeps it). Until "ready", no model can be
+ *  called missing. */
 export interface ModelsMeta {
+  list: "loading" | "failed" | "ready";
   auto: string | null;
   updated: string | null;
   refreshing: boolean;
   providers: Record<string, Pick<ProviderListing, "ok" | "checked" | "updated" | "error" | "failure">>;
+}
+
+/** ModelsMeta.list from the reader's state: a list read (even if a later read
+ *  failed) is "ready"; no list and a failed read is "failed"; else "loading". */
+export function listState(hasList: boolean, loading: boolean, error: string | null): ModelsMeta["list"] {
+  return hasList ? "ready" : error && !loading ? "failed" : "loading";
 }
 
 /** How long ago an ISO UTC time was, in words ("just now", "5 min ago"). */
@@ -134,19 +145,32 @@ export function updatedLine(meta: ModelsMeta, nowMs: number): string {
 
 /** What the picker's button says about the picked model: `ok`, `auto` (with
  *  the model it runs now), `unavailable` (with the server's reason), `missing`
- *  (no longer in the list) or `none` (nothing picked). */
+ *  (no longer in the list), `unknown` (no list was read yet, so nothing can be
+ *  claimed either way) or `none` (nothing picked). A `mock/` model is the
+ *  offline mock, which always runs. */
 export function modelStatus(
   selectedId: string,
   models: ReadonlyMap<string, ModelManifest>,
-  auto: string | null,
-): { state: "ok" | "auto" | "unavailable" | "missing" | "none"; note: string } {
+  meta: Pick<ModelsMeta, "auto" | "list">,
+): { state: "ok" | "auto" | "unavailable" | "missing" | "unknown" | "none"; note: string } {
   if (!selectedId) return { state: "none", note: "" };
+  const listed = meta.list === "ready";
   if (selectedId === AUTO_MODEL) {
-    const runs = auto ? models.get(auto) : undefined;
+    const runs = meta.auto ? models.get(meta.auto) : undefined;
     return {
       state: "auto",
-      note: runs ? `runs ${runs.label}` : auto ? `runs ${auto}` : "runs the mock until a model is connected",
+      note: !listed
+        ? "picks a model that can run when it runs"
+        : runs
+          ? `runs ${runs.label}`
+          : meta.auto
+            ? `runs ${meta.auto}`
+            : "runs the mock until a model is connected",
     };
+  }
+  if (selectedId.startsWith("mock/")) return { state: "ok", note: "" };
+  if (!listed) {
+    return { state: "unknown", note: meta.list === "failed" ? "the model list could not be read" : "" };
   }
   const manifest = models.get(selectedId);
   if (!manifest) return { state: "missing", note: "not in the model list any more" };

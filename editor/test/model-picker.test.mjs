@@ -20,7 +20,7 @@ async function load(rel) {
   return import("data:text/javascript," + encodeURIComponent(js));
 }
 const {
-  AUTO_MODEL, ago, modelStatus, pickerGroups, runnableModels, searchModels, updatedLine,
+  AUTO_MODEL, ago, listState, modelStatus, pickerGroups, runnableModels, searchModels, updatedLine,
 } = await load("modelMeta.ts");
 
 let failures = 0;
@@ -77,7 +77,9 @@ check("an empty search keeps every row", searchModels(served, "  ").length, serv
 
 // ---- the "last updated" line
 const now = Date.parse("2026-09-27T12:00:00Z");
-const meta = (extra = {}) => ({ auto: null, updated: null, refreshing: false, providers: {}, ...extra });
+const meta = (extra = {}) => ({
+  list: "ready", auto: null, updated: null, refreshing: false, providers: {}, ...extra,
+});
 check("never refreshed", updatedLine(meta(), now), "not checked yet");
 check("refreshing", updatedLine(meta({ refreshing: true, updated: "2026-09-27T11:59:00Z" }), now), "refreshing…");
 check("seconds read as just now", updatedLine(meta({ updated: "2026-09-27T11:59:30Z" }), now), "updated just now");
@@ -125,17 +127,35 @@ check("a failure of no known kind (an older cache) failed",
 
 // ---- what the button says about the picked model
 const byId = new Map(served.map((m) => [m.id, m]));
-check("nothing picked", modelStatus("", byId, null), { state: "none", note: "" });
+check("nothing picked", modelStatus("", byId, meta()), { state: "none", note: "" });
 check("auto names the model it runs",
-  modelStatus(AUTO_MODEL, byId, "ollama/gemma4:e4b"), { state: "auto", note: "runs Gemma 4 e4b (Ollama)" });
+  modelStatus(AUTO_MODEL, byId, meta({ auto: "ollama/gemma4:e4b" })), { state: "auto", note: "runs Gemma 4 e4b (Ollama)" });
 check("auto with nothing connected runs the mock",
-  modelStatus(AUTO_MODEL, byId, null), { state: "auto", note: "runs the mock until a model is connected" });
+  modelStatus(AUTO_MODEL, byId, meta()), { state: "auto", note: "runs the mock until a model is connected" });
 check("an unavailable model carries the server's reason",
-  modelStatus("ollama/qwen3:14b", byId, null),
+  modelStatus("ollama/qwen3:14b", byId, meta()),
   { state: "unavailable", note: "not installed in Ollama: pull it in Connections" });
 check("a vanished model is missing",
-  modelStatus("ollama/llama3.1:8b", byId, null), { state: "missing", note: "not in the model list any more" });
-check("a runnable model is ok", modelStatus("xai/grok-4.7", byId, null), { state: "ok", note: "" });
+  modelStatus("ollama/llama3.1:8b", byId, meta()), { state: "missing", note: "not in the model list any more" });
+check("a runnable model is ok", modelStatus("xai/grok-4.7", byId, meta()), { state: "ok", note: "" });
+check("the offline mock is never missing",
+  modelStatus("mock/echo", byId, meta()), { state: "ok", note: "" });
+
+// ---- before a list was read, nothing is called missing
+check("the first read in flight is loading", listState(false, true, null), "loading");
+check("a first read that failed is failed", listState(false, false, "models 500"), "failed");
+check("a list read once stays ready when a later read fails", listState(true, false, "models 500"), "ready");
+const empty = new Map();
+check("while the list loads a picked model is neutral",
+  modelStatus("xai/grok-4.7", empty, meta({ list: "loading" })), { state: "unknown", note: "" });
+check("a list that could not be read claims nothing about the model",
+  modelStatus("xai/grok-4.7", empty, meta({ list: "failed" })),
+  { state: "unknown", note: "the model list could not be read" });
+check("auto while the list loads says what it does, not that it runs the mock",
+  modelStatus(AUTO_MODEL, empty, meta({ list: "loading" })),
+  { state: "auto", note: "picks a model that can run when it runs" });
+check("the mock is fine before the list too",
+  modelStatus("mock/echo", empty, meta({ list: "failed" })), { state: "ok", note: "" });
 
 if (failures) {
   console.error(`\n${failures} check(s) failed`);

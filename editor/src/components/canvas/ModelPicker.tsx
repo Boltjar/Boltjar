@@ -168,7 +168,7 @@ export function ModelPicker({
     }
   };
 
-  const status = modelStatus(selectedId, models, modelsMeta.auto);
+  const status = modelStatus(selectedId, models, modelsMeta);
   const warn = status.state === "missing" || status.state === "unavailable";
   const label =
     status.state === "auto" ? "Auto" : selected?.label ?? (selectedId || "select a model");
@@ -178,7 +178,7 @@ export function ModelPicker({
     // a voice / embed model has no token context: show just its provider.
     sub = `${providerLabel(selected.provider)}${selected.context > 0 ? ` · ${formatContext(selected.context)} ctx` : ""}`;
   }
-  const autoNote = modelStatus(AUTO_MODEL, models, modelsMeta.auto).note;
+  const autoNote = modelStatus(AUTO_MODEL, models, modelsMeta).note;
 
   // screen-space placement for the portaled panel: prefer below the trigger,
   // flip above when it would not fit, and clamp to the viewport otherwise.
@@ -210,7 +210,7 @@ export function ModelPicker({
         type="button"
         className={`mp-trigger nodrag ${open ? "open" : ""} ${warn || status.state === "none" ? "missing" : ""}`}
         onClick={() => setOpen((o) => !o)}
-        title={warn || status.state === "auto" ? status.note : selected ? selected.summary : "no model selected"}
+        title={status.note || (selected ? selected.summary : selectedId || "no model selected")}
       >
         <span className="mp-trig-ico">
           <Icon name={warn ? "warning-outline" : "sparkles"} />
