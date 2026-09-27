@@ -8,7 +8,7 @@
 
 export const DOCS_URL = "https://boltjar.link/docs";
 export const FEEDBACK_URL = "https://github.com/Boltjar/Boltjar/discussions/new?category=ideas";
-export const SPONSOR_URL = "https://github.com/sponsors/DKLRD";
+export const SPONSOR_URL = "https://github.com/sponsors/Boltjar";
 const NEW_ISSUE_URL = "https://github.com/Boltjar/Boltjar/issues/new";
 
 /** GET /api/version, reduced to the three fields the editor uses. */

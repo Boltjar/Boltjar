@@ -31,7 +31,7 @@ function check(label, got, want) {
 // ---- links
 check("docs", DOCS_URL, "https://boltjar.link/docs");
 check("feedback goes to the ideas category", FEEDBACK_URL, "https://github.com/Boltjar/Boltjar/discussions/new?category=ideas");
-check("sponsors", SPONSOR_URL, "https://github.com/sponsors/DKLRD");
+check("sponsors", SPONSOR_URL, "https://github.com/sponsors/Boltjar");
 
 // ---- /api/version payload
 const info = parseVersionInfo({ version: "0.1.0", python: "3.12.4", platform: "Windows-11-10.0.26200-SP0" });
