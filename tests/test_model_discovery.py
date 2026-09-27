@@ -4,8 +4,8 @@ Each provider is faked at the HTTP boundary (`vendor_http`, see conftest.py)
 with the response shapes the real endpoints return (checked live 2026-09-27):
 Ollama GET /api/tags + POST /api/show, xAI GET /v1/language-models, Anthropic
 GET /v1/models, and an OpenAI-compatible GET <base>/models. Covers the mapping
-onto the manifest shape, the merge with the TOML manifests, and the cache and
-its offline fallback.
+onto the manifest shape, the merge with the TOML manifests, the cache and its
+offline fallback, and the OpenAI-compatible chat call.
 """
 from __future__ import annotations
 
@@ -19,6 +19,7 @@ import pytest
 import boltjar.nodes.core  # noqa: F401  (registers nodes + loads manifests)
 import boltjar.secrets as secrets
 from boltjar import endpoints, model_discovery as md, models
+from boltjar.runtime import Runtime
 from local_client import local_client
 
 client = local_client()
@@ -122,10 +123,15 @@ OPENAI_MODELS = {"object": "list", "data": [
     {"id": "gpt-4o-mini-tts", "object": "model", "created": 1742403959, "owned_by": "system"},
 ]}
 
+COMPLETION = {"id": "c1", "object": "chat.completion",
+              "choices": [{"index": 0, "finish_reason": "stop",
+                           "message": {"role": "assistant", "content": "Hello!"}}]}
+
 OFFLINE = httpx.ConnectError("connection refused")
 
 
-def vendors(*, ollama=True, xai=None, anthropic=None, openai=None, endpoints_=None):
+def vendors(*, ollama=True, xai=None, anthropic=None, openai=None, endpoints_=None,
+            chat=None):
     """A reply router in the recorded shapes. A provider left None answers 404;
     ollama=False refuses the connection like a stopped Ollama."""
     def reply(request: httpx.Request) -> httpx.Response:
@@ -147,6 +153,8 @@ def vendors(*, ollama=True, xai=None, anthropic=None, openai=None, endpoints_=No
         for base, body in (endpoints_ or {}).items():
             if url == f"{base}/models":
                 return httpx.Response(200, json=body)
+        if path.endswith("/chat/completions") and chat is not None:
+            return httpx.Response(200, json=chat)
         return httpx.Response(404, text="not faked")
     return reply
 
@@ -397,6 +405,102 @@ def test_refresh_endpoint_returns_the_fresh_list(fresh, vendor_http):
     assert ids["ollama/llama3.2:latest"]["source"] == "discovered"
     assert body["providers"]["ollama"]["ok"] is True
     assert body["updated"].endswith("Z") and body["refreshing"] is False
+
+
+# ------------------------------------------------------- the LLM node
+
+def _run_llm(model: str, prompt: str = "hi") -> dict:
+    graph = {
+        "nodes": [{"id": "chat", "type": "core.trigger.chat"},
+                  {"id": "llm", "type": "core.ai.llm", "config": {"model": model}},
+                  {"id": "out", "type": "core.output.log"}],
+        "edges": [{"src": "chat", "src_port": "trigger", "dst": "llm", "dst_port": "trigger"},
+                  {"src": "chat", "src_port": "text", "dst": "llm", "dst_port": "prompt"},
+                  {"src": "llm", "src_port": "response", "dst": "out", "dst_port": "in"}],
+    }
+    events: list[dict] = []
+    rt = Runtime(observer=events.append)
+    rt.build(graph)
+
+    async def drive():
+        await rt.run()
+        rt.send_chat("chat", prompt)
+        await asyncio.sleep(0.4)
+        await rt.stop()
+
+    asyncio.run(drive())
+    return {e["port"]: e["value"] for e in events if e["kind"] == "value" and e["node"] == "llm"}
+
+
+# ------------------------------------------------ OpenAI-compatible calls
+
+class _Ctx:
+    def __init__(self):
+        self.calls: list[tuple[str, dict]] = []
+
+    async def call_tool(self, tid, args):
+        self.calls.append((tid, args))
+        return "sunny"
+
+
+def test_openai_compatible_request_shape_with_image_and_tools(vendor_http):
+    from boltjar.nodes.core import builtin as b
+
+    tool_call = {"id": "call_1", "type": "function",
+                 "function": {"name": "weather", "arguments": '{"city": "Paris"}'}}
+    replies = iter([
+        {"choices": [{"message": {"role": "assistant", "content": "", "tool_calls": [tool_call]}}]},
+        {"choices": [{"message": {"role": "assistant", "content": "It is sunny.",
+                                  "reasoning": "checked the tool"}}]},
+    ])
+    vendor_http.reply = lambda r: httpx.Response(200, json=next(replies))
+    ctx = _Ctx()
+    tools = [{"id": "t1", "name": "weather", "description": "the weather",
+              "parameters": {"type": "object", "properties": {"city": {"type": "string"}}}}]
+    text, reasoning = asyncio.run(b._openai_chat(
+        "https://openrouter.ai/api/v1/chat/completions", "test-key", "meta-llama/llama-3.3-70b-instruct",
+        "weather?", {"temperature": 0.2, "json": True, "think": "off"},
+        {"image": "data:image/png;base64,AAAA"}, ctx=ctx, tools=tools))
+    assert (text, reasoning) == ("It is sunny.", "checked the tool")
+    assert ctx.calls == [("t1", {"city": "Paris"})]
+    first, second = (json.loads(r.content) for r in vendor_http.requests)
+    assert str(vendor_http.requests[0].url) == "https://openrouter.ai/api/v1/chat/completions"
+    assert vendor_http.requests[0].headers["authorization"] == "Bearer test-key"
+    assert first["model"] == "meta-llama/llama-3.3-70b-instruct" and first["temperature"] == 0.2
+    assert first["response_format"] == {"type": "json_object"}
+    assert "reasoning_effort" not in first, "think off sends no effort"
+    assert first["messages"][0]["content"] == [
+        {"type": "image_url", "image_url": {"url": "data:image/png;base64,AAAA"}},
+        {"type": "text", "text": "weather?"}]
+    assert first["tools"][0]["function"]["name"] == "weather"
+    assert second["messages"][1]["tool_calls"] == [tool_call]
+    assert second["messages"][2] == {"role": "tool", "tool_call_id": "call_1", "content": "sunny"}
+
+
+def test_a_keyless_endpoint_sends_no_authorization(vendor_http):
+    from boltjar.nodes.core import builtin as b
+
+    vendor_http.reply = lambda r: httpx.Response(200, json=COMPLETION)
+    asyncio.run(b._openai_chat("http://localhost:1234/v1/chat/completions", "", "qwen", "hi", {}))
+    assert "authorization" not in vendor_http.last.headers
+    assert vendor_http.last_json() == {"model": "qwen",
+                                       "messages": [{"role": "user", "content": "hi"}]}
+
+
+def test_the_llm_node_calls_openai_and_custom_endpoints(fresh, vendor_http, monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
+    endpoints.save("lmstudio", "http://localhost:1234/v1")
+    vendor_http.reply = vendors(ollama=False, openai=OPENAI_MODELS,
+                                endpoints_={"http://localhost:1234/v1": LMSTUDIO_MODELS},
+                                chat=COMPLETION)
+    refresh()
+    assert _run_llm("openai/gpt-5")["response"] == "Hello!"
+    call = vendor_http.last
+    assert str(call.url) == "https://api.openai.com/v1/chat/completions"
+    assert call.headers["authorization"] == "Bearer test-openai-key"
+    assert json.loads(call.content)["model"] == "gpt-5"
+    assert _run_llm("lmstudio/qwen2.5-7b-instruct")["response"] == "Hello!"
+    assert str(vendor_http.last.url) == "http://localhost:1234/v1/chat/completions"
 
 
 # ------------------------------------------------------------ endpoints API

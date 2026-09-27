@@ -16,7 +16,7 @@ import re
 from simpleeval import SimpleEval, DEFAULT_FUNCTIONS
 
 from boltjar.sdk import node, Kind, NodeFailure, Port, Widget, code, model, select, slider, tmpl
-from boltjar import models
+from boltjar import endpoints, models
 from boltjar.secrets import resolve_secrets
 
 _log = logging.getLogger(__name__)
@@ -3127,14 +3127,18 @@ def _mock_reply(prompt: str) -> str:
     return f"[mock] {snippet}"
 
 
-_PROVIDER_KEYS = {"xai": "XAI_API_KEY", "anthropic": "ANTHROPIC_API_KEY", "google": "GOOGLE_API_KEY"}
+_PROVIDER_KEYS = {"xai": "XAI_API_KEY", "anthropic": "ANTHROPIC_API_KEY", "google": "GOOGLE_API_KEY",
+                  "openai": "OPENAI_API_KEY"}
 
 
 def _provider_ready(provider: str) -> bool:
-    """Mock is always ready; Ollama is assumed local; cloud needs its key set."""
+    """Mock is always ready; Ollama is assumed local; cloud needs its key set; a
+    custom OpenAI-compatible endpoint needs to exist (and its key, if it takes one)."""
     if provider in ("mock", "ollama"):
         return True
-    return bool(os.environ.get(_PROVIDER_KEYS.get(provider, "")))
+    if provider in _PROVIDER_KEYS:
+        return bool(os.environ.get(_PROVIDER_KEYS[provider]))
+    return endpoints.resolve(provider) is not None
 
 
 # The synthetic capability knobs (see boltjar.models): the thinking lever and
@@ -3168,8 +3172,8 @@ async def _call_model(manifest, model_id: str, prompt: str, params: dict, media:
 
     `tools` is the list of {id, name, description, parameters} for every wired
     Tool node; `ctx` is the LLM's runtime Ctx, used by the provider call to
-    invoke a tool via ctx.call_tool(). Anthropic / Ollama / Google ignore tools
-    for now (their signatures are unchanged); xAI runs the full tool loop.
+    invoke a tool via ctx.call_tool(). Google ignores tools; Ollama, xAI,
+    Anthropic and the OpenAI-compatible endpoints run the full tool loop.
     """
     provider = manifest.provider if manifest else "mock"
     model = manifest.model if manifest else (model_id.split("/", 1)[-1] or "echo")
@@ -3185,6 +3189,10 @@ async def _call_model(manifest, model_id: str, prompt: str, params: dict, media:
         text, reasoning = await _anthropic(model, prompt, params, media, ctx=ctx, tools=tools)
     elif provider == "google":
         text, reasoning = await _google(model, prompt, params)
+    elif (endpoint := endpoints.resolve(provider)) is not None:
+        text, reasoning = await _openai_chat(f"{endpoint.base_url}/chat/completions",
+                                             endpoint.key(), model, prompt, params, media,
+                                             ctx=ctx, tools=tools)
     else:
         text, reasoning = _mock_reply(prompt), ""
 
@@ -3331,22 +3339,42 @@ async def _ollama(model: str, prompt: str, params: dict, media: dict,
 
 async def _xai(model: str, prompt: str, params: dict, media: dict | None = None,
                ctx=None, tools: list | None = None) -> tuple[str, str]:
-    """xAI Grok (OpenAI-compatible). Thinking is top-level `reasoning_effort`
-    (none|low|medium|high; the trace comes back as `reasoning_content`); JSON
-    via `response_format`. "none" disables thinking; low/medium/high set effort.
-    Missing/empty/"off" sends no reasoning_effort (use provider default).
+    """xAI Grok, over its OpenAI-compatible chat completions (see _openai_chat)."""
+    return await _openai_chat("https://api.x.ai/v1/chat/completions",
+                              os.environ.get("XAI_API_KEY", ""), model, prompt, params,
+                              media, ctx=ctx, tools=tools)
+
+
+# the think values that send no reasoning effort (the provider default).
+_NO_EFFORT = ("", "off", "false", "0")
+
+
+async def _openai_chat(url: str, key: str, model: str, prompt: str, params: dict,
+                       media: dict | None = None, ctx=None,
+                       tools: list | None = None) -> tuple[str, str]:
+    """An OpenAI-compatible chat completion: xAI, OpenAI and every custom endpoint
+    (OpenRouter, Groq, LM Studio, llama.cpp, vLLM). `key` rides a Bearer header
+    and is left out when empty (a local server takes none).
+
+    Thinking is top-level `reasoning_effort` (the think knob's value, e.g. none|
+    low|medium|high; "off" or empty sends nothing, the provider default); the
+    trace comes back as `reasoning_content` (xAI) or `reasoning` (OpenRouter).
+    JSON output is `response_format: json_object`. Sampling knobs (temperature,
+    top_p, max_completion_tokens, max_tokens, seed) are sent only when the model
+    declares them.
 
     With an image (`media["image"]`), the user content is an OpenAI-style array:
-    an `image_url` block (xAI accepts an https URL or a `data:image/...;base64,...`
-    URL directly, no re-encode) followed by the text block. No image -> plain str.
+    an `image_url` block (an https URL or a `data:image/...;base64,...` URL,
+    passed through without a re-encode) followed by the text block. No image ->
+    plain str.
 
     With wired `tools` (each {id, name, description, parameters}) the body
     declares `tools=[{"type":"function","function":{...}}]`; when the model
     responds with `tool_calls`, each call is dispatched to its Tool node via
     `ctx.call_tool(id, args)`, the result is appended as a `role:tool` message
-    (with `tool_call_id`), and the chat completions endpoint is hit again. The
-    loop runs up to 6 hops before returning whatever text the last response
-    carries, so a misbehaving model can never spin forever."""
+    (with `tool_call_id`), and the endpoint is hit again. The loop runs up to 6
+    hops before returning whatever text the last response carries, so a
+    misbehaving model can never spin forever."""
     import httpx
     media = media or {}
     image = media.get("image")
@@ -3360,10 +3388,11 @@ async def _xai(model: str, prompt: str, params: dict, media: dict | None = None,
     messages: list[dict] = [{"role": "user", "content": content}]
 
     base_body: dict = {"model": model}
-    base_body.update(_opts(params, ("temperature", "top_p", "max_completion_tokens")))
+    base_body.update(_opts(params, ("temperature", "top_p", "max_completion_tokens",
+                                    "max_tokens", "seed")))
     effort = params.get(_THINK)
-    if isinstance(effort, str) and effort.lower() in ("none", "low", "medium", "high"):
-        base_body["reasoning_effort"] = effort.lower()
+    if isinstance(effort, str) and effort.strip().lower() not in _NO_EFFORT:
+        base_body["reasoning_effort"] = effort.strip().lower()
     if _json_on(params):
         base_body["response_format"] = {"type": "json_object"}
 
@@ -3377,6 +3406,7 @@ async def _xai(model: str, prompt: str, params: dict, media: dict | None = None,
             for t in tools
         ]
     name_to_id = {t["name"]: t["id"] for t in tools}
+    headers = {"Authorization": f"Bearer {key}"} if key else {}
 
     reasoning_text = ""
     final_text = ""
@@ -3384,23 +3414,20 @@ async def _xai(model: str, prompt: str, params: dict, media: dict | None = None,
         for _ in range(6):
             body = dict(base_body)
             body["messages"] = messages
-            resp = await client.post(
-                "https://api.x.ai/v1/chat/completions",
-                headers={"Authorization": f"Bearer {os.environ.get('XAI_API_KEY', '')}"},
-                json=body,
-            )
+            resp = await client.post(url, headers=headers, json=body)
             resp.raise_for_status()
             msg = resp.json()["choices"][0]["message"]
-            if msg.get("reasoning_content"):
+            trace = msg.get("reasoning_content") or msg.get("reasoning")
+            if isinstance(trace, str) and trace:
                 # the last non-empty trace wins; intermediate hops can carry one too.
-                reasoning_text = msg.get("reasoning_content") or reasoning_text
+                reasoning_text = trace
             tool_calls = msg.get("tool_calls") or []
             if not tool_calls or not tools or ctx is None:
                 final_text = msg.get("content", "") or ""
                 break
             # Append the assistant turn that carries the tool_calls EXACTLY as
             # returned, then one role:tool message per call with the dispatch
-            # result. xAI requires both for the next /chat/completions call.
+            # result. The API requires both for the next call.
             messages.append({"role": "assistant",
                              "content": msg.get("content", "") or "",
                              "tool_calls": tool_calls})
