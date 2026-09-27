@@ -1309,6 +1309,7 @@ export default function App() {
           x={helpAnchor.x}
           y={helpAnchor.y}
           align="end"
+          label="Help"
           items={helpItems}
           onClose={() => setHelpAnchor(null)}
         />

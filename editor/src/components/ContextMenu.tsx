@@ -7,11 +7,15 @@
 // Positions itself within the viewport and closes on outside-click / Escape.
 // Opened from a button (the top bar's Help), `align: "end"` hangs the menu
 // from the anchor's right edge instead of starting at it.
+// The items are a WAI-ARIA menu: focus lands on the first item (or the search
+// box) when it opens, ↑/↓/Home/End move it (lib/menuKeys), Tab and Escape
+// close it, and focus goes back to where it was before the menu opened.
 // ============================================================================
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { NodeDef } from "../types/protocol";
 import { Icon } from "../lib/icons";
 import { functionColorVar, nodeIcon } from "../lib/kinds";
+import { menuFocusTarget } from "../lib/menuKeys";
 import { capabilityHint } from "../lib/nodeMeta";
 
 export interface MenuItem {
@@ -40,6 +44,8 @@ interface ContextMenuProps {
   align?: "start" | "end";
   /** plain action items (node + edge menus, and the canvas non-search items). */
   items: MenuItem[];
+  /** the menu's name for assistive tech ("Help"). */
+  label?: string;
   /** when set, render a node-search section titled by `searchTitle`. */
   defs?: NodeDef[];
   searchTitle?: string;
@@ -47,7 +53,10 @@ interface ContextMenuProps {
   onClose: () => void;
 }
 
-export function ContextMenu({ x, y, align = "start", items, defs, searchTitle, onPickNode, onClose }: ContextMenuProps) {
+/** The items focus can land on: every menu item that is not disabled. */
+const ITEM_SELECTOR = '[role^="menuitem"]:not(:disabled)';
+
+export function ContextMenu({ x, y, align = "start", items, label, defs, searchTitle, onPickNode, onClose }: ContextMenuProps) {
   const ref = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   // an end-aligned menu is first laid out at the left edge: at `left: x` (near
@@ -70,8 +79,31 @@ export function ContextMenu({ x, y, align = "start", items, defs, searchTitle, o
     setPos({ x: Math.max(8, nx), y: Math.max(8, ny) });
   }, [x, y, align]);
 
+  // focus goes back where it was when the menu opened (the Help button, a
+  // node), and only from inside the menu: an item that moved focus on purpose
+  // (Rename's field) keeps it. A layout effect, so it runs before anything the
+  // item's action mounts can take focus.
+  useLayoutEffect(() => {
+    const opener = document.activeElement;
+    const menu = ref.current;
+    return () => {
+      if (opener instanceof HTMLElement && opener.isConnected && menu?.contains(document.activeElement)) {
+        opener.focus({ preventScroll: true });
+      }
+    };
+  }, []);
+
+  const itemEls = () => Array.from(ref.current?.querySelectorAll<HTMLElement>(ITEM_SELECTOR) ?? []);
+
+  /** Focus stop `i`: an item, or the search box as the stop past the last one. */
+  const focusStop = (i: number | null) => {
+    if (i === null) return;
+    (itemEls()[i] ?? searchRef.current)?.focus({ preventScroll: true });
+  };
+
   useEffect(() => {
     if (searchable) searchRef.current?.focus();
+    else focusStop(0);
   }, [searchable]);
 
   useEffect(() => {
@@ -110,34 +142,78 @@ export function ContextMenu({ x, y, align = "start", items, defs, searchTitle, o
     }
   };
 
+  // Keys the menu acts on stop here: a menu can sit inside a node in React
+  // (a port's menu is portaled out of it only in the DOM), and the node's own
+  // keys (arrows move it, Enter selects it, Escape deselects it) must not fire.
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      onClose();
+      return;
+    }
+    const els = itemEls();
+    const from = els.indexOf(e.target as HTMLElement);
+    if (from < 0) return; // the search box handles its own keys
+    if (e.key === "Tab") {
+      // focus goes back to the opener, and Tab moves on from there
+      onClose();
+      return;
+    }
+    const to = menuFocusTarget(e.key, from, els.length, searchable);
+    if (to !== null) {
+      e.preventDefault();
+      focusStop(to);
+    }
+    if (to !== null || e.key === "Enter" || e.key === " ") e.stopPropagation();
+  };
+
+  // while focus is on an item it follows the pointer, as in a native menu, so
+  // ↑/↓ go on from the row under it; focus in the search box stays put.
+  const followPointer = (e: React.MouseEvent<HTMLButtonElement>) => {
+    const current = document.activeElement;
+    if (current instanceof HTMLElement && current !== e.currentTarget && itemEls().includes(current)) {
+      e.currentTarget.focus({ preventScroll: true });
+    }
+  };
+
   return (
     <div
       ref={ref}
       className="ctxmenu"
       style={{ left: pos.x, top: pos.y }}
       onContextMenu={(e) => e.preventDefault()}
+      onKeyDown={onKeyDown}
     >
-      {items.map((it) => (
-        <div key={it.id}>
-          {it.separatorBefore && <div className="ctx-sep" />}
-          <button
-            className={`ctx-item ${it.danger ? "danger" : ""} ${it.disabled ? "disabled" : ""}`}
-            disabled={it.disabled}
-            onClick={() => {
-              if (it.disabled) return;
-              it.run();
-              onClose();
-            }}
-          >
-            {it.swatch
-              ? <span className="ctx-swatch" style={{ background: it.swatch }} />
-              : it.icon && <Icon name={it.icon} className="ctx-ico" />}
-            <span className="ctx-lbl">{it.label}</span>
-            {it.active && <Icon name="checkmark-outline" className="ctx-check" />}
-            {it.kbd && <span className="ctx-kbd">{it.kbd}</span>}
-          </button>
+      {items.length > 0 && (
+        <div role="menu" aria-label={label}>
+          {items.map((it) => (
+            <div key={it.id} role="none">
+              {it.separatorBefore && <div className="ctx-sep" role="separator" />}
+              <button
+                role={it.active === undefined ? "menuitem" : "menuitemradio"}
+                aria-checked={it.active}
+                tabIndex={-1}
+                className={`ctx-item ${it.danger ? "danger" : ""} ${it.disabled ? "disabled" : ""}`}
+                disabled={it.disabled}
+                onMouseEnter={followPointer}
+                onClick={() => {
+                  if (it.disabled) return;
+                  it.run();
+                  onClose();
+                }}
+              >
+                {it.swatch
+                  ? <span className="ctx-swatch" style={{ background: it.swatch }} />
+                  : it.icon && <Icon name={it.icon} className="ctx-ico" />}
+                <span className="ctx-lbl">{it.label}</span>
+                {it.active && <Icon name="checkmark-outline" className="ctx-check" />}
+                {it.kbd && <span className="ctx-kbd">{it.kbd}</span>}
+              </button>
+            </div>
+          ))}
         </div>
-      ))}
+      )}
 
       {searchable && (
         <div className="ctx-search-sec">
@@ -157,7 +233,9 @@ export function ContextMenu({ x, y, align = "start", items, defs, searchTitle, o
                   setActive((a) => Math.min(matches.length - 1, a + 1));
                 } else if (e.key === "ArrowUp") {
                   e.preventDefault();
-                  setActive((a) => Math.max(0, a - 1));
+                  // ↑ from the top result goes up into the items above
+                  if (active === 0) focusStop(menuFocusTarget("ArrowUp", itemEls().length, itemEls().length, true));
+                  else setActive((a) => Math.max(0, a - 1));
                 } else if (e.key === "Enter") {
                   e.preventDefault();
                   pickActive();

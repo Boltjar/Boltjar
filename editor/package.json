@@ -8,7 +8,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test": "node test/types-compat.test.mjs && node test/model-switch.test.mjs && node test/template-ports.test.mjs && node test/dead-wires.test.mjs && node test/rename.test.mjs && node test/knob-bool.test.mjs && node test/graph-format.test.mjs && node test/server-graph.test.mjs && node test/media-summary.test.mjs && node test/help.test.mjs && node test/palette-groups.test.mjs"
+    "test": "node test/types-compat.test.mjs && node test/model-switch.test.mjs && node test/template-ports.test.mjs && node test/dead-wires.test.mjs && node test/rename.test.mjs && node test/knob-bool.test.mjs && node test/graph-format.test.mjs && node test/server-graph.test.mjs && node test/media-summary.test.mjs && node test/help.test.mjs && node test/palette-groups.test.mjs && node test/menu-keys.test.mjs"
   },
   "dependencies": {
     "@fontsource/inter": "^5.3.0",

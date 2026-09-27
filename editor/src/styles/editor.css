@@ -798,9 +798,11 @@ button{font-family:inherit;}
 .ctx-item{display:flex; align-items:center; gap:10px; width:100%; padding:7px 9px; border:none; background:none; cursor:pointer;
   border-radius:var(--radius-sm); color:var(--ink-dim); font-family:var(--font-sans); font-size:var(--fs-sm); text-align:left;
   transition:background var(--dur-1), color var(--dur-1);}
-.ctx-item:hover{background:var(--panel-3); color:var(--ink-bright);}
+/* keyboard focus reads as the hover row, the way a native menu shows it */
+.ctx-item:focus{outline:none;}
+.ctx-item:hover,.ctx-item:focus-visible{background:var(--panel-3); color:var(--ink-bright);}
 .ctx-item .ctx-ico{width:15px; height:15px; color:var(--ink-faint); flex:none;}
-.ctx-item:hover .ctx-ico{color:var(--ink);}
+.ctx-item:hover .ctx-ico,.ctx-item:focus-visible .ctx-ico{color:var(--ink);}
 .ctx-item .ctx-lbl{flex:1;}
 .ctx-item .ctx-kbd{font-family:var(--font-mono); font-size:9px; color:var(--ink-ghost); border:1px solid var(--line-2);
   border-radius:var(--radius-xs); padding:1px 5px; flex:none;}
@@ -809,7 +811,7 @@ button{font-family:inherit;}
 .ctx-item .ctx-check{width:14px; height:14px; flex:none; color:var(--ink);}
 .ctx-item.danger{color:var(--bad);}
 .ctx-item.danger .ctx-ico{color:var(--bad);}
-.ctx-item.danger:hover{background:rgba(var(--bad-rgb),0.12); color:var(--bad);}
+.ctx-item.danger:hover,.ctx-item.danger:focus-visible{background:rgba(var(--bad-rgb),0.12); color:var(--bad);}
 .ctx-item.disabled{opacity:0.4; cursor:not-allowed;}
 .ctx-item.disabled:hover{background:none; color:var(--ink-dim);}
 .ctx-sep{height:1px; background:var(--line); margin:4px 6px;}
