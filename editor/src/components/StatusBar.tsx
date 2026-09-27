@@ -2,14 +2,18 @@
 // StatusBar: the bottom live line + expandable console.
 // Collapsed: the latest event, flow counters, cursor coords, zoom, save state.
 // Expanded: a scrolling console with level-coloured rows (full-row tint on
-// warn/error, never a single-side stripe) and level filter chips.
+// warn/error, never a single-side stripe) and filter chips: the levels, and
+// "values", which adds the full value stream to the lines worth reading
+// (lib/consoleFeed). Rows are memoised by entry, so an event redraws only the
+// row it adds or counts, and the view follows new lines only while it sits at
+// the bottom.
 // ============================================================================
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "../lib/icons";
-import type { ConsoleLine } from "../hooks/useRunSocket";
+import { latestEntry, visibleEntries, type ConsoleEntry, type ConsoleFeed, type ConsoleLevel } from "../lib/consoleFeed";
 
 interface StatusBarProps {
-  log: ConsoleLine[];
+  log: ConsoleFeed;
   running: boolean;
   eventsPerSec: number;
   inFlight: number;
@@ -23,7 +27,7 @@ interface StatusBarProps {
   onClear: () => void;
 }
 
-const LEVEL_ICON: Record<ConsoleLine["level"], string> = {
+const LEVEL_ICON: Record<ConsoleLevel, string> = {
   info: "information-circle-outline",
   ok: "checkmark-circle",
   warn: "alert-circle-outline",
@@ -33,24 +37,31 @@ const LEVEL_ICON: Record<ConsoleLine["level"], string> = {
 export function StatusBar(props: StatusBarProps) {
   const { log, running, eventsPerSec, inFlight, nodeCount, cursor, zoom, dirty, lastSaved, onClear } = props;
   const [open, setOpen] = useState(false);
-  const [levelFilter, setLevelFilter] = useState<Set<ConsoleLine["level"]>>(new Set());
+  const [levelFilter, setLevelFilter] = useState<Set<ConsoleLevel>>(new Set());
+  const [showValues, setShowValues] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  // the view follows new lines only while it sits at the bottom
+  const atBottom = useRef(true);
 
-  const tail = log[log.length - 1];
+  const entries = useMemo(() => visibleEntries(log, showValues), [log, showValues]);
+  const tail = useMemo(() => latestEntry(entries), [entries]);
 
   const filtered = useMemo(() => {
-    if (levelFilter.size === 0) return log;
-    return log.filter((l) => levelFilter.has(l.level));
-  }, [log, levelFilter]);
+    if (levelFilter.size === 0) return entries;
+    return entries.filter((l) => levelFilter.has(l.level));
+  }, [entries, levelFilter]);
 
-  // auto-scroll the console to the newest line
-  useEffect(() => {
-    if (open && scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [filtered.length, open]);
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (open && el && atBottom.current) el.scrollTop = el.scrollHeight;
+  }, [filtered, open]);
 
-  const toggleLevel = (lvl: ConsoleLine["level"]) =>
+  const onScroll = () => {
+    const el = scrollRef.current;
+    if (el) atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 8;
+  };
+
+  const toggleLevel = (lvl: ConsoleLevel) =>
     setLevelFilter((s) => {
       const next = new Set(s);
       if (next.has(lvl)) next.delete(lvl);
@@ -74,6 +85,13 @@ export function StatusBar(props: StatusBarProps) {
           <div className="console-bar">
             <span className="ct">Console</span>
             <div className="filters">
+              <button
+                className={`chip ${showValues ? "on" : ""}`}
+                onClick={() => setShowValues((v) => !v)}
+                title="add every value a port emits (they also show on the nodes)"
+              >
+                values
+              </button>
               {(["info", "ok", "warn", "bad"] as const).map((lvl) => (
                 <button
                   key={lvl}
@@ -88,20 +106,13 @@ export function StatusBar(props: StatusBarProps) {
               </button>
             </div>
           </div>
-          <div className="console-scroll" ref={scrollRef}>
+          <div className="console-scroll" ref={scrollRef} onScroll={onScroll}>
             {filtered.length === 0 ? (
-              <div className="console-empty">no events yet · run the graph to stream live values</div>
+              <div className="console-empty">
+                {showValues ? "no events yet · run the graph to stream live values" : "no lines yet · logs, warnings and errors show here"}
+              </div>
             ) : (
-              filtered.map((line) => (
-                <div className={`log-row ${line.level}`} key={line.id}>
-                  <span className="lts">{line.ts}</span>
-                  <span className="llvl">
-                    <Icon name={LEVEL_ICON[line.level]} />
-                  </span>
-                  {line.node && <span className="lnode">{line.node}</span>}
-                  <span className="lmsg">{line.message}</span>
-                </div>
-              ))
+              filtered.map((entry) => <LogRow entry={entry} key={entry.id} />)
             )}
           </div>
         </div>
@@ -117,6 +128,7 @@ export function StatusBar(props: StatusBarProps) {
               </span>
               <span className="msg">
                 {tail.node && <span className="hl">{tail.node}</span>} {tail.message}
+                {tail.count > 1 && ` ×${tail.count}`}
               </span>
             </>
           ) : (
@@ -157,6 +169,21 @@ export function StatusBar(props: StatusBarProps) {
     </footer>
   );
 }
+
+/** One console row; redrawn only when its entry changes (a new count or time). */
+const LogRow = memo(function LogRow({ entry }: { entry: ConsoleEntry }) {
+  return (
+    <div className={`log-row ${entry.level}`}>
+      <span className="lts">{entry.ts}</span>
+      <span className="llvl">
+        <Icon name={LEVEL_ICON[entry.level]} />
+      </span>
+      {entry.node && <span className="lnode">{entry.node}</span>}
+      <span className="lmsg">{entry.message}</span>
+      {entry.count > 1 && <span className="lcount">×{entry.count}</span>}
+    </div>
+  );
+});
 
 function agoLabel(ts: number): string {
   const s = Math.max(0, Math.round((Date.now() - ts) / 1000));

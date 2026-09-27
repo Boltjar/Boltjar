@@ -4,7 +4,8 @@
 // the streamed events into editor-facing live state:
 //   - `power`        : "on" | "off"  (the live status capsule + breathing dot)
 //   - `connected`    : the ws transport is open
-//   - `log`          : a bounded console feed (value / log / error lines)
+//   - `log`          : the console feed (lib/consoleFeed): readable lines and
+//                      the values stream, each bounded, identical runs collapsed
 //   - `nodeStatus`   : per-node lifecycle (running | ok | error | idle)
 //   - `liveValues`   : latest value per `node:port` (lights ports)
 //   - a `carry` lights the wires it names (lib/wirePulse), with no React state
@@ -26,20 +27,11 @@ import { resumeNoticeAfter } from "../lib/resumeNotice";
 import { pulseWires } from "../lib/wirePulse";
 import { RunConnection } from "../lib/runConnection";
 import { isReplayed } from "../lib/replayedValues";
+import { appendLine, EMPTY_FEED, type ConsoleFeed, type ConsoleLevel, type ConsoleLineIn } from "../lib/consoleFeed";
 
 export type NodeRunStatus = "idle" | "running" | "ok" | "warn" | "error";
 export type { Power };
 
-export interface ConsoleLine {
-  id: number;
-  ts: string;
-  level: "info" | "ok" | "warn" | "bad";
-  node?: string;
-  /** one console-safe line (lib/mediaSummary): media as "mime · size", long
-   *  text cut with its total length, never a base64 payload. */
-  message: string;
-  tag?: string;
-}
 
 export interface LiveValue {
   value: unknown;
@@ -63,7 +55,7 @@ export interface ChatMessage {
 export interface RunSocketState {
   connected: boolean;
   power: Power;
-  log: ConsoleLine[];
+  log: ConsoleFeed;
   nodeStatus: Record<string, NodeRunStatus>;
   liveValues: Record<string, LiveValue>;
   valueHistory: Record<string, HistPoint[]>;
@@ -85,12 +77,11 @@ export interface RunSocketState {
   fire: (node: string) => void;
   /** Post an editor-side line to the console (it comes from the editor, not the
    *  runtime): e.g. a dead wire the editor removed while loading a graph. */
-  notice: (message: string, level?: ConsoleLine["level"]) => void;
+  notice: (message: string, level?: ConsoleLevel) => void;
   clearLog: () => void;
   clearProblems: () => void;
 }
 
-const MAX_LOG = 300;
 const HIST_KEEP = 48; // points retained per port for sparklines
 const MAX_CHAT = 80;
 const VALUE_MAX = 60; // chars of a value shown after `port =`
@@ -104,7 +95,6 @@ function nowStamp(): string {
 
 export function useRunSocket(slug: string = "_default"): RunSocketState {
   const connRef = useRef<RunConnection | null>(null);
-  const lineId = useRef(0);
   const chatId = useRef(0);
   const eventTimes = useRef<number[]>([]);
   // the last value event id seen per `node:port`, so a replay after a
@@ -117,7 +107,7 @@ export function useRunSocket(slug: string = "_default"): RunSocketState {
 
   const [connected, setConnected] = useState(false);
   const [power, setPower] = useState<Power>("off");
-  const [log, setLog] = useState<ConsoleLine[]>([]);
+  const [log, setLog] = useState<ConsoleFeed>(EMPTY_FEED);
   const [nodeStatus, setNodeStatus] = useState<Record<string, NodeRunStatus>>({});
   const [liveValues, setLiveValues] = useState<Record<string, LiveValue>>({});
   const [valueHistory, setValueHistory] = useState<Record<string, HistPoint[]>>({});
@@ -130,12 +120,9 @@ export function useRunSocket(slug: string = "_default"): RunSocketState {
 
   // every console line passes through here, so none can carry a raw payload
   // (a TTS reply is megabytes of base64) into the panel or the bounded log.
-  const pushLine = useCallback((line: Omit<ConsoleLine, "id">) => {
+  const pushLine = useCallback((line: ConsoleLineIn) => {
     const message = consoleText(line.message, MESSAGE_MAX);
-    setLog((prev) => {
-      const next = [...prev, { ...line, message, id: lineId.current++ }];
-      return next.length > MAX_LOG ? next.slice(next.length - MAX_LOG) : next;
-    });
+    setLog((prev) => appendLine(prev, { ...line, message }));
   }, []);
 
   const handleEvent = useCallback(
@@ -158,6 +145,7 @@ export function useRunSocket(slug: string = "_default"): RunSocketState {
           // a value emit is instantaneous, so it must not mark a node "running"
           // (that is what left the Chat Input stuck animating forever).
           pushLine({
+            kind: evt.kind,
             ts: nowStamp(),
             level: "info",
             node: evt.node,
@@ -174,7 +162,7 @@ export function useRunSocket(slug: string = "_default"): RunSocketState {
           setNodeStatus((p) => ({ ...p, [evt.node]: evt.status }));
           break;
         case "log": {
-          pushLine({ ts: nowStamp(), level: "ok", node: evt.node, message: evt.message });
+          pushLine({ kind: evt.kind, ts: nowStamp(), level: "ok", node: evt.node, message: evt.message });
           setNodeStatus((p) => ({ ...p, [evt.node]: p[evt.node] === "error" ? "error" : "ok" }));
           // a Deliver to the chat channel feeds the most recent chat as the assistant's turn.
           const m = /^->\s*chat:\s*(.*)$/i.exec(evt.message);
@@ -190,23 +178,24 @@ export function useRunSocket(slug: string = "_default"): RunSocketState {
           break;
         }
         case "warning":
-          pushLine({ ts: nowStamp(), level: "warn", node: evt.node, message: evt.message });
+          pushLine({ kind: evt.kind, ts: nowStamp(), level: "warn", node: evt.node, message: evt.message });
           break;
         case "node_error":
-          pushLine({ ts: nowStamp(), level: "bad", node: evt.node, message: evt.error });
+          pushLine({ kind: evt.kind, ts: nowStamp(), level: "bad", node: evt.node, message: evt.error });
           setNodeStatus((p) => ({ ...p, [evt.node]: "error" }));
           break;
         // a tool hop the model made: show the call args then the result it got
         // back, attributed to the Tool node, so the agentic loop is legible.
         case "tool_call":
-          pushLine({ ts: nowStamp(), level: "info", node: evt.node, message: `tool call ${consoleText(evt.args, VALUE_MAX)}` });
+          pushLine({ kind: evt.kind, ts: nowStamp(), level: "info", node: evt.node, message: `tool call ${consoleText(evt.args, VALUE_MAX)}` });
           break;
         case "tool_result":
-          pushLine({ ts: nowStamp(), level: "ok", node: evt.node, message: `tool result -> ${consoleText(evt.result, VALUE_MAX)}` });
+          pushLine({ kind: evt.kind, ts: nowStamp(), level: "ok", node: evt.node, message: `tool result -> ${consoleText(evt.result, VALUE_MAX)}` });
           break;
         case "status":
           setPower(evt.power);
           pushLine({
+            kind: evt.kind,
             ts: nowStamp(),
             level: evt.power === "on" ? "ok" : "info",
             message: evt.power === "on" ? "power on: graph is live" : "power off",
@@ -226,6 +215,7 @@ export function useRunSocket(slug: string = "_default"): RunSocketState {
           setPower("off");
           const count = `${evt.problems.length} problem${evt.problems.length === 1 ? "" : "s"}`;
           pushLine({
+            kind: evt.kind,
             ts: nowStamp(),
             level: "bad",
             message: evt.resume ? `not resumed after the launch: ${count}` : `cannot start: ${count}`,
@@ -233,7 +223,7 @@ export function useRunSocket(slug: string = "_default"): RunSocketState {
           break;
         }
         case "error":
-          pushLine({ ts: nowStamp(), level: "bad", message: evt.resume ? `not resumed after the launch: ${evt.error}` : evt.error });
+          pushLine({ kind: evt.kind, ts: nowStamp(), level: "bad", message: evt.resume ? `not resumed after the launch: ${evt.error}` : evt.error });
           setPower("off");
           break;
         case "live_graph":
@@ -265,7 +255,7 @@ export function useRunSocket(slug: string = "_default"): RunSocketState {
         // live. Keep the last known power; the `status` replayed on reconnect sets it.
         onClose: () => setConnected(false),
         onError: () =>
-          handlersRef.current.pushLine({ ts: nowStamp(), level: "bad", message: "socket error: is the backend running on :8770?" }),
+          handlersRef.current.pushLine({ kind: "error", ts: nowStamp(), level: "bad", message: "socket error: is the backend running on :8770?" }),
         onMessage: (data) => {
           try {
             handlersRef.current.handleEvent(JSON.parse(String(data)) as RunEvent);
@@ -344,11 +334,11 @@ export function useRunSocket(slug: string = "_default"): RunSocketState {
   );
 
   const notice = useCallback(
-    (message: string, level: ConsoleLine["level"] = "info") => pushLine({ ts: nowStamp(), level, message }),
+    (message: string, level: ConsoleLevel = "info") => pushLine({ kind: "notice", ts: nowStamp(), level, message }),
     [pushLine],
   );
 
-  const clearLog = useCallback(() => setLog([]), []);
+  const clearLog = useCallback(() => setLog(EMPTY_FEED), []);
   const clearProblems = useCallback(() => setProblems([]), []);
 
   // Throttle: derive events/sec on a light timer.
