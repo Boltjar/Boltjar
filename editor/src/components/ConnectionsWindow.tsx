@@ -6,12 +6,15 @@
 // Connections" action, and the model picker's "Add a connection" row.
 //
 // Structure: a .scrim + a centered .conn-modal card (reuses .palette + rise
-// animation grammar). Two segmented tabs: AI Providers | Secrets. Closes on
-// scrim click or Esc.
+// animation grammar). Two segmented tabs: AI Providers (a card per provider,
+// then the OpenAI-compatible endpoints) | Secrets. Closes on scrim click or Esc.
 // ============================================================================
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Icon } from "../lib/icons";
 import { useEditor } from "../lib/editorContext";
+import { baseUrlProblem, endpointKeySecret, endpointNameProblem, type EndpointInfo } from "../lib/endpoints";
+import { listingNote } from "../lib/modelMeta";
+import { serverError } from "../lib/serverGraph";
 
 // ── API shapes ──────────────────────────────────────────────────────────────
 
@@ -651,6 +654,242 @@ function ProviderCard({ info, onRefetch }: ProviderCardProps) {
   );
 }
 
+// ── OpenAI-compatible endpoints ─────────────────────────────────────────────
+// Named servers that speak OpenAI's chat completions (OpenRouter, Groq, LM
+// Studio, llama.cpp, vLLM). Built from this window's own idioms: the provider
+// card, the library rows and chips of the Ollama panel, the fields of the Add
+// secret form and SecretInput for the key.
+
+function EndpointsCard() {
+  const { modelsMeta, refreshModels } = useEditor();
+  const [endpoints, setEndpoints] = useState<EndpointInfo[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [nonce, setNonce] = useState(0);
+  const [adding, setAdding] = useState(false);
+  const [name, setName] = useState("");
+  const [baseUrl, setBaseUrl] = useState("");
+  const [key, setKey] = useState("");
+  const [nameError, setNameError] = useState<string | null>(null);
+  const [urlError, setUrlError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/connections/endpoints");
+        if (!res.ok) throw new Error(await serverError(res));
+        const json = (await res.json()) as { endpoints?: EndpointInfo[] };
+        if (alive) { setEndpoints(json.endpoints ?? []); setError(null); }
+      } catch (err) {
+        if (alive) setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        if (alive) setLoaded(true);
+      }
+    })();
+    return () => { alive = false; };
+  }, [nonce]);
+
+  const answered = endpoints.some((e) => modelsMeta.providers[e.name]?.ok);
+
+  function resetForm() {
+    setAdding(false);
+    setName(""); setBaseUrl(""); setKey("");
+    setNameError(null); setUrlError(null);
+  }
+
+  async function addEndpoint() {
+    const nameProblem = endpointNameProblem(name, endpoints.map((e) => e.name));
+    const urlProblem = baseUrlProblem(baseUrl);
+    setNameError(nameProblem);
+    setUrlError(urlProblem);
+    if (nameProblem || urlProblem) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const body: Record<string, string> = { base_url: baseUrl.trim() };
+      if (key.trim()) body.key = key.trim();
+      const res = await fetch(`/api/connections/endpoints/${encodeURIComponent(name)}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error(await serverError(res));
+      resetForm();
+      setNonce((n) => n + 1);
+      void refreshModels(); // its models join the pickers
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function removeEndpoint(target: string) {
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/connections/endpoints/${encodeURIComponent(target)}`, { method: "DELETE" });
+      if (!res.ok) throw new Error(await serverError(res));
+      setConfirmRemove(null);
+      setNonce((n) => n + 1);
+      void refreshModels(); // and its models leave them
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="prov-card">
+      <div className="prov-card-head">
+        <div
+          className="prov-brand-tile"
+          style={{ background: "color-mix(in srgb, var(--ink-dim) 14%, transparent)", border: "1px solid color-mix(in srgb, var(--ink-dim) 36%, transparent)" }}
+        >
+          <Icon name="server-outline" style={{ color: "var(--ink-dim)" }} />
+        </div>
+        <div className="prov-name-block">
+          <span className="prov-name">OpenAI-compatible</span>
+          <span className="prov-modality">LLM · OpenRouter, Groq, LM Studio, llama.cpp, vLLM</span>
+        </div>
+        <div className={`prov-status runstate ${answered ? "power-on" : "power-off"}`} style={{ margin: 0 }}>
+          <span className="dot" />
+          {answered ? "CONNECTED" : "NOT CONNECTED"}
+        </div>
+      </div>
+
+      <div className="prov-card-body">
+        {error && <div className="insp-problem">{error}</div>}
+
+        {endpoints.length > 0 ? (
+          <div className="ollama-lib-list">
+            <div className="ollama-lib-head">Endpoints</div>
+            {endpoints.map((e) => {
+              const note = e.key_secret && !e.has_key
+                ? { ok: false, text: `${e.key_secret} not defined` }
+                : listingNote(modelsMeta.providers[e.name]);
+              return (
+                <div key={e.name} className="ollama-lib-row">
+                  <span className="ollama-lib-name" title={e.base_url}>{e.name}</span>
+                  {confirmRemove !== e.name && (
+                    <>
+                      <span className="ollama-lib-size">{e.base_url}</span>
+                      <span className={`mp-chip ctx ${note.ok ? "in-picker" : "not-mapped"}`}>{note.text}</span>
+                    </>
+                  )}
+                  {confirmRemove === e.name ? (
+                    <div className="conn-confirm-row">
+                      <span className="conn-confirm-label">Remove? Its key stays in Secrets.</span>
+                      <button
+                        type="button"
+                        className="conn-action-btn danger"
+                        onClick={() => void removeEndpoint(e.name)}
+                        disabled={saving}
+                      >
+                        {saving ? "…" : "Yes, remove"}
+                      </button>
+                      <button
+                        type="button"
+                        className="conn-action-btn"
+                        onClick={() => setConfirmRemove(null)}
+                        disabled={saving}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className="conn-action-btn danger"
+                      title={`Remove ${e.name}`}
+                      onClick={() => setConfirmRemove(e.name)}
+                    >
+                      <Icon name="trash-outline" />
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ) : loaded && !adding ? (
+          <div className="ollama-lib-empty">No endpoints yet.</div>
+        ) : null}
+
+        {adding ? (
+          <div className="prov-add-key-form">
+            <div className="field">
+              <div className="field-lbl">Name (the provider id of its models)</div>
+              <div className={`input ${nameError ? "conn-input-err" : ""}`}>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => { setName(e.target.value.toLowerCase()); setNameError(null); }}
+                  placeholder="openrouter"
+                  autoFocus
+                  spellCheck={false}
+                />
+              </div>
+              {nameError && <div className="conn-field-error">{nameError}</div>}
+            </div>
+            <div className="field">
+              <div className="field-lbl">Base URL</div>
+              <div className={`input ${urlError ? "conn-input-err" : ""}`}>
+                <input
+                  type="text"
+                  value={baseUrl}
+                  onChange={(e) => { setBaseUrl(e.target.value); setUrlError(null); }}
+                  placeholder="https://openrouter.ai/api/v1"
+                  spellCheck={false}
+                  autoComplete="off"
+                />
+              </div>
+              {urlError && <div className="conn-field-error">{urlError}</div>}
+            </div>
+            <div className="field">
+              <div className="field-lbl">
+                <Icon name="lock-closed-outline" className="lockico" />
+                API key{name && !nameError ? ` · stored as ${endpointKeySecret(name)}` : ""}
+              </div>
+              <SecretInput
+                value={key}
+                onChange={setKey}
+                placeholder="paste the key, or leave empty for a local server"
+              />
+            </div>
+            <div className="prov-add-key-footer">
+              <span className="prov-add-key-hint">
+                Stored server-side. Its models appear in the pickers once saved.
+              </span>
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                type="button"
+                className="conn-save-btn"
+                onClick={() => void addEndpoint()}
+                disabled={saving || !name || !baseUrl.trim()}
+              >
+                {saving ? <Icon name="sync-outline" /> : <Icon name="save-outline" />}
+                {saving ? "Saving…" : "Save"}
+              </button>
+              <button type="button" className="conn-action-btn" onClick={resetForm} disabled={saving}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button type="button" className="conn-save-btn" onClick={() => setAdding(true)}>
+            <Icon name="add-outline" /> Add endpoint
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Secrets tab ──────────────────────────────────────────────────────────────
 
 interface SecretsTabProps {
@@ -988,6 +1227,7 @@ export function ConnectionsWindow({ open, onClose }: ConnectionsWindowProps) {
               {providers.map((p) => (
                 <ProviderCard key={p.provider} info={p} onRefetch={refetch} />
               ))}
+              {providers.length > 0 && <EndpointsCard />}
               {!loadingProviders && !errorProviders && providers.length === 0 && (
                 <div className="insp-empty" style={{ padding: "40px 0" }}>
                   <div className="et">No providers configured</div>

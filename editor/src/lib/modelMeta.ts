@@ -91,7 +91,8 @@ export interface ModelsMeta {
   auto: string | null;
   updated: string | null;
   refreshing: boolean;
-  providers: Record<string, Pick<ProviderListing, "ok" | "checked" | "updated" | "error" | "failure">>;
+  providers: Record<string, Pick<ProviderListing, "ok" | "checked" | "updated" | "error" | "failure">
+    & Partial<Pick<ProviderListing, "count">>>;
 }
 
 /** ModelsMeta.list from the reader's state: a list read (even if a later read
@@ -120,6 +121,24 @@ const FAILURE_WORDS: Record<string, string> = {
   error: "failed",
 };
 
+/** How a provider's failed attempt reads, by its kind ("not running", ...). */
+export function failureWords(failure: string | null | undefined): string {
+  return FAILURE_WORDS[failure ?? "error"] ?? FAILURE_WORDS.error;
+}
+
+/** A provider's last listing in a few words, for its row in Connections: how
+ *  many models it listed, why its last attempt failed, or that it was never
+ *  asked (no listing: the server asks it on its next refresh). */
+export function listingNote(listing: ModelsMeta["providers"][string] | undefined): {
+  ok: boolean;
+  text: string;
+} {
+  if (!listing) return { ok: false, text: "not checked yet" };
+  if (!listing.ok) return { ok: false, text: failureWords(listing.failure) };
+  const count = listing.count ?? 0;
+  return { ok: true, text: `${count} ${count === 1 ? "model" : "models"}` };
+}
+
 /** The picker's "last updated" line: the age of the newest successful refresh
  *  (or of the last attempt, when no provider ever answered), plus each provider
  *  whose last attempt failed and why. Ollama is always asked, so one that never
@@ -139,7 +158,7 @@ export function updatedLine(meta: ModelsMeta, nowMs: number): string {
       : "not checked yet";
   const down = listings
     .filter(([name, p]) => !p.ok && !(name === "ollama" && !p.updated))
-    .map(([name, p]) => `${providerLabel(name)} ${FAILURE_WORDS[p.failure ?? "error"] ?? FAILURE_WORDS.error}`);
+    .map(([name, p]) => `${providerLabel(name)} ${failureWords(p.failure)}`);
   return down.length ? `${head} · ${down.join(", ")}` : head;
 }
 
