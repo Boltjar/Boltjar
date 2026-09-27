@@ -622,6 +622,20 @@ def validate_graph(graph: dict) -> list[dict]:
         for name in _secrets.unresolved(text):
             problems.append({"node": n["id"], "kind": "missing-secret",
                              "message": f"secret {name} is not defined: add it in Connections"})
+    # a model picker whose model vanished (no manifest names it and no provider
+    # lists it any more), or that holds another family's model: name it and the
+    # closest available one before On, instead of a mock reply or a failed call.
+    for n in graph.get("nodes", []):
+        spec = NODE_REGISTRY.get(n["type"])
+        if n.get("disabled") or spec is None:
+            continue
+        cfg = node_config(spec, n.get("config"))
+        for w in spec.widgets:
+            if w.kind != "model" or not _widget_in_use(n["id"], cfg, w, edges_in):
+                continue
+            message = _discovery.model_problem(str(cfg.get(w.name) or ""), w.model_kind or "llm")
+            if message:
+                problems.append({"node": n["id"], "kind": "model-missing", "message": message})
     # every edge: src/dst ports exist (statically or as a legal dynamic port) and
     # the wire's types are compatible. Runs after the node checks so an unknown /
     # disabled node is already handled and its edges are skipped.

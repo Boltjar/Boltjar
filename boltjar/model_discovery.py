@@ -32,6 +32,7 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import datetime
+import difflib
 import functools
 import json
 import logging
@@ -678,6 +679,66 @@ def resolve_auto() -> ModelManifest | None:
         if m.provider != "ollama" and entry.available and _chat(m) and _has_key(m.provider):
             return m
     return None
+
+
+def _lookup(model_id: str) -> Entry | None:
+    target = models.ALIASES.get(model_id, model_id)
+    return next((e for e in entries() if e.manifest.id == target), None)
+
+
+def _family(name: str) -> str:
+    """A model's family: its name up to the first digit (qwen3.5:9b -> qwen,
+    claude-sonnet-4-6 -> claude-sonnet, grok-4.20 -> grok)."""
+    base = name.lower().split(":", 1)[0]
+    stem = re.split(r"\d", base, maxsplit=1)[0].strip("-_. ")
+    return stem or base
+
+
+def closest(model_id: str, kind: str) -> str | None:
+    """The available model of `kind` nearest to `model_id`: same provider and
+    family first, then same provider, then same family, then any; ties go to the
+    most similar name."""
+    provider, _, name = model_id.partition("/") if "/" in model_id else ("", "", model_id)
+    family = _family(name)
+
+    def score(entry: Entry) -> tuple:
+        m = entry.manifest
+        same_provider = m.provider == provider
+        same_family = _family(m.model) == family
+        tier = 0 if same_provider and same_family else 1 if same_provider else 2 if same_family else 3
+        ratio = difflib.SequenceMatcher(None, name.lower(), m.model.lower()).ratio()
+        return tier, -ratio, m.id
+
+    candidates = [e for e in entries() if e.available and e.manifest.kind == kind
+                  and e.manifest.id != model_id]
+    return min(candidates, key=score).manifest.id if candidates else None
+
+
+def model_problem(model_id: str, kind: str) -> str | None:
+    """Why a saved graph cannot run `model_id` on a node that takes `kind` models:
+    the model vanished (no manifest names it and no provider lists it, or its
+    provider's list no longer has it) or it is another kind of model. None when
+    it can run, or when it is empty, "auto" or the offline mock."""
+    if not model_id or model_id == AUTO or model_id.startswith("mock/"):
+        return None
+    entry = _lookup(model_id)
+    if entry is not None and entry.manifest.kind != kind:
+        return f"model {model_id} is a {entry.manifest.kind} model; this node takes {kind} models"
+    if entry is not None and not entry.unlisted:
+        return None
+    provider = model_id.split("/", 1)[0] if "/" in model_id else ""
+    if entry is not None:
+        why = _unlisted_reason(provider)
+    elif provider in _state and _state[provider].known and provider in _usable_names():
+        why = _unlisted_reason(provider)
+    else:
+        known = provider in _secrets.PROVIDERS or endpoints.get(provider) is not None
+        ok, reason = _unlisted_availability(provider) if known else (True, None)
+        why = "not in the model list" + (f" ({reason})" if not ok and reason else "")
+    nearest = closest(model_id, kind)
+    hint = (f"closest available: {nearest}" if nearest
+            else f"pick another model, or connect a {kind} model in Connections")
+    return f"model {model_id} is {why}; {hint}"
 
 
 def payload() -> dict:

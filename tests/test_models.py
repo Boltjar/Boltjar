@@ -134,4 +134,8 @@ def test_llm_uses_the_declared_model() -> None:
 def test_chat_console_graph_validates() -> None:
     # frozen fixture, not the editable examples/chat.json.
     g = json.loads(pathlib.Path("tests/fixtures/chat-console.json").read_text(encoding="utf-8"))
-    assert client.post("/api/validate", json=g).json()["problems"] == []
+    problems = client.post("/api/validate", json=g).json()["problems"]
+    # the only problem: its TTS still names "fish-audio", a model id nothing
+    # declares or lists any more (the TTS would fail when it runs).
+    assert [(p["node"], p["kind"]) for p in problems] == [("tts1", "model-missing")]
+    assert "fish-audio" in problems[0]["message"]

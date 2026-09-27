@@ -5,7 +5,7 @@ with the response shapes the real endpoints return (checked live 2026-09-27):
 Ollama GET /api/tags + POST /api/show, xAI GET /v1/language-models, Anthropic
 GET /v1/models, and an OpenAI-compatible GET <base>/models. Covers the mapping
 onto the manifest shape, the merge with the TOML manifests, the cache and its
-offline fallback, the OpenAI-compatible chat call and the "auto" model.
+offline fallback, the "auto" model, and the validation of a vanished model.
 """
 from __future__ import annotations
 
@@ -547,6 +547,64 @@ def test_auto_with_nothing_connected_says_how_to_connect(fresh, vendor_http):
     assert out["response"] == md.AUTO_MOCK_REPLY
     assert "Connections" in md.AUTO_MOCK_REPLY and md.AUTO_MOCK_REPLY.count(".") == 1
     assert "trigger" in out, "the mock reply still completes the node"
+
+
+# -------------------------------------------------------- vanished models
+
+def _llm_graph(model: str, node_type: str = "core.ai.llm") -> dict:
+    return {"nodes": [{"id": "go", "type": "core.trigger.manual"},
+                      {"id": "m", "type": node_type, "config": {"model": model}}],
+            "edges": [{"src": "go", "src_port": "trigger", "dst": "m", "dst_port": "trigger"}]}
+
+
+def _model_problems(graph: dict) -> list[dict]:
+    return [p for p in client.post("/api/validate", json=graph).json()["problems"]
+            if p["kind"] == "model-missing"]
+
+
+def test_a_vanished_ollama_model_names_the_closest_installed_one(fresh, vendor_http):
+    vendor_http.reply = vendors()
+    refresh()
+    [problem] = _model_problems(_llm_graph("ollama/llama3.1:8b"))
+    assert problem["node"] == "m"
+    assert problem["message"] == ("model ollama/llama3.1:8b is not installed in Ollama: pull it "
+                                  "in Connections; closest available: ollama/llama3.2:latest")
+
+
+def test_a_manifest_its_provider_dropped_suggests_the_same_family(fresh, vendor_http, monkeypatch):
+    monkeypatch.setenv("XAI_API_KEY", "test-xai-key")
+    vendor_http.reply = vendors(ollama=False, xai=XAI_MODELS)
+    refresh()
+    [problem] = _model_problems(_llm_graph("xai/grok-4.3"))
+    assert problem["message"] == ("model xai/grok-4.3 is no longer offered by xAI; "
+                                  "closest available: xai/grok-4.7")
+
+
+def test_an_unknown_model_with_nothing_available_says_what_to_do(fresh):
+    [problem] = _model_problems(_llm_graph("acme/gone"))
+    assert problem["message"] == ("model acme/gone is not in the model list; pick another "
+                                  "model, or connect a llm model in Connections")
+
+
+def test_a_model_of_another_family_is_named(fresh):
+    [problem] = _model_problems(_llm_graph("ollama/gemma4:e4b", "core.ai.tts"))
+    assert problem["message"] == "model ollama/gemma4:e4b is a llm model; this node takes tts models"
+
+
+def test_models_that_can_run_raise_no_problem(fresh, vendor_http):
+    vendor_http.reply = vendors()
+    refresh()
+    for model in ("", "auto", "mock/echo", "ollama/gemma4:e4b", "ollama/llama3.2:latest",
+                  "ollama/llama3.2"):
+        assert _model_problems(_llm_graph(model)) == [], model
+    # a manifest whose provider has never answered is not called vanished.
+    md.CACHE_PATH.unlink()
+    md.reset()
+    assert _model_problems(_llm_graph("ollama/qwen3:14b")) == []
+    # a disabled node is never checked.
+    graph = _llm_graph("acme/gone")
+    graph["nodes"][1]["disabled"] = True
+    assert _model_problems(graph) == []
 
 
 # ------------------------------------------------------------ endpoints API
