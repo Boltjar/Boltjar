@@ -94,3 +94,44 @@ def test_queue_growable_trigger_fires_through_runtime():
     first, after_ack = asyncio.run(run())
     assert first == ["A"]                 # backpressure held B
     assert after_ack == ["A", "B"]        # ack released the next
+
+
+def test_queue_sockets_named_after_their_sources_fire_it():
+    """The editor names each Queue socket after the node wired into it (`ask`,
+    `nudge`), not in0: each still fires the Queue, and a promoted knob wired
+    beside them (`timeout`) only sets the knob."""
+    events: list[dict] = []
+    rt = Runtime(observer=events.append)
+    rt.build({
+        "nodes": [
+            {"id": "ask", "type": "core.trigger.chat"},
+            {"id": "nudge", "type": "core.trigger.chat"},
+            {"id": "secs", "type": "core.value.integer", "config": {"number": 60}},
+            {"id": "q", "type": "core.flow.queue", "config": {"promoted": ["timeout"]}},
+        ],
+        "edges": [
+            {"src": "ask", "src_port": "text", "dst": "q", "dst_port": "ask"},
+            {"src": "nudge", "src_port": "text", "dst": "q", "dst_port": "nudge"},
+            {"src": "secs", "src_port": "out", "dst": "q", "dst_port": "timeout"},
+        ],
+    })
+    q = rt.nodes["q"]
+    assert q.is_trigger("ask") and q.is_trigger("nudge") and q.is_trigger("ack")
+    assert not q.is_trigger("timeout")
+
+    async def run():
+        await rt.run()
+        rt.send_chat("ask", "A")
+        await asyncio.sleep(0.05)
+        rt.send_chat("nudge", "B")
+        await asyncio.sleep(0.05)
+        q.mailbox.put_nowait(("ack", 1, rt.new_turn()))
+        await asyncio.sleep(0.05)
+        await rt.stop()
+
+    asyncio.run(run())
+    fires = [e for e in events if e["kind"] == "node_status" and e["node"] == "q"
+             and e["status"] == "running"]
+    assert len(fires) == 3, "two arrivals and one ack, each fires the Queue once"
+    assert [e["value"] for e in events if e["kind"] == "value" and e["node"] == "q"
+            and e["port"] == "out"] == ["A", "B"]

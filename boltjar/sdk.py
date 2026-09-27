@@ -343,6 +343,23 @@ class NodeSpec:
     icon: str = ""
     subline: str = ""
 
+    def growable_base(self, port: str, promoted: Any = ()) -> Optional[Port]:
+        """The growable input that owns the socket `port` (a Queue's `chat`, a
+        Sync's `in0`, a Template's `{tag}`), or None when `port` is a declared
+        input or a knob promoted to an input (`promoted`, the node's
+        `config.promoted`). A node with one growable input owns every other
+        socket, whatever it is named: a Queue names each after its source. On a
+        node with several, a socket belongs to the base its name starts with."""
+        bases = [p for p in self.inputs if p.growable]
+        for p in self.inputs:
+            if p.name == port:
+                return p if p.growable else None
+        if not bases or (isinstance(promoted, (list, tuple, set, frozenset)) and port in promoted):
+            return None
+        if len(bases) == 1:
+            return bases[0]
+        return next((p for p in bases if port.startswith(p.name)), None)
+
     def definition(self) -> dict:
         """The serialized contract the editor consumes (the /object_info payload)."""
         return {

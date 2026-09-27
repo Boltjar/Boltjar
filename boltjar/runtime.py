@@ -144,24 +144,17 @@ class NodeInstance:
         # fired nodes mark their firing input(s) trigger=True; data inputs latch.
         return {p.name for p in self.spec.inputs if p.trigger}
 
-    def _growable_trigger_bases(self) -> list[str]:
-        # a growable trigger base (Sync's `in`) mints dynamic sockets (in_0, in0…)
-        # that must ALSO fire the node, not just latch. Returns the base names so
-        # is_trigger can match a dynamic socket back to its triggering base.
-        return [p.name for p in self.spec.inputs if p.trigger and p.growable]
-
     def is_trigger(self, port: str) -> bool:
         """Whether a value landing on `port` should FIRE this node. A declared
-        trigger port fires; so does a dynamic socket grown from a growable
-        trigger base (Sync's in_0/in_1), matched by the base-name prefix the
-        editor uses (in -> in0, in_0). Data ports and dynamic sockets of a
-        non-trigger base (Template tags) only latch."""
+        trigger port fires; so does every socket of a growable trigger input
+        (Sync's in0, a Queue's socket named after its source), found the way
+        validation finds it (NodeSpec.growable_base). Data ports, promoted
+        knobs and the sockets of a data input (Template tags) only latch."""
         if port in self.trigger_ports():
             return True
-        declared = {p.name for p in self.spec.inputs}
-        if port in declared:
-            return False
-        return any(port.startswith(base) for base in self._growable_trigger_bases())
+        promoted = (getattr(self.obj, "_node_cfg", None) or {}).get("promoted") or ()
+        base = self.spec.growable_base(port, promoted)
+        return base is not None and base.trigger
 
 
 class Runtime:
