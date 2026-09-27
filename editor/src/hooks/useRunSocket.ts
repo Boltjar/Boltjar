@@ -27,11 +27,12 @@ import { resumeNoticeAfter } from "../lib/resumeNotice";
 import { pulseWires } from "../lib/wirePulse";
 import { RunConnection } from "../lib/runConnection";
 import { isReplayed } from "../lib/replayedValues";
-import { appendLine, EMPTY_FEED, type ConsoleFeed, type ConsoleLevel, type ConsoleLineIn } from "../lib/consoleFeed";
+import { appendLine, EMPTY_FEED, settleOffer, type ConsoleFeed, type ConsoleLevel, type ConsoleLineIn, type NoticeAction } from "../lib/consoleFeed";
 
 export type NodeRunStatus = "idle" | "running" | "ok" | "warn" | "error";
 export type { Power };
 
+export type { NoticeAction } from "../lib/consoleFeed";
 
 export interface LiveValue {
   value: unknown;
@@ -77,7 +78,9 @@ export interface RunSocketState {
   fire: (node: string) => void;
   /** Post an editor-side line to the console (it comes from the editor, not the
    *  runtime): e.g. a dead wire the editor removed while loading a graph. */
-  notice: (message: string, level?: ConsoleLevel) => void;
+  notice: (message: string, level?: ConsoleLevel, offer?: { id: string; actions: NoticeAction[] }) => void;
+  /** The offer `id` is answered: its lines keep their text and lose their buttons. */
+  settleNotice: (id: string) => void;
   clearLog: () => void;
   clearProblems: () => void;
 }
@@ -334,9 +337,13 @@ export function useRunSocket(slug: string = "_default"): RunSocketState {
   );
 
   const notice = useCallback(
-    (message: string, level: ConsoleLevel = "info") => pushLine({ kind: "notice", ts: nowStamp(), level, message }),
+    (message: string, level: ConsoleLevel = "info", offer?: { id: string; actions: NoticeAction[] }) =>
+      pushLine({ kind: "notice", ts: nowStamp(), level, message, ...(offer ? { offer: offer.id, actions: offer.actions } : {}) }),
     [pushLine],
   );
+  const settleNotice = useCallback((id: string) => {
+    setLog((prev) => settleOffer(prev, id));
+  }, []);
 
   const clearLog = useCallback(() => setLog(EMPTY_FEED), []);
   const clearProblems = useCallback(() => setProblems([]), []);
@@ -398,6 +405,7 @@ export function useRunSocket(slug: string = "_default"): RunSocketState {
     audio,
     fire,
     notice,
+    settleNotice,
     clearLog,
     clearProblems,
   };

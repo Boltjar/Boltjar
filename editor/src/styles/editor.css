@@ -579,6 +579,8 @@ button{font-family:inherit;}
 .log-row .lnode{color:var(--ink); flex:none; min-width:54px;}
 .log-row .lmsg{color:var(--ink-dim); word-break:break-word;}
 .log-row .lcount{flex:none; color:var(--ink-faint);}
+.log-offer{display:inline-flex; align-items:center; gap:6px; flex:none;}
+.log-row .log-offer{align-self:center;}
 .log-row.bad{background:rgba(var(--bad-rgb),0.07);}
 .log-row.warn{background:rgba(var(--warn-rgb),0.06);}
 .log-row.bad .llvl{color:var(--bad);} .log-row.warn .llvl{color:var(--warn);} .log-row.ok .llvl{color:var(--good);} .log-row.info .llvl{color:var(--info);}

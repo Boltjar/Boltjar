@@ -10,7 +10,7 @@
 // ============================================================================
 import { memo, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "../lib/icons";
-import { latestEntry, visibleEntries, type ConsoleEntry, type ConsoleFeed, type ConsoleLevel } from "../lib/consoleFeed";
+import { latestEntry, visibleEntries, type ConsoleEntry, type ConsoleFeed, type ConsoleLevel, type NoticeAction } from "../lib/consoleFeed";
 
 interface StatusBarProps {
   log: ConsoleFeed;
@@ -44,7 +44,10 @@ export function StatusBar(props: StatusBarProps) {
   const atBottom = useRef(true);
 
   const entries = useMemo(() => visibleEntries(log, showValues), [log, showValues]);
-  const tail = useMemo(() => latestEntry(entries), [entries]);
+  // a line still waiting on a choice (its buttons) holds the status line until
+  // the choice is made, so newer lines never push it out of sight.
+  const offer = useMemo(() => [...log.readable].reverse().find((e) => e.actions && e.actions.length > 0), [log]);
+  const tail = useMemo(() => offer ?? latestEntry(entries), [offer, entries]);
 
   const filtered = useMemo(() => {
     if (levelFilter.size === 0) return entries;
@@ -130,6 +133,7 @@ export function StatusBar(props: StatusBarProps) {
                 {tail.node && <span className="hl">{tail.node}</span>} {tail.message}
                 {tail.count > 1 && ` ×${tail.count}`}
               </span>
+              {tail.actions && <OfferButtons actions={tail.actions} />}
             </>
           ) : (
             <span className="empty">idle · no events streamed yet</span>
@@ -181,9 +185,21 @@ const LogRow = memo(function LogRow({ entry }: { entry: ConsoleEntry }) {
       {entry.node && <span className="lnode">{entry.node}</span>}
       <span className="lmsg">{entry.message}</span>
       {entry.count > 1 && <span className="lcount">×{entry.count}</span>}
+      {entry.actions && <OfferButtons actions={entry.actions} />}
     </div>
   );
 });
+
+/** The answers a console line offers, as the console's own chips. */
+function OfferButtons({ actions }: { actions: NoticeAction[] }) {
+  return (
+    <span className="log-offer">
+      {actions.map((a) => (
+        <button key={a.label} type="button" className="chip" onClick={a.run}>{a.label}</button>
+      ))}
+    </span>
+  );
+}
 
 function agoLabel(ts: number): string {
   const s = Math.max(0, Math.round((Date.now() - ts) / 1000));

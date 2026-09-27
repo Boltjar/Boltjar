@@ -19,6 +19,12 @@ export type ConsoleStream = "readable" | "values";
 
 /** One line as it arrives. `kind` is the ws event kind it came from, or
  *  "notice" for a line the editor posts itself. */
+/** A button on a console line: one answer to a choice the editor offers. */
+export interface NoticeAction {
+  label: string;
+  run: () => void;
+}
+
 export interface ConsoleLineIn {
   kind: string;
   ts: string;
@@ -27,6 +33,11 @@ export interface ConsoleLineIn {
   /** one console-safe line (lib/mediaSummary): never a raw payload. */
   message: string;
   tag?: string;
+  /** a choice the editor offers on this line (Restore / Discard), as buttons
+   *  that stay until the choice is made (settleOffer). */
+  actions?: NoticeAction[];
+  /** names the offer, so settleOffer can take its buttons off. */
+  offer?: string;
 }
 
 export interface ConsoleEntry extends Omit<ConsoleLineIn, "kind"> {
@@ -73,7 +84,9 @@ export function appendLine(feed: ConsoleFeed, line: ConsoleLineIn, keep = CONSOL
   while (at >= 0 && (list[at].node !== line.node || list[at].tag !== line.tag)) at -= 1;
   const prior = at >= 0 ? list[at] : undefined;
   let nextList: ConsoleEntry[];
-  if (prior && prior.level === line.level && prior.message === line.message) {
+  // a line offering a choice is always its own entry: it never counts into
+  // (or absorbs) another line, so its buttons stay with its own words.
+  if (prior && !line.actions && !prior.actions && prior.level === line.level && prior.message === line.message) {
     nextList = list.slice();
     nextList[at] = { ...prior, ts: line.ts, seq, count: prior.count + 1 };
   } else {
@@ -99,6 +112,16 @@ export function visibleEntries(feed: ConsoleFeed, showValues: boolean): ConsoleE
     else out.push(b[j++]);
   }
   return out;
+}
+
+/** `feed` with the offer `id` answered: its lines keep their words and lose
+ *  their buttons. The same feed when nothing carries that offer. */
+export function settleOffer(feed: ConsoleFeed, id: string): ConsoleFeed {
+  if (!feed.readable.some((e) => e.offer === id && e.actions)) return feed;
+  return {
+    ...feed,
+    readable: feed.readable.map((e) => (e.offer === id && e.actions ? { ...e, actions: undefined } : e)),
+  };
 }
 
 /** The entry that changed last (a new line or a count), for the status line. */
