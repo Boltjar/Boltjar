@@ -406,21 +406,59 @@ def test_a_removed_key_takes_its_models_out(fresh, vendor_http, monkeypatch):
     assert "no xAI key" in got["xai/grok-4.20"]["reason"]
 
 
-def test_refresh_runs_when_stale_and_not_when_fresh(fresh, vendor_http, monkeypatch):
-    scheduled: list[bool] = []
-    monkeypatch.setattr(md, "schedule_refresh", lambda: scheduled.append(True))
-    md.refresh_if_stale()
-    assert scheduled == [True], "a list never fetched is stale"
+def _ago(seconds: float) -> str:
+    return md._iso(md._now() - datetime.timedelta(seconds=seconds))
 
-    vendor_http.reply = vendors()
+
+def test_refresh_runs_when_stale_and_not_when_fresh(fresh, vendor_http, monkeypatch):
+    monkeypatch.setenv("XAI_API_KEY", "test-xai-key")
+    scheduled: list[set] = []
+    monkeypatch.setattr(md, "schedule_refresh", lambda names=None: scheduled.append(names))
+    md.refresh_if_stale()
+    assert scheduled == [{"ollama", "xai"}], "a list never fetched is stale"
+
+    vendor_http.reply = vendors(xai=XAI_MODELS)
     refresh()
     scheduled.clear()
     md.refresh_if_stale()
     assert scheduled == []
-    old = md._iso(md._now() - datetime.timedelta(seconds=md.STALE_AFTER + 60))
-    md._state["ollama"].checked = old
+    # Ollama is local and cheap: a picker opened half a minute later asks it
+    # again, and only it.
+    md._state["ollama"].checked = _ago(md.OLLAMA_STALE_AFTER + 1)
+    md._state["xai"].checked = _ago(60 * 60)
     md.refresh_if_stale()
-    assert scheduled == [True]
+    assert scheduled == [{"ollama"}]
+    scheduled.clear()
+    md._state["xai"].checked = _ago(md.STALE_AFTER + 60)
+    md.refresh_if_stale()
+    assert scheduled == [{"ollama", "xai"}]
+
+
+def test_opening_a_picker_finds_a_model_pulled_in_a_terminal(fresh, vendor_http, monkeypatch):
+    monkeypatch.setattr(md, "AUTO_REFRESH", True)
+    vendor_http.reply = vendors()
+    refresh()
+    md._state["ollama"].checked = _ago(md.OLLAMA_STALE_AFTER + 1)
+    pulled = {"models": OLLAMA_TAGS["models"] + [{"name": "qwen3:14b", "model": "qwen3:14b",
+                                                  "details": {}}]}
+    shows = dict(OLLAMA_SHOW, **{"qwen3:14b": {"capabilities": ["completion", "tools"]}})
+
+    def reply(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/tags":
+            return httpx.Response(200, json=pulled)
+        if request.url.path == "/api/show":
+            return httpx.Response(200, json=shows[json.loads(request.content)["model"]])
+        return httpx.Response(404)
+    vendor_http.reply = reply
+
+    async def open_picker():
+        md.refresh_if_stale()            # what GET /api/models does first
+        assert md.refreshing(), "the read started an Ollama refresh"
+        while md.refreshing():           # the editor reads again while it runs
+            await asyncio.sleep(0.01)
+
+    asyncio.run(open_picker())
+    assert rows()["ollama/qwen3:14b"]["available"] is True
 
 
 def test_the_server_start_refreshes_in_the_background(fresh, monkeypatch):
@@ -779,6 +817,71 @@ def test_a_model_of_another_family_is_named(fresh):
     assert problem["message"] == "model ollama/gemma4:e4b is a llm model; this node takes tts models"
 
 
+def _pulled(*names: str) -> dict:
+    return {"models": [t for t in OLLAMA_TAGS["models"]] + [
+        {"name": n, "model": n, "details": {}} for n in names]}
+
+
+def _ollama_with(tags: dict):
+    """An Ollama whose /api/tags answers `tags` (every model shows as a chat model)."""
+    def reply(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/tags":
+            return httpx.Response(200, json=tags)
+        if request.url.path == "/api/show":
+            name = json.loads(request.content)["model"]
+            return httpx.Response(200, json=OLLAMA_SHOW.get(name, {"capabilities": ["completion"]}))
+        return httpx.Response(404)
+    return reply
+
+
+def _tags_asked(vendor_http) -> int:
+    return len([r for r in vendor_http.requests if r.url.path == "/api/tags"])
+
+
+def test_validation_asks_ollama_again_before_calling_a_model_missing(fresh, vendor_http):
+    vendor_http.reply = vendors()
+    refresh()
+    md._state["ollama"].checked = _ago(md.RECHECK_AFTER + 1)
+    # `ollama pull qwen3:14b` in a terminal: nothing told the server.
+    vendor_http.reply = _ollama_with(_pulled("qwen3:14b"))
+    before = _tags_asked(vendor_http)
+    assert _model_problems(_llm_graph("ollama/qwen3:14b")) == []
+    assert _tags_asked(vendor_http) == before + 1
+    # a model still missing after the recheck is reported, and validating again
+    # right away does not ask again.
+    [problem] = _model_problems(_llm_graph("ollama/llama3.1:8b"))
+    assert "not installed in Ollama" in problem["message"]
+    assert _model_problems(_llm_graph("ollama/llama3.1:8b")) == [problem]
+    assert _tags_asked(vendor_http) == before + 1, "asked at most once per RECHECK_AFTER"
+
+
+def test_turning_on_asks_again_too(fresh, vendor_http):
+    from boltjar.server import Hub
+
+    vendor_http.reply = vendors()
+    refresh()
+    md._state["ollama"].checked = _ago(md.RECHECK_AFTER + 1)
+    vendor_http.reply = _ollama_with(_pulled("qwen3:14b"))
+
+    async def power():
+        hub = Hub()
+        problems = await hub.power_on(_llm_graph("ollama/qwen3:14b"))
+        await hub.power_off()
+        return problems
+
+    problems = asyncio.run(power()) or []
+    assert [p for p in problems if p["kind"] == "model-missing"] == []
+
+
+def test_a_model_of_another_family_is_not_rechecked(fresh, vendor_http):
+    vendor_http.reply = vendors()
+    refresh()
+    md._state["ollama"].checked = _ago(md.RECHECK_AFTER + 1)
+    before = _tags_asked(vendor_http)
+    assert len(_model_problems(_llm_graph("ollama/gemma4:e4b", "core.ai.tts"))) == 1
+    assert _tags_asked(vendor_http) == before
+
+
 def test_models_that_can_run_raise_no_problem(fresh, vendor_http):
     vendor_http.reply = vendors()
     refresh()
@@ -888,12 +991,17 @@ def test_a_lookup_reads_the_endpoint_list_once(fresh, monkeypatch):
     body = md.payload()
     assert len(body["models"]) > 200
     assert len(calls) == 1, "one read for the whole list, not one per row"
-    calls.clear()
-    graph = {"nodes": [{"id": "go", "type": "core.trigger.manual"}] + [
-        {"id": f"m{i}", "type": "core.ai.llm", "config": {"model": f"openrouter/vendor/gone-{i}"}}
-        for i in range(5)], "edges": []}
-    assert len(_model_problems(graph)) == 5
-    assert len(calls) == 1, "one snapshot serves every model widget of a graph"
+
+    def reads_to_validate(widgets: int) -> int:
+        calls.clear()
+        graph = {"nodes": [{"id": "go", "type": "core.trigger.manual"}] + [
+            {"id": f"m{i}", "type": "core.ai.llm",
+             "config": {"model": f"openrouter/vendor/gone-{i}"}} for i in range(widgets)],
+            "edges": []}
+        assert len(_model_problems(graph)) == widgets
+        return len(calls)
+
+    assert reads_to_validate(5) == reads_to_validate(1) <= 2,         "a graph's model widgets share one snapshot, not one read each"
 
 
 def test_the_endpoint_file_is_parsed_again_only_when_it_changes(fresh, monkeypatch):

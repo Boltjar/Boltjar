@@ -18,8 +18,11 @@ Every provider this install can actually use is asked which models exist now:
 What each provider reports is mapped onto the manifest shape (kind, inputs,
 outputs, tools, thinking, json, context) and cached in user/data/models-cache.json
 with UTC timestamps. The list refreshes in the background when the server starts
-(never blocking boot), on demand (POST /api/models/refresh), after a key or an
-Ollama model changes, and when it is older than STALE_AFTER. A provider that
+(never blocking boot), on demand (POST /api/models/refresh), after a key, an
+endpoint or an Ollama model changes, and when it is read after it went stale
+(Ollama after OLLAMA_STALE_AFTER, so opening a picker catches a model pulled in
+a terminal; the others after STALE_AFTER). Nothing refreshes on a timer. Before
+validation calls a model missing, its provider is asked again. A provider that
 cannot be reached keeps its last good list, so the picker works offline.
 
 TOML manifests are the optional enrichment: a listed model with a manifest keeps
@@ -56,6 +59,14 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 CACHE_PATH = ROOT / "user" / "data" / "models-cache.json"
 # A list older than this is refreshed in the background the next time it is read.
 STALE_AFTER = 3 * 60 * 60  # seconds
+# Ollama is local and cheap to ask, so its list goes stale sooner: opening a
+# model picker reads the list, and a model pulled in a terminal shows up then.
+OLLAMA_STALE_AFTER = 30  # seconds
+# Before validation calls a model missing, its provider is asked again unless it
+# answered this recently (so validating over and over asks at most this often),
+# and validation waits for the answer at most this long.
+RECHECK_AFTER = 30  # seconds
+RECHECK_WAIT = 10.0  # seconds
 # Background refreshes (start, stale, after a key or model change). The test suite
 # turns them off so no test reaches a real provider; POST /api/models/refresh and
 # refresh() always run.
@@ -586,13 +597,46 @@ def schedule_refresh(names: set[str] | None = None, *, changed: bool = False) ->
     _start(loop, names, changed=changed)
 
 
+def _stale_after(provider: str) -> float:
+    return OLLAMA_STALE_AFTER if provider == "ollama" else STALE_AFTER
+
+
 def refresh_if_stale() -> None:
-    """Schedule a background refresh when a usable provider was never asked, or
-    was last asked more than STALE_AFTER ago."""
+    """Schedule a background refresh of every usable provider never asked, or
+    last asked longer ago than it stays fresh (Ollama: OLLAMA_STALE_AFTER, as it
+    is local and cheap to ask; the others: STALE_AFTER). Nothing runs on a
+    timer: this runs when the list is read (the editor loads, a picker opens)."""
     ensure_loaded()
-    if any(_age(_state[n].checked if n in _state else None) > STALE_AFTER
-           for n in _usable_names()):
-        schedule_refresh()
+    stale = {n for n in _usable_names()
+             if _age(_state[n].checked if n in _state else None) > _stale_after(n)}
+    if stale:
+        schedule_refresh(stale)
+
+
+async def confirm_missing(refs: list[tuple[str, str]]) -> None:
+    """Before validation calls a model missing, ask its provider again, so a
+    model installed or offered since the last listing (an `ollama pull` in a
+    terminal) is found. `refs` are (model id, node family) pairs. Only a model
+    that is not in the list (not one of another family) makes its provider be
+    asked, and only when that provider is usable and was not asked in the last
+    RECHECK_AFTER seconds; the wait is capped at RECHECK_WAIT seconds."""
+    snap = Snapshot.now()
+    ask: set[str] = set()
+    for model_id, kind in refs:
+        if model_problem(model_id, kind, snap) is None:
+            continue
+        entry = _lookup(model_id, snap.rows)
+        if entry is not None and entry.manifest.kind != kind:
+            continue  # another family: asking again changes nothing
+        provider = model_id.split("/", 1)[0] if "/" in model_id else ""
+        listing = _state.get(provider)
+        if provider in snap.view.usable and _age(listing.checked if listing else None) > RECHECK_AFTER:
+            ask.add(provider)
+    if ask:
+        try:
+            await asyncio.wait_for(refresh(ask), RECHECK_WAIT)
+        except asyncio.TimeoutError:
+            _log.info("model recheck of %s took longer than %s s", sorted(ask), RECHECK_WAIT)
 
 
 def startup() -> None:

@@ -16,10 +16,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/).
 - The Webhook trigger can require a shared secret in the `X-Webhook-Secret` header.
 - An LLM node that reshapes its ports and knobs to the selected model, with tool calling through Tool and Tool Args.
 - Model manifests as TOML files, one per model: chat models from xAI, Anthropic, OpenAI and Ollama, plus voice, embedding and rerank models.
-- A live model list: the picker shows the models your Ollama has installed and your keys can run, asked from each provider when the server starts, on Refresh and every few hours, and kept offline in a cache. A manifest enriches the model it names, and one its provider no longer lists is marked unavailable.
+- A live model list: the picker shows the models your Ollama has installed and your keys can run, asked from each provider when the server starts, on Refresh, and when the list is read after it went stale (Ollama after 30 seconds, so opening a picker shows a model you just pulled; the others after 3 hours), and kept offline in a cache. A manifest enriches the model it names, and one its provider no longer lists is marked unavailable.
 - OpenAI and custom OpenAI-compatible endpoints (OpenRouter, Groq, LM Studio, llama.cpp, vLLM) in the LLM node. GPT-4o, GPT-4o mini, GPT-4.1, GPT-4.1 mini, GPT-5, GPT-5 mini and GPT-5 nano take images and tools through their manifests; a model from another endpoint takes them when its server reports them.
 - An `auto` model for the LLM node: the first installed Ollama chat model, else the first chat model of another connected provider that answered the last time it was asked, a model with a manifest before one the provider merely lists, else a reply that says how to connect one.
-- Validation names a saved model that vanished and the closest one available.
+- Validation names a saved model that vanished and the closest one available, after asking its provider again.
 - A mock mode: without a key, a cloud model in the LLM node answers with a mock reply, so the chat example replies out of the box. Its TTS node still needs a key.
 - TTS and STT nodes for xAI, Fish Audio and ElevenLabs. Each needs its provider's API key.
 - Retrieval nodes: Chunk, Sentences, Embed, Vector Store, Vectors and Rerank.

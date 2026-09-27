@@ -223,7 +223,7 @@ class Hub:
         except GraphFormatError as exc:
             problems = [_format_problem(exc)]
         else:
-            problems = validate_graph(graph)
+            problems = await validate_graph_now(graph)
         if problems:
             _tap({"kind": "invalid", "problems": problems, "slug": self.slug})
             return problems
@@ -555,6 +555,30 @@ def _widget_in_use(node_id: str, cfg: dict, widget, edges_in: set) -> bool:
     return not (widget.name in (cfg.get("promoted") or []) and (node_id, widget.name) in edges_in)
 
 
+def _model_refs(graph: dict) -> list[tuple[str, str, str]]:
+    """(node id, model id, family) for every model picker that reaches a node:
+    enabled nodes only, and not a picker promoted to an input a wire feeds."""
+    edges_in = {(e["dst"], e["dst_port"]) for e in graph.get("edges", [])}
+    refs = []
+    for n in graph.get("nodes", []):
+        spec = NODE_REGISTRY.get(n["type"])
+        if n.get("disabled") or spec is None:
+            continue
+        cfg = node_config(spec, n.get("config"))
+        for w in spec.widgets:
+            if w.kind == "model" and _widget_in_use(n["id"], cfg, w, edges_in):
+                refs.append((n["id"], str(cfg.get(w.name) or ""), w.model_kind or "llm"))
+    return refs
+
+
+async def validate_graph_now(graph: dict) -> list[dict]:
+    """validate_graph after asking again any provider whose list lacks a model
+    the graph names (a model pulled or offered since the last listing is found
+    then, instead of blocking On until the next refresh)."""
+    await _discovery.confirm_missing([(m, k) for _, m, k in _model_refs(graph)])
+    return validate_graph(graph)
+
+
 def validate_graph(graph: dict) -> list[dict]:
     """Pre-run validation: a graph cannot turn On if any node is broken."""
     problems: list[dict] = []
@@ -627,19 +651,11 @@ def validate_graph(graph: dict) -> list[dict]:
     # closest available one before On, instead of a mock reply or a failed call.
     # One snapshot of the merged list serves every model widget of the graph.
     snap: _discovery.Snapshot | None = None
-    for n in graph.get("nodes", []):
-        spec = NODE_REGISTRY.get(n["type"])
-        if n.get("disabled") or spec is None:
-            continue
-        cfg = node_config(spec, n.get("config"))
-        for w in spec.widgets:
-            if w.kind != "model" or not _widget_in_use(n["id"], cfg, w, edges_in):
-                continue
-            snap = snap or _discovery.Snapshot.now()
-            message = _discovery.model_problem(str(cfg.get(w.name) or ""), w.model_kind or "llm",
-                                               snap)
-            if message:
-                problems.append({"node": n["id"], "kind": "model-missing", "message": message})
+    for node_id, model_id, kind in _model_refs(graph):
+        snap = snap or _discovery.Snapshot.now()
+        message = _discovery.model_problem(model_id, kind, snap)
+        if message:
+            problems.append({"node": node_id, "kind": "model-missing", "message": message})
     # every edge: src/dst ports exist (statically or as a legal dynamic port) and
     # the wire's types are compatible. Runs after the node checks so an unknown /
     # disabled node is already handled and its edges are skipped.
@@ -676,8 +692,9 @@ async def list_models() -> dict:
     lists, each with `source` (manifest, discovered, both) and `available` (plus
     `reason` when not); `auto` is the model an "auto" LLM runs now (null: the
     mock); `updated` is the newest successful refresh (ISO 8601 UTC); `providers`
-    is each asked provider's last answer. A list older than a few hours is
-    refreshed in the background, so this never waits on a provider."""
+    is each asked provider's last answer. A stale list (Ollama's after 30 s,
+    another provider's after 3 h) is refreshed in the background, so this never
+    waits on a provider; the editor reads it again while `refreshing`."""
     _discovery.refresh_if_stale()
     return _discovery.payload()
 
@@ -897,7 +914,7 @@ async def validate(graph: dict) -> dict:
         graph = migrate(graph)
     except GraphFormatError as exc:
         return {"problems": [_format_problem(exc)]}
-    return {"problems": validate_graph(graph)}
+    return {"problems": await validate_graph_now(graph)}
 
 
 # ---- Runtime control (REST) -------------------------------------------------
