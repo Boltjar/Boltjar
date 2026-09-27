@@ -82,12 +82,19 @@ class Boolean:
 # examples/. Anywhere else is refused before anything is read, so a graph (or a
 # value wired into `src`) can never turn a media node into a reader for .env.
 _MEDIA_ROOTS_LABEL = "user/data/files and examples/"
+# standard padded base64; line breaks are allowed (`base64` on Linux wraps at 76).
+_BASE64_RE = re.compile(r"[A-Za-z0-9+/]+={0,2}")
+
+
+def _is_base64(text: str) -> bool:
+    compact = "".join(text.split())
+    return len(compact) % 4 == 0 and _BASE64_RE.fullmatch(compact) is not None
 
 
 def _media_file(src: str, node_name: str):
     """The readable file `src` names, or None when there is none (the value then
     passes through as-is: bare base64, or a name with no file behind it). Raises
-    PathEscapeError for a path outside the media roots."""
+    PathEscapeError for a path outside the media roots that is not base64."""
     import pathlib
     from boltjar.file_store import PathEscapeError, within
     from boltjar.server import EXAMPLES_DIR, FILE_STORE, ROOT
@@ -112,7 +119,9 @@ def _media_file(src: str, node_name: str):
             allowed = True
             if real.is_file():
                 return real
-    if allowed:
+    # bare base64 is data, not a path, though JPEG's starts '/9j/' and headerless
+    # MP3's '//u', both read as absolute: it passes through, nothing is read.
+    if allowed or _is_base64(src):
         return None
     raise PathEscapeError(f"{node_name}: {src!r} is outside the folders a graph may read "
                           f"files from ({_MEDIA_ROOTS_LABEL})")

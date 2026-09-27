@@ -154,6 +154,29 @@ def test_image_node_passes_data_urls_and_bare_base64_through(media_roots):
     assert _image(long_bare) == long_bare
 
 
+# the first bytes of a JPEG (SOI, then the JFIF header) and of an MP3 frame with
+# no ID3 tag: their base64 starts with '/', which reads as an absolute path.
+_JPEG_BYTES = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00"
+_MP3_BYTES = b"\xff\xfb\x90\x64" + bytes(60)
+
+
+def test_image_node_passes_bare_jpeg_base64_through(media_roots):
+    jpeg = base64.b64encode(_JPEG_BYTES).decode()
+    assert jpeg.startswith("/9j/")
+    assert _image(jpeg) == jpeg
+    wrapped = base64.encodebytes(_JPEG_BYTES * 8).decode()  # a line break every 76 characters
+    assert "\n" in wrapped.strip()
+    assert _image(wrapped) == wrapped.strip()
+
+
+def test_audio_node_passes_bare_mp3_base64_through(media_roots):
+    mp3 = base64.b64encode(_MP3_BYTES).decode()
+    assert mp3.startswith("//u")
+    audio = NODE_REGISTRY["core.value.audio"].cls()
+    audio.src = mp3
+    assert audio.value()["out"] == mp3
+
+
 def test_audio_node_follows_the_same_roots(media_roots):
     clip = media_roots / "user" / "data" / "files" / "clip.wav"
     clip.write_bytes(b"RIFF")
