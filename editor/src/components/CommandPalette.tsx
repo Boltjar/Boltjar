@@ -10,6 +10,7 @@ import type { WFNode } from "../lib/graphAdapter";
 import { Icon } from "../lib/icons";
 import { libraryGroup, nodeIcon } from "../lib/kinds";
 import { capabilityHint } from "../lib/nodeMeta";
+import { PALETTE_GROUPS, inGroupOrder, type PaletteGroup } from "../lib/paletteGroups";
 import { typesCompatible } from "../lib/types";
 
 export interface PaletteAction {
@@ -39,7 +40,7 @@ interface CommandPaletteProps {
 
 interface Row {
   key: string;
-  group: string;
+  group: PaletteGroup;
   icon: string;
   label: string;
   hint: string;
@@ -122,7 +123,8 @@ export function CommandPalette(props: CommandPaletteProps) {
         };
       });
 
-    return [...addRows, ...actionRows, ...gotoRows];
+    // in drawn order, so a row's index here is its place on screen
+    return inGroupOrder([...addRows, ...actionRows, ...gotoRows]);
   }, [defs, nodes, actions, query, onAddNode, onGoToNode, onClose]);
 
   // clamp active index whenever the result set changes
@@ -132,13 +134,12 @@ export function CommandPalette(props: CommandPaletteProps) {
 
   // group the flat rows for rendering while keeping a global active index
   const groups = useMemo(() => {
-    const order = ["Add node", "Actions", "Help", "Go to node"];
-    const byGroup = new Map<string, { row: Row; index: number }[]>();
+    const byGroup = new Map<PaletteGroup, { row: Row; index: number }[]>();
     rows.forEach((row, index) => {
       if (!byGroup.has(row.group)) byGroup.set(row.group, []);
       byGroup.get(row.group)!.push({ row, index });
     });
-    return order.filter((g) => byGroup.has(g)).map((g) => ({ name: g, items: byGroup.get(g)! }));
+    return PALETTE_GROUPS.filter((g) => byGroup.has(g)).map((g) => ({ name: g, items: byGroup.get(g)! }));
   }, [rows]);
 
   const onKeyDown = (e: React.KeyboardEvent) => {
