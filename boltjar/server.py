@@ -1025,7 +1025,7 @@ async def api_set_provider_key(provider: str, body: dict = Body(...)) -> dict:
         _secrets.set_secret(env_var, value)
     except ValueError as exc:
         return JSONResponse({"error": str(exc)}, status_code=400)
-    _discovery.schedule_refresh()  # the new key's models join the list
+    _discovery.schedule_refresh(changed=True)  # the new key's models join the list
     return {"ok": True}
 
 
@@ -1043,7 +1043,7 @@ async def api_delete_provider_key(provider: str) -> dict:
                 {"error": "managed in server .env"}, status_code=409
             )
         return JSONResponse({"error": "not found"}, status_code=404)
-    _discovery.schedule_refresh()  # its models leave the list
+    _discovery.schedule_refresh(changed=True)  # its models leave the list
     return {"ok": True}
 
 
@@ -1072,7 +1072,7 @@ async def api_put_endpoint(name: str, body: dict = Body(...)) -> dict:
         endpoint = _endpoints.save(endpoint.name, endpoint.base_url, endpoint.key_secret)
     except ValueError as exc:
         return JSONResponse({"error": str(exc)}, status_code=400)
-    _discovery.schedule_refresh()
+    _discovery.schedule_refresh(changed=True)
     return {"endpoint": endpoint.as_dict()}
 
 
@@ -1081,7 +1081,7 @@ async def api_delete_endpoint(name: str) -> dict:
     """Remove an endpoint. Its key secret stays in the secrets store."""
     if not _endpoints.delete(name):
         return JSONResponse({"error": "not found"}, status_code=404)
-    _discovery.schedule_refresh()
+    _discovery.schedule_refresh(changed=True)
     return {"ok": True}
 
 
@@ -1240,7 +1240,7 @@ async def ollama_pull(payload: dict = Body(...)):
             import json as _json
             yield _json.dumps({"status": "error", "error": str(exc)}) + "\n"
         finally:
-            _discovery.schedule_refresh()  # a pulled model joins the list
+            _discovery.schedule_refresh({"ollama"}, changed=True)  # a pulled model joins the list
 
     return StreamingResponse(content=_stream(), media_type="application/x-ndjson")
 
@@ -1258,7 +1258,7 @@ async def ollama_delete(name: str) -> dict:
             if resp.status_code not in (200, 204):
                 text = resp.text[:200]
                 return JSONResponse({"error": text or f"{resp.status_code}"}, status_code=502)
-            _discovery.schedule_refresh()  # a deleted model leaves the list
+            _discovery.schedule_refresh({"ollama"}, changed=True)  # a deleted model leaves the list
             return {"ok": True}
     except Exception as exc:
         return JSONResponse({"error": str(exc)}, status_code=502)

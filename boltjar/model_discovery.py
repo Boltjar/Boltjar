@@ -147,7 +147,6 @@ class Listing:
 
 _state: dict[str, Listing] = {}
 _loaded = False
-_task: asyncio.Task | None = None
 
 
 def ensure_loaded() -> None:
@@ -170,9 +169,10 @@ def ensure_loaded() -> None:
 
 def reset() -> None:
     """Forget everything in memory (the next lookup reads the cache again)."""
-    global _loaded, _task
+    global _loaded, _job
     _loaded = False
-    _task = None
+    _job = None
+    _tasks.clear()
     _state.clear()
     models.DISCOVERED.clear()
     models.ALIASES.clear()
@@ -467,35 +467,64 @@ def _short_error(exc: BaseException) -> str:
     return _secrets.redact(text)[:200]
 
 
-async def _refresh() -> None:
+async def _refresh(only: frozenset[str] | set[str] | None = None) -> None:
+    """Ask the usable providers (`only`: just those of them) and record what
+    each said. A provider asked that fails keeps its last good list (the
+    offline copy); a provider not asked keeps its listing as it was; one no
+    longer usable (its key removed) drops out."""
     ensure_loaded()
-    asked = _discoverers()
-    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        results = await asyncio.gather(*(fn(client) for fn in asked.values()),
-                                       return_exceptions=True)
+    asked = {n: fn for n, fn in _discoverers().items() if only is None or n in only}
+    results: list = []
+    if asked:
+        async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+            results = await asyncio.gather(*(fn(client) for fn in asked.values()),
+                                           return_exceptions=True)
     checked = _iso(_now())
-    fresh: dict[str, Listing] = {}
     for name, result in zip(asked, results):
         before = _state.get(name)
         if isinstance(result, BaseException):
             if isinstance(result, asyncio.CancelledError):
                 raise result
             # unreachable or refused: keep the last good list (the offline copy).
-            fresh[name] = Listing(ok=False, checked=checked,
-                                  updated=before.updated if before else None,
-                                  error=_short_error(result),
-                                  models=before.models if before else [])
+            _state[name] = Listing(ok=False, checked=checked,
+                                   updated=before.updated if before else None,
+                                   error=_short_error(result),
+                                   models=before.models if before else [])
         else:
-            fresh[name] = Listing(ok=True, checked=checked, updated=checked, models=result)
-    # a provider no longer usable (its key removed) drops out of the list.
-    _state.clear()
-    _state.update(fresh)
+            _state[name] = Listing(ok=True, checked=checked, updated=checked, models=result)
+    usable = set(_usable_names())  # read again: a key may have gone while asking
+    for name in [n for n in _state if n not in usable]:
+        del _state[name]
     _publish()
     _save()
 
 
-def _running(loop: asyncio.AbstractEventLoop) -> bool:
-    return _task is not None and not _task.done() and _task.get_loop() is loop
+# The refresh running now, or queued behind it. A request that the running one
+# covers joins it; any other waits for it and then runs, and requests made while
+# one waits merge into it, so at most one refresh runs and one waits.
+@dataclass(eq=False)
+class _Job:
+    names: set[str] | None          # the providers to ask (None: every usable one)
+    task: asyncio.Task | None = None
+    started: bool = False           # it began asking, so `asked` is fixed
+    asked: frozenset[str] = frozenset()
+
+
+_job: _Job | None = None
+_tasks: set[asyncio.Task] = set()
+
+
+def _live(job: _Job | None, loop: asyncio.AbstractEventLoop) -> bool:
+    return (job is not None and job.task is not None and not job.task.done()
+            and job.task.get_loop() is loop)
+
+
+async def _run(job: _Job, before: asyncio.Task | None) -> None:
+    if before is not None:
+        await asyncio.wait({before})  # never cancels it, never raises its error
+    job.started = True
+    job.asked = frozenset(n for n in _usable_names() if job.names is None or n in job.names)
+    await _refresh(job.asked)
 
 
 def _log_failure(task: asyncio.Task) -> None:
@@ -503,38 +532,58 @@ def _log_failure(task: asyncio.Task) -> None:
         _log.warning("model list refresh failed: %s", task.exception())
 
 
-def _start(loop: asyncio.AbstractEventLoop) -> asyncio.Task:
-    global _task
-    if not _running(loop):
-        _task = loop.create_task(_refresh())
-        _task.add_done_callback(_log_failure)
-    return _task
+def _start(loop: asyncio.AbstractEventLoop, names: set[str] | None = None, *,
+           changed: bool = False) -> asyncio.Task:
+    """A refresh of `names` (None: every usable provider): the running one when
+    it asks all of them and nothing changed since it began (`changed`: a key,
+    an endpoint or an installed model did), else one that runs after it."""
+    global _job
+    job = _job if _live(_job, loop) else None
+    if job is not None and not job.started:
+        # queued (or not begun yet): widen it, it reads its names when it starts.
+        if job.names is not None:
+            job.names = None if names is None else job.names | set(names)
+        return job.task
+    if job is not None and not changed:
+        wanted = set(names) if names is not None else set(_usable_names())
+        if wanted <= job.asked:
+            return job.task
+    new = _Job(None if names is None else set(names))
+    new.task = loop.create_task(_run(new, job.task if job is not None else None))
+    new.task.add_done_callback(_log_failure)
+    _tasks.add(new.task)
+    new.task.add_done_callback(_tasks.discard)
+    _job = new
+    return new.task
 
 
-async def refresh() -> None:
-    """Ask every usable provider now and wait for the answers (joins a refresh
-    already running). Never raises for a provider that fails: it keeps its list."""
-    task = _start(asyncio.get_running_loop())
+async def refresh(names: set[str] | None = None, *, changed: bool = False) -> None:
+    """Ask every usable provider (`names`: just those) now and wait for the
+    answers, joining a refresh that already asks them. Never raises for a
+    provider that fails: it keeps its list."""
+    task = _start(asyncio.get_running_loop(), names, changed=changed)
     await asyncio.shield(task)
 
 
 def refreshing() -> bool:
     try:
-        return _running(asyncio.get_running_loop())
+        return _live(_job, asyncio.get_running_loop())
     except RuntimeError:
         return False
 
 
-def schedule_refresh() -> None:
+def schedule_refresh(names: set[str] | None = None, *, changed: bool = False) -> None:
     """Refresh in the background (no-op without a running loop, or with
-    AUTO_REFRESH off)."""
+    AUTO_REFRESH off). `changed`: something a running refresh may have read
+    before it changed (a key, an endpoint, an installed model), so it is asked
+    again after that one."""
     if not AUTO_REFRESH:
         return
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
         return
-    _start(loop)
+    _start(loop, names, changed=changed)
 
 
 def refresh_if_stale() -> None:
@@ -553,10 +602,12 @@ def startup() -> None:
 
 
 async def shutdown() -> None:
-    """Server stop: cancel a refresh still running on this loop."""
-    task = _task
-    if task is not None and _running(asyncio.get_running_loop()):
+    """Server stop: cancel every refresh still running or waiting on this loop."""
+    loop = asyncio.get_running_loop()
+    live = [t for t in _tasks if not t.done() and t.get_loop() is loop]
+    for task in live:
         task.cancel()
+    for task in live:
         try:
             await task
         except (asyncio.CancelledError, Exception):

@@ -463,6 +463,97 @@ def test_refresh_endpoint_returns_the_fresh_list(fresh, vendor_http):
     assert body["updated"].endswith("Z") and body["refreshing"] is False
 
 
+def _held_ollama(base):
+    """A reply router whose first /api/tags waits for `gate` (a slow Ollama)."""
+    gate = asyncio.Event()
+
+    async def reply(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/tags" and not gate.is_set():
+            await gate.wait()
+        return base(request)
+    return gate, reply
+
+
+def _asked(vendor_http, url: str) -> list[httpx.Request]:
+    return [r for r in vendor_http.requests if str(r.url).startswith(url)]
+
+
+def test_a_key_added_during_a_refresh_is_asked_after_it(fresh, vendor_http, monkeypatch):
+    async def scenario():
+        gate, vendor_http.reply = _held_ollama(vendors(xai=XAI_MODELS))
+        first = asyncio.create_task(md.refresh())    # only Ollama is usable yet
+        await asyncio.sleep(0.05)
+        assert md.refreshing()
+        monkeypatch.setenv("XAI_API_KEY", "test-xai-key")
+        again = asyncio.create_task(md.refresh())    # Refresh right after the key
+        await asyncio.sleep(0.05)
+        assert not again.done(), "the running refresh never asks xAI, so it is not joined"
+        gate.set()
+        await again
+        assert first.done()
+
+    asyncio.run(scenario())
+    assert "xai/grok-4.7" in rows()
+    assert len(_asked(vendor_http, md.XAI_MODELS_URL)) == 1
+
+
+def test_a_refresh_that_covers_a_request_is_joined(fresh, vendor_http):
+    async def scenario():
+        gate, vendor_http.reply = _held_ollama(vendors())
+        first = asyncio.create_task(md.refresh())
+        await asyncio.sleep(0.05)
+        again = asyncio.create_task(md.refresh())
+        await asyncio.sleep(0.05)
+        gate.set()
+        await asyncio.gather(first, again)
+
+    asyncio.run(scenario())
+    assert len([r for r in vendor_http.requests if r.url.path == "/api/tags"]) == 1
+
+
+def test_a_key_replaced_during_a_refresh_is_asked_again(fresh, vendor_http, monkeypatch):
+    monkeypatch.setattr(md, "AUTO_REFRESH", True)
+    monkeypatch.setenv("XAI_API_KEY", "old-xai-key")
+
+    async def scenario():
+        gate, vendor_http.reply = _held_ollama(vendors(xai=XAI_MODELS))
+        md.schedule_refresh()
+        await asyncio.sleep(0.05)
+        monkeypatch.setenv("XAI_API_KEY", "new-xai-key")
+        md.schedule_refresh(changed=True)     # the same providers, but a key changed
+        md.schedule_refresh({"ollama"}, changed=True)   # merges into the queued one
+        await asyncio.sleep(0.05)
+        gate.set()
+        while md.refreshing():
+            await asyncio.sleep(0.01)
+
+    asyncio.run(scenario())
+    keys = [r.headers["authorization"] for r in _asked(vendor_http, md.XAI_MODELS_URL)]
+    assert keys == ["Bearer old-xai-key", "Bearer new-xai-key"], "two refreshes, not three"
+
+
+def test_shutdown_cancels_a_queued_refresh_too(fresh, monkeypatch):
+    monkeypatch.setattr(md, "AUTO_REFRESH", True)
+    runs: list[bool] = []
+
+    async def never(*_):
+        runs.append(True)
+        await asyncio.sleep(3600)
+
+    monkeypatch.setattr(md, "_refresh", never)
+
+    async def scenario():
+        md.schedule_refresh()
+        await asyncio.sleep(0)
+        md.schedule_refresh(changed=True)   # queued behind the first
+        await asyncio.sleep(0)
+        await md.shutdown()
+        assert not md.refreshing() and all(t.cancelled() for t in md._tasks)
+
+    asyncio.run(scenario())
+    assert runs == [True], "the queued refresh never began"
+
+
 # ------------------------------------------------------- the LLM node
 
 def _run_llm(model: str, prompt: str = "hi") -> dict:
