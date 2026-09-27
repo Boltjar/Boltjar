@@ -325,10 +325,11 @@ LAUNCH_NOTICES: dict[str, dict] = {}
 
 
 def _record_resume(slug: str, graph: dict) -> None:
-    """Record `slug` as On. A disk that refuses the write costs the resume,
-    never the power-on."""
+    """Record `slug` as On, and whether it has a graph file (a draft never
+    saved has none). A disk that refuses the write costs the resume, never the
+    power-on."""
     try:
-        _resume.record(slug, graph)
+        _resume.record(slug, graph, saved=_graph_path(slug) is not None)
     except OSError as exc:
         _log.warning("could not record %s as On for the next launch: %s", slug, exc)
 
@@ -494,19 +495,23 @@ async def resume_graphs() -> tuple[list[str], list[str]]:
     """Power back On, one at a time and through the normal validation, every
     graph the last run left On, from the JSON it ran. One that fails stays Off
     and stays recorded for the next launch (no person turned it Off), with one
-    terminal line and the problems kept for the editor; one whose graph file is
-    gone is dropped. Returns (resumed, not resumed) slugs."""
+    terminal line and the problems kept for the editor; one whose graph file
+    was deleted since is dropped (a draft never saved had none, and comes back
+    from its JSON). Returns (resumed, not resumed) slugs."""
     resumed: list[str] = []
     failed: list[str] = []
+    dropped: list[str] = []
     try:
         entries = _resume.earlier()
     except OSError as exc:
         GRAPH_LINES.note(f"could not read the graphs that were On, so none is resumed: {exc}", "warn")
         return resumed, failed
-    for slug, graph in entries:
-        if _graph_path(slug) is None:
+    for slug, entry in entries:
+        graph = entry["graph"]
+        if entry["saved"] and _graph_path(slug) is None:
             _forget_resume(slug)
             GRAPH_LINES.resume_dropped(slug)
+            dropped.append(slug)
             continue
         hub = get_hub(slug)
         if hub.runtime is not None:  # already turned On since the boot
@@ -525,7 +530,7 @@ async def resume_graphs() -> tuple[list[str], list[str]]:
         if problems:
             GRAPH_LINES.not_resumed(slug, problems[0])
         # a graph that failed to build printed its own line (its `error` event)
-    GRAPH_LINES.resume_summary(resumed, failed)
+    GRAPH_LINES.resume_summary(resumed, failed, dropped)
     return resumed, failed
 
 
@@ -1027,6 +1032,10 @@ async def put_graph(name: str, graph: dict):
     GRAPHS_DIR.mkdir(parents=True, exist_ok=True)
     (GRAPHS_DIR / f"{_safe(name)}.json").write_text(json.dumps(graph, indent=2), encoding="utf-8")
     _snapshot_graph(name, graph)  # versioned backup on every explicit Save
+    try:
+        _resume.mark_saved(name)  # a draft On since before it had a file has one now
+    except OSError as exc:
+        _log.warning("could not note %s as saved for the next launch: %s", name, exc)
     return {"ok": True}
 
 
@@ -1061,7 +1070,9 @@ async def delete_graph(name: str):
     """Permanently remove a saved graph file. The editor's rename + delete tab
     actions call this; missing file is a no-op (already gone is success). Only
     user copies are deleted: removing a user copy of an example brings the
-    example back, and a slug that exists only as an example is a 409."""
+    example back, and a slug that exists only as an example is a 409. A
+    deleted graph that is On keeps running, but no launch brings it back (the
+    editor's rename deletes the old slug this way)."""
     path = GRAPHS_DIR / f"{_safe(name)}.json"
     try:
         path.unlink()
@@ -1071,6 +1082,7 @@ async def delete_graph(name: str):
                 {"error": f"{path.stem!r} is a built-in example and cannot be deleted"},
                 status_code=409,
             )
+    _forget_resume(name)
     return {"ok": True}
 
 

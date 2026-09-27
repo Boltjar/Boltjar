@@ -2,11 +2,12 @@
 boltjar.resume: the graphs On when Boltjar last stopped, for the next launch.
 
 The server records a graph here the moment it turns On (the exact graph JSON it
-runs, a draft included) and keeps it through a Restart. It drops it when a
-person turns it Off, and when a Restart leaves it Off (the new build failed
-after the old runtime stopped). Stopping the server (Ctrl+C, closing the
-window, the computer shutting down) is not an Off: the record stays as it was,
-so it names the graphs that were On at that moment.
+runs, a draft that was never saved included) and keeps it through a Restart. It
+drops it when a person turns it Off, when a Restart leaves it Off (the new
+build failed after the old runtime stopped) and when its graph is deleted.
+Stopping the server (Ctrl+C, closing the window, the computer shutting down) is
+not an Off: the record stays as it was, so it names the graphs that were On at
+that moment.
 
 Every entry is stamped with the launch that wrote it. What an earlier launch
 left is the graphs On when it ended, and this launch settles it
@@ -20,7 +21,11 @@ The record lives in user/data/resume.json, rewritten whole through a temporary
 file (atomic) on every change, in the order the graphs turned On:
 
     {"version": 1, "graphs": {"chat": {"since": "2026-09-27T09:00:00Z",
-                                       "launch": "<id>", "graph": {...}}}}
+                                       "launch": "<id>", "saved": true, "graph": {...}}}}
+
+`saved`: the graph had a file (a saved graph or a shipped example) since it was
+recorded, so a launch that finds none drops it as deleted. A graph never saved
+has no file to lose and comes back from its JSON.
 """
 from __future__ import annotations
 
@@ -98,13 +103,24 @@ def _earlier(entry: dict) -> bool:
 
 
 # ---------------------------------------------------------------- changes
-def record(slug: str, graph: dict) -> None:
-    """`slug` is On in this run, running `graph`. A graph already recorded
-    keeps its place in the order and its `since`; its JSON becomes the new one
-    (a Restart)."""
+def record(slug: str, graph: dict, saved: bool = True) -> None:
+    """`slug` is On in this run, running `graph`; `saved`: it has a graph file.
+    A graph already recorded keeps its place in the order and its `since`; its
+    JSON becomes the new one (a Restart)."""
     graphs = _read(for_write=True)
     since = graphs.get(slug, {}).get("since") or _now()
-    graphs[slug] = {"since": since, "launch": LAUNCH, "graph": graph}
+    graphs[slug] = {"since": since, "launch": LAUNCH, "saved": bool(saved), "graph": graph}
+    _write(graphs)
+
+
+def mark_saved(slug: str) -> None:
+    """`slug` was just saved: from now on it has a graph file to lose. Writes
+    only when that changes the entry."""
+    graphs = _read(for_write=True)
+    entry = graphs.get(slug)
+    if entry is None or entry.get("saved") is True:
+        return
+    entry["saved"] = True
     _write(graphs)
 
 
@@ -148,9 +164,11 @@ def drop_earlier() -> list[str]:
 
 # ---------------------------------------------------------------- reading
 def earlier() -> list[tuple[str, dict]]:
-    """(slug, graph JSON) for every graph an earlier launch left On, in the
-    order they turned On: what this launch resumes."""
-    return [(slug, entry["graph"]) for slug, entry in _read().items() if _earlier(entry)]
+    """(slug, entry) for every graph an earlier launch left On, in the order
+    they turned On: what this launch resumes. The entry holds `graph` and
+    `saved` (an entry without one, from an older record, counts as saved)."""
+    return [(slug, {**entry, "saved": entry.get("saved") is not False})
+            for slug, entry in _read().items() if _earlier(entry)]
 
 
 def recorded() -> list[tuple[str, dict]]:

@@ -926,11 +926,15 @@ class GraphLines:
         """A graph that was On whose graph file is gone: it is no longer resumed."""
         self._line(slug, "info", "Off", "its graph file is gone: no longer resumed", glyph="off")
 
-    def resume_summary(self, resumed: Sequence[str], failed: Sequence[str]) -> None:
-        """`resumed 2: chat, digest`, or `resumed 1 of 2: chat; not resumed: digest`."""
+    def resume_summary(self, resumed: Sequence[str], failed: Sequence[str],
+                       dropped: Sequence[str] = ()) -> None:
+        """`resumed 2: chat, digest`, or `resumed 1 of 2: chat; not resumed:
+        digest`. `dropped`: graphs that were On but are gone (each printed its
+        own line), so the summary never says none was On."""
         total = len(resumed) + len(failed)
         if not total:
-            self.note("no graph was On when Boltjar last stopped: nothing to resume")
+            self.note("nothing left to resume" if dropped
+                      else "no graph was On when Boltjar last stopped: nothing to resume")
             return
         text = f"resumed {len(resumed)}" + (f" of {total}" if failed else "")
         if resumed:

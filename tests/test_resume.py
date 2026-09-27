@@ -588,3 +588,56 @@ def test_a_graph_that_failed_to_resume_is_tried_again_at_the_next_launch(fresh, 
         client.portal.call(server.launch_sequence)
         assert running() == ["chat"]
         power(client, "chat", "off")
+
+
+# ---------------------------------------------------------------- saved or not
+def test_a_never_saved_graph_turned_on_in_the_editor_comes_back(fresh, monkeypatch, no_local_providers):
+    settings.update({"resume_workflows": True})
+    with local_client() as client:
+        # a New workflow tab, never saved, turned On over its socket
+        with client.websocket_connect("/ws?slug=untitled-2") as ws:
+            assert ws.receive_json()["kind"] == "status"
+            ws.send_json({"action": "on", "graph": MANUAL_LOG_DRAFT})
+            while (event := ws.receive_json()).get("kind") != "status" or event["power"] != "on":
+                pass
+    restart_server(monkeypatch)
+    with local_client() as client:
+        client.portal.call(server.launch_sequence)
+        assert running() == ["untitled-2"]
+        assert [n["id"] for n in server.HUBS["untitled-2"].graph["nodes"]] == ["m", "lg", "lg2"]
+        power(client, "untitled-2", "off")
+
+
+def test_deleting_a_graph_drops_it(fresh):
+    save(fresh, "chat", MANUAL_LOG)
+    with local_client() as client:
+        power(client, "chat", "on", MANUAL_LOG)
+        assert client.delete("/api/graphs/chat").json() == {"ok": True}
+        assert resume.slugs() == []  # still running now, not at the next launch
+        power(client, "chat", "off")
+
+
+def test_a_graph_saved_while_on_and_then_removed_by_hand_is_dropped(fresh, monkeypatch,
+                                                                    no_local_providers, caplog):
+    settings.update({"resume_workflows": True})
+    with local_client() as client:
+        power(client, "draft", "on", MANUAL_LOG)  # never saved when it turned On
+        assert client.put("/api/graphs/draft", json=MANUAL_LOG).json() == {"ok": True}
+    (fresh / "draft.json").unlink()  # removed outside Boltjar
+    restart_server(monkeypatch)
+    with caplog.at_level(logging.INFO, logger="boltjar.graph"):
+        with local_client() as client:
+            client.portal.call(server.launch_sequence)
+            assert running() == []
+    assert resume.slugs() == []
+    assert any(getattr(r, "tag", None) == "draft" and "gone" in r.detail for r in caplog.records)
+
+
+def test_the_summary_never_says_nothing_was_on_when_a_graph_was_dropped(fresh, monkeypatch, caplog):
+    left_on(monkeypatch, ("gone", MANUAL_LOG))  # saved then, deleted by hand since
+    with caplog.at_level(logging.INFO, logger="boltjar.graph"):
+        with local_client() as client:
+            client.portal.call(server.resume_graphs)
+    shown = [r.getMessage() for r in caplog.records if r.name == "boltjar.graph"]
+    assert shown[-1] == "nothing left to resume"
+    assert not any("no graph was On" in line for line in shown)
