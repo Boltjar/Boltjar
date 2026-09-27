@@ -19,7 +19,7 @@ from typing import Callable
 import httpx
 import pytest
 
-from boltjar import endpoints, model_discovery, ollama, security, settings
+from boltjar import endpoints, model_discovery, ollama, resume, security, settings
 
 
 def _never(what: str):
@@ -38,8 +38,9 @@ def pytest_configure(config):
     model_discovery.CACHE_PATH = tmp / "models-cache.json"
     model_discovery.AUTO_REFRESH = False
     endpoints.PATH = tmp / "endpoints.json"
-    # the settings and Ollama's log: the suite's own
+    # the settings, the graphs recorded as On, and Ollama's log: the suite's own
     settings.PATH = tmp / "settings.json"
+    resume.PATH = tmp / "resume.json"
     ollama.LOG_PATH = tmp / "logs" / "ollama.log"
     # no test ever runs Ollama or ends a real process
     ollama._popen = _never("run a program")

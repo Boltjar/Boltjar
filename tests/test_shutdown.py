@@ -85,7 +85,7 @@ def test_a_graph_whose_stop_hangs_holds_up_none_of_the_others(hubs):
         async def never_stops():
             await asyncio.Event().wait()
 
-        stuck.power_off = never_stops  # first in line, and it never returns
+        stuck.stop_for_exit = never_stops  # first in line, and it never returns
         shutdown = asyncio.ensure_future(server.shutdown_all())
         for _ in range(100):
             if fine.runtime is None:
@@ -117,7 +117,7 @@ def test_a_stop_that_fails_shows_no_key_in_the_terminal(hubs, monkeypatch):
         async def refuses():
             raise RuntimeError(f"401 for https://api.example.com/v1/close?key={key}")
 
-        hub.power_off = refuses
+        hub.stop_for_exit = refuses
         assert await server.shutdown_all() == 0
         await hub.runtime.stop()
 

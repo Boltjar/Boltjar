@@ -8,7 +8,8 @@ WS protocol (the editor is the client):
     -> { action: "restart", graph }           stop + start
     -> { action: "chat", node, text }         inject a message into a Chat Input
     <- { kind: "status",  power: "on"|"off" }
-    <- { kind: "invalid", problems: [...] }   On rejected (broken graph)
+    <- { kind: "invalid", problems: [...], resume? }   On rejected (broken graph);
+                                              resume: a launch could not resume it
     <- { kind: "value",   node, port, value } live value on a wire
     <- { kind: "log",     node, message, echo? }   echo: true when the terminal prints it too
     <- { kind: "node_error", node, error }
@@ -17,7 +18,9 @@ Power persistence: the live runtime lives in a module-level Hub singleton, not i
 any one websocket. A browser refresh / tab close only drops a SUBSCRIBER; the graph
 keeps running. On reconnect the editor receives the current status plus a replay of
 every cached live value so its wires light up again. Only the server process
-exiting stops the graph, and on the way out it stops every graph cleanly.
+exiting stops the graph, and on the way out it stops every graph cleanly. That
+exit is not an Off: the graphs On are recorded (boltjar.resume), and with
+"Resume workflows after launch" on, the next launch powers them back On.
 
 Run:  python -m boltjar serve   (see boltjar/__main__.py)
 """
@@ -63,6 +66,8 @@ from boltjar import endpoints as _endpoints
 from boltjar import model_discovery as _discovery
 from boltjar import ollama as _ollama
 from boltjar import packs as _packs
+from boltjar import resume as _resume
+from boltjar import settings as _settings
 from boltjar.console import GraphLines
 import boltjar.secrets as _secrets
 import boltjar.security as _security
@@ -213,13 +218,30 @@ class Hub:
                 pass
 
     async def power_off(self) -> None:
+        """A person turned this graph Off (from the editor, the REST API or the
+        MCP server): it stops, and a launch no longer resumes it."""
+        await self._power_down()
+        LAUNCH_NOTICES.pop(self.slug, None)
+        _forget_resume(self.slug)
+
+    async def stop_for_exit(self) -> None:
+        """The server is exiting: the graph stops, but that is not an Off, so
+        the resume record keeps it and the next launch knows it was On."""
+        await self._power_down()
+
+    async def _power_down(self) -> None:
         async with self._lock:
             await self._stop()
         self.broadcast({"kind": "status", "power": "off"})
         self.broadcast(self.live_graph_event())  # empty set: nothing is live now
 
-    async def power_on(self, graph: dict) -> list[dict] | None:
-        """Start the graph live. Returns validation problems if the graph is broken."""
+    async def power_on(self, graph: dict, *, resuming: bool = False) -> list[dict] | None:
+        """Start the graph live. Returns validation problems if the graph is broken.
+
+        On success the graph is recorded as On (boltjar.resume), with the JSON it
+        runs. `resuming`: a launch is powering back a graph that was On; a
+        refusal then prints no lines of its own (the launch prints one per
+        graph) and is kept for the editor, which is shown it on connect."""
         try:
             graph = migrate(graph)
         except GraphFormatError as exc:
@@ -227,7 +249,10 @@ class Hub:
         else:
             problems = await validate_graph_now(graph)
         if problems:
-            _tap({"kind": "invalid", "problems": problems, "slug": self.slug})
+            if resuming:
+                self._launch_notice({"kind": "invalid", "problems": problems})
+            else:
+                _tap({"kind": "invalid", "problems": problems, "slug": self.slug})
             return problems
         async with self._lock:
             await self._stop()
@@ -242,12 +267,29 @@ class Hub:
                 self.graph = None
                 # built here, not in the runtime, so it gets the redaction every
                 # runtime event gets on its way out (Runtime._notify)
-                self.broadcast({"kind": "error", "error": _secrets.redact(repr(exc))})
+                error = {"kind": "error", "error": _secrets.redact(repr(exc))}
+                if resuming:
+                    error["resume"] = True
+                    LAUNCH_NOTICES[self.slug] = dict(error)
+                self.broadcast(error)
                 return None
             self.graph = graph  # the now-running graph (the live set source of truth)
+        LAUNCH_NOTICES.pop(self.slug, None)
+        _record_resume(self.slug, graph)
         self.broadcast({"kind": "status", "power": "on"})
         self.broadcast(self.live_graph_event())
         return None
+
+    def _launch_notice(self, event: dict) -> None:
+        """Keep why a launch could not resume this graph, for every editor that
+        opens it, and tell the ones open now."""
+        notice = {**event, "resume": True}
+        LAUNCH_NOTICES[self.slug] = notice
+        for q in list(self.subscribers):
+            try:
+                q.put_nowait({**notice, "slug": self.slug})
+            except Exception:
+                pass
 
     async def restart(self, graph: dict) -> list[dict] | None:
         # power_on stops any current runtime under the lock before starting.
@@ -269,6 +311,28 @@ class Hub:
 # Registry of live Hubs, keyed by graph slug. A graph turns On in its OWN Hub,
 # so multiple graphs can run live concurrently (one editor tab per slug).
 HUBS: dict[str, Hub] = {}
+
+# Why a launch could not resume a graph, by slug: the `invalid` (or `error`)
+# event, marked `resume`, replayed to every editor that opens the graph until
+# it turns On or a person turns it Off. Kept outside the Hubs, which an editor
+# closing its last tab drops.
+LAUNCH_NOTICES: dict[str, dict] = {}
+
+
+def _record_resume(slug: str, graph: dict) -> None:
+    """Record `slug` as On. A disk that refuses the write costs the resume,
+    never the power-on."""
+    try:
+        _resume.record(slug, graph)
+    except OSError as exc:
+        _log.warning("could not record %s as On for the next launch: %s", slug, exc)
+
+
+def _forget_resume(slug: str) -> None:
+    try:
+        _resume.forget(slug)
+    except OSError as exc:
+        _log.warning("could not drop %s from the graphs a launch resumes: %s", slug, exc)
 
 
 def get_hub(slug: str) -> Hub:
@@ -296,9 +360,11 @@ async def shutdown_all() -> int:
     """Stop every running graph (services and stores close cleanly) and end
     every live connection, the editors' /ws and the /stream media clients, so
     the server exits on one Ctrl+C. The graphs stop side by side: one whose
-    stop hangs holds up none of the others. Then the Ollama this process
+    stop hangs holds up none of the others. An exit is not an Off: the graphs
+    stay recorded as On for the next launch. Then the Ollama this process
     started, if any, stops too. Safe to call twice. Returns how many graphs
     were stopped."""
+    await _cancel_launch()
     stopped = await asyncio.gather(*(_stop_for_exit(hub) for hub in list(HUBS.values())))
     await _ollama.stop_if_started()  # only the Ollama this process started
     return sum(stopped)
@@ -308,12 +374,119 @@ async def _stop_for_exit(hub: Hub) -> bool:
     stopped = False
     if hub.runtime is not None:
         try:
-            await hub.power_off()
+            await hub.stop_for_exit()
             stopped = True
         except Exception:
             _log.exception("could not stop graph %s cleanly", hub.slug)
     hub.close_connections()
     return stopped
+
+
+# ---- After a launch ---------------------------------------------------------
+# `python -m boltjar serve` starts these once its Ready line is out, so none of
+# them holds up the boot: (1) start Ollama when "Start Ollama with Boltjar" is
+# on, (2) refresh the local providers' model lists, so validation sees the
+# installed models, (3) power back On the graphs that were On, when "Resume
+# workflows after launch" is on. Each step's failure is reported and the next
+# one runs anyway.
+
+_launch_log = logging.getLogger("boltjar.launch")
+# How long step (2) waits for the local providers to answer.
+LOCAL_REFRESH_WAIT = 15.0  # seconds
+_launch_task: asyncio.Task | None = None
+
+
+def start_launch(resume: bool = True) -> asyncio.Task | None:
+    """Run the launch steps in the background on the running loop. `resume`
+    False (--no-resume) skips step (3) for this launch. None without a loop."""
+    global _launch_task
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return None
+    _launch_task = loop.create_task(launch_sequence(resume))
+    _launch_task.add_done_callback(_launch_done)
+    return _launch_task
+
+
+def _launch_done(task: asyncio.Task) -> None:
+    if not task.cancelled() and task.exception() is not None:
+        _launch_log.error("the launch steps stopped: %s", task.exception())
+
+
+async def _cancel_launch() -> None:
+    """An exit mid-launch: no graph is resumed once the stop has begun."""
+    task = _launch_task
+    if task is None or task.done():
+        return
+    task.cancel()
+    await asyncio.wait({task}, timeout=2)
+
+
+async def launch_sequence(resume: bool = True) -> None:
+    prefs = _settings.load()
+    if prefs["start_ollama"]:
+        try:
+            tone, text = await _ollama.launch_start()
+        except Exception as exc:
+            tone, text = "warn", f"Ollama did not start: {exc}"
+        _launch_log.log(logging.WARNING if tone == "warn" else logging.INFO, text,
+                        extra={"tone": tone})
+    await refresh_local_models()
+    if not prefs["resume_workflows"]:
+        return
+    if not resume:
+        GRAPH_LINES.note("--no-resume: the graphs that were On stay Off for this launch")
+        return
+    await resume_graphs()
+
+
+async def refresh_local_models() -> None:
+    """Ask the providers on this computer (Ollama, a loopback endpoint) for
+    their models, so a graph resumed next validates against what is installed.
+    Never the cloud providers; bounded by LOCAL_REFRESH_WAIT."""
+    local = _discovery.local_providers()
+    if not local:
+        return
+    try:
+        await asyncio.wait_for(_discovery.refresh(set(local), changed=True), LOCAL_REFRESH_WAIT)
+    except asyncio.TimeoutError:
+        _launch_log.info("the local model lists took longer than %s s", LOCAL_REFRESH_WAIT)
+    except Exception as exc:
+        _launch_log.info("could not refresh the local model lists: %s", exc)
+
+
+async def resume_graphs() -> tuple[list[str], list[str]]:
+    """Power back On, one at a time and through the normal validation, every
+    graph recorded as On, from the JSON it ran. One that fails stays Off and
+    stays recorded (no person turned it Off), with one terminal line and the
+    problems kept for the editor; one whose graph file is gone is dropped.
+    Returns (resumed, not resumed) slugs."""
+    resumed: list[str] = []
+    failed: list[str] = []
+    for slug, graph in _resume.recorded():
+        if _graph_path(slug) is None:
+            _forget_resume(slug)
+            GRAPH_LINES.resume_dropped(slug)
+            continue
+        hub = get_hub(slug)
+        if hub.runtime is not None:  # already turned On since the boot
+            resumed.append(slug)
+            continue
+        try:
+            problems = await hub.power_on(graph, resuming=True)
+        except Exception as exc:
+            problems = [{"node": None, "kind": "error", "message": _secrets.redact(str(exc))}]
+            hub._launch_notice({"kind": "invalid", "problems": problems})
+        if hub.runtime is not None:
+            resumed.append(slug)
+            continue
+        failed.append(slug)
+        if problems:
+            GRAPH_LINES.not_resumed(slug, problems[0])
+        # a graph that failed to build printed its own line (its `error` event)
+    GRAPH_LINES.resume_summary(resumed, failed)
+    return resumed, failed
 
 
 def running_graphs() -> list[str]:
@@ -1446,6 +1619,10 @@ async def runtime_ws(websocket: WebSocket, slug: str = "_default") -> None:
     outgoing.put_nowait({"kind": "status", "power": "on" if hub.runtime else "off", "slug": hub.slug})
     # the live set, so this editor can tell live nodes/wires from draft-only edits.
     outgoing.put_nowait({**hub.live_graph_event(), "slug": hub.slug})
+    # why the last launch could not resume this graph, until it turns On or Off.
+    notice = LAUNCH_NOTICES.get(hub.slug)
+    if notice is not None and hub.runtime is None:
+        outgoing.put_nowait({**notice, "slug": hub.slug})
     for event in list(hub.latest.values()):
         outgoing.put_nowait(event)
 

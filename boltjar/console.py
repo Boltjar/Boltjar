@@ -915,6 +915,34 @@ class GraphLines:
             self._limited((slug, event.get("node"), kind), "info", "Log",
                           summarize(event.get("message"), 200))
 
+    # ------------------------------------------------ resuming after a launch
+    def not_resumed(self, slug: str, problem: dict | str) -> None:
+        """A graph that was On could not be powered back On: one line, the
+        graph and its first problem (the editor lists them all)."""
+        text = _problem_text(problem) if isinstance(problem, dict) else str(problem)
+        self._line(slug, "warn", "On", f"not resumed: {summarize(text, 200)}")
+
+    def resume_dropped(self, slug: str) -> None:
+        """A graph that was On whose graph file is gone: it is no longer resumed."""
+        self._line(slug, "info", "Off", "its graph file is gone: no longer resumed", glyph="off")
+
+    def resume_summary(self, resumed: Sequence[str], failed: Sequence[str]) -> None:
+        """`resumed 2: chat, digest`, or `resumed 1 of 2: chat; not resumed: digest`."""
+        total = len(resumed) + len(failed)
+        if not total:
+            self.note("no graph was On when Boltjar last stopped: nothing to resume")
+            return
+        text = f"resumed {len(resumed)}" + (f" of {total}" if failed else "")
+        if resumed:
+            text += ": " + ", ".join(resumed)
+        if failed:
+            text += "; not resumed: " + ", ".join(failed)
+        self.note(text, "warn" if failed else "ok")
+
+    def note(self, text: str, tone: str = "info") -> None:
+        """A plain line under the Graphs rule, about no one graph."""
+        self.log.log(_TONE_LEVELS[tone], text, extra={"tone": tone})
+
     def _limited(self, key: tuple, tone: str, event: str, detail: str) -> None:
         now = self.clock()
         tokens, last, skipped = self._buckets.get(key, (float(self.BURST), now, 0))

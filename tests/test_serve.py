@@ -69,7 +69,22 @@ def test_serve_dispatches_with_its_options(monkeypatch):
     monkeypatch.setattr(serve, "serve", lambda **kw: seen.update(kw) or 0)
     assert cli.main(["serve", "--port", "8771", "--no-browser"]) == 0
     assert seen == {"host": "127.0.0.1", "port": 8771, "open_browser": False,
-                    "verbose": False, "allow_remote": False}
+                    "verbose": False, "allow_remote": False, "resume": True}
+
+
+def test_no_resume_reaches_serve(monkeypatch):
+    seen = {}
+    monkeypatch.setattr(serve, "serve", lambda **kw: seen.update(kw) or 0)
+    assert cli.main(["serve", "--no-resume"]) == 0
+    assert seen["resume"] is False
+
+
+def test_the_help_explains_no_resume(capsys):
+    with pytest.raises(SystemExit):
+        cli.parse_args(["serve", "--help"])
+    shown = " ".join(capsys.readouterr().out.split())
+    assert "--no-resume" in shown
+    assert "graphs that were On" in shown
 
 
 # ---------------------------------------------------------------- the bind policy

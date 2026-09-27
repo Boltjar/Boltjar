@@ -423,6 +423,18 @@ def _base_url(provider: str) -> str:
     return endpoint.base_url if endpoint is not None else ""
 
 
+def local_providers() -> list[str]:
+    """The usable providers that run on this computer: Ollama, and any
+    OpenAI-compatible endpoint on a loopback address (LM Studio, llama.cpp).
+    A launch refreshes these before it resumes graphs, never the cloud ones."""
+    out = []
+    for name in _usable_names():
+        host = (urlsplit(_base_url(name)).hostname or "").lower()
+        if host in _LOOPBACK or host.endswith(".localhost"):
+            out.append(name)
+    return out
+
+
 def failure_kind(exc: BaseException, provider: str) -> str:
     """What kind of failure `exc` is (see Listing.failure)."""
     if isinstance(exc, httpx.TimeoutException):

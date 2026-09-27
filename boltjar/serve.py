@@ -2,7 +2,7 @@
 boltjar.serve: `python -m boltjar serve`, the command that runs Boltjar.
 
     python -m boltjar serve [--host 127.0.0.1] [--port 8770] [--no-browser]
-                            [--verbose] [--allow-remote]
+                            [--verbose] [--allow-remote] [--no-resume]
 
 It prints the banner with the boot checklist beside it (Python and its
 virtualenv, the editor bundle, the port, the node packs): only facts that hold
@@ -11,8 +11,11 @@ Connections, so the editor shows them and the terminal never does. It binds the
 port itself so a busy one is reported before anything starts, runs uvicorn in
 this process with the console's quiet log setup, opens the browser once the
 server reports ready (when a screen is in front of whoever started it, see
-browser_can_open), and on Ctrl+C stops every graph and ends every live
-connection BEFORE uvicorn waits on them, so one press exits.
+browser_can_open), then runs the launch steps in the background (start Ollama,
+refresh the local model lists, resume the graphs that were On: see
+boltjar.server.launch_sequence; --no-resume skips the last for one launch), and
+on Ctrl+C stops every graph and ends every live connection BEFORE uvicorn waits
+on them, so one press exits.
 
 The server learns its bind through the environment: BOLTJAR_ALLOWED_HOSTS (the
 host names a request may carry, a comma list) and BOLTJAR_PORT.
@@ -351,13 +354,14 @@ def make_server(config, shutdown_app: Callable[[], Awaitable[int]],
 
 
 def serve(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT, open_browser: bool = True,
-          verbose: bool = False, allow_remote: bool = False) -> int:
-    """Run Boltjar until Ctrl+C. Returns the process exit code."""
+          verbose: bool = False, allow_remote: bool = False, resume: bool = True) -> int:
+    """Run Boltjar until Ctrl+C. Returns the process exit code. `resume` False
+    (--no-resume) leaves Off, for this launch, the graphs that were On."""
     console.prepare_streams()
     out = console.Console()
     logging.config.dictConfig(console.log_config(verbose))
     try:
-        return _serve(out, host, port, open_browser, verbose, allow_remote)
+        return _serve(out, host, port, open_browser, verbose, allow_remote, resume)
     except KeyboardInterrupt:  # Ctrl+C during the boot
         out.section("Shutdown")
         out.goodbye()
@@ -367,7 +371,7 @@ def serve(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT, open_browser: bool
 
 
 def _serve(out: console.Console, host: str, port: int, open_browser: bool,
-           verbose: bool, allow_remote: bool) -> int:
+           verbose: bool, allow_remote: bool, resume: bool = True) -> int:
     rows: list[console.Row] = []
 
     def refuse(row: console.Row, code: int) -> int:
@@ -418,6 +422,8 @@ def _serve(out: console.Console, host: str, port: int, open_browser: bool,
         out.section("Graphs", console.times_note())
         if opens:
             threading.Thread(target=webbrowser.open, args=(url,), daemon=True).start()
+        # in the background, after the Ready line: never part of the boot
+        app_module.start_launch(resume=resume)
 
     def stopping() -> None:
         out.section("Shutdown")
