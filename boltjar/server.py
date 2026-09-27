@@ -30,6 +30,7 @@ import asyncio
 import contextlib
 import datetime
 import hmac
+import itertools
 import json
 import logging
 import pathlib
@@ -38,6 +39,7 @@ import re
 import sqlite3
 
 import os
+from secrets import token_hex
 
 import httpx
 
@@ -167,6 +169,7 @@ class Hub:
     def broadcast(self, event: dict) -> None:
         event["slug"] = self.slug
         if event.get("kind") == "value":
+            event["id"] = _next_event_id()
             self.latest[(event["node"], event["port"])] = event
         for q in list(self.subscribers):
             try:
@@ -402,6 +405,18 @@ def _drop_earlier(slug: str) -> None:
         _resume.drop_earlier([slug])
     except OSError as exc:
         _log.warning("could not drop %s from the graphs a launch resumes: %s", slug, exc)
+
+
+# Every value event gets an id, and the replay on connect sends the cached
+# event, id and all: an editor reconnecting to the graph it shows can tell a
+# value it already holds from a new one. The random prefix keeps the ids of a
+# restarted server apart from the ones an editor still holds from before.
+_EVENT_BOOT = token_hex(4)
+_EVENT_SEQ = itertools.count(1)
+
+
+def _next_event_id() -> str:
+    return f"{_EVENT_BOOT}-{next(_EVENT_SEQ)}"
 
 
 def get_hub(slug: str) -> Hub:
