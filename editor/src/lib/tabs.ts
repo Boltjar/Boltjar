@@ -164,9 +164,8 @@ export function openPlan(
 
 /** Whether two graphs hold the same workflow: the same nodes (type, config,
  *  position, size, disabled), wires and groups, whatever their order or name.
- *  `sizeOf` gives the size a node shows at (a node saved without one takes
- *  its default), so a graph read from a file compares with one the canvas
- *  wrote; without it a size counts only when both sides have one. */
+ *  `sizeOf` gives the size each node counts at (`() => null`: sizes never
+ *  count); without it a size counts only when both sides have one. */
 export function sameGraph(
   a: Graph,
   b: Graph,

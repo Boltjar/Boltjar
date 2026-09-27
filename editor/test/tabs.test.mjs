@@ -187,6 +187,9 @@ check("a size both sides have counts",
     sameGraph(SAVED, { ...SAVED, nodes: [node("a", 0, { size: [260, 140] }), node("b", 300)] }, sizeOf), true);
   check("and a resize counts", sameGraph(SAVED, { ...SAVED, nodes: [node("a", 0, { size: [400, 140] }), node("b", 300)] }, sizeOf), false);
 }
+check("with sizes ruled out, a node the canvas grew to fit its text still matches (the editor judges old drafts so)",
+  sameGraph({ ...SAVED, nodes: [node("a", 0, { size: [300, 160] }), node("b", 300)] },
+    { ...SAVED, nodes: [node("a", 0, { size: [300, 208] }), node("b", 300)] }, () => null), true);
 check("group member order does not count",
   sameGraph({ ...SAVED, groups: [{ id: "g", title: "G", color: "blue", members: ["a", "b"] }] },
     { ...SAVED, groups: [{ id: "g", title: "G", color: "blue", members: ["b", "a"] }] }), true);

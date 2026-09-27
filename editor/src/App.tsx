@@ -8,7 +8,7 @@
 // ============================================================================
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ReactFlowProvider } from "@xyflow/react";
-import type { Graph, GraphNode } from "./types/protocol";
+import type { Graph } from "./types/protocol";
 import { useObjectInfo } from "./hooks/useObjectInfo";
 import { useModels } from "./hooks/useModels";
 import { useRunSocket } from "./hooks/useRunSocket";
@@ -16,7 +16,7 @@ import { useTabsStatus } from "./hooks/useTabsStatus";
 import { useGraph } from "./hooks/useGraph";
 import { useVersion } from "./hooks/useVersion";
 import { EditorProvider, type InboundWire } from "./lib/editorContext";
-import { migrateGraph, outputType, toRFNode, DATABASE_ID, KV_STORE_ID } from "./lib/graphAdapter";
+import { migrateGraph, outputType, DATABASE_ID, KV_STORE_ID } from "./lib/graphAdapter";
 import { WIRELESS_IN_ID, WIRELESS_OUT_ID, ROUTER_ID, isGhostHandle, type WirelessChannelMap, type WirelessSocket } from "./lib/dynamicPorts";
 import { deadWireNotice, healDeadWires } from "./lib/deadWires";
 import { notifyStoreChanged } from "./lib/storeEvents";
@@ -107,11 +107,12 @@ function dropAside(slug: string) {
 function asideOffer(slug: string): string {
   return `aside:${slug}`;
 }
-/** The size a saved node shows at on the canvas (its own, else its type's
- *  default), so a graph read from a file compares with a draft the canvas wrote. */
-function canvasSize(n: GraphNode): [number, number] | null {
-  const rf = toRFNode(n);
-  return typeof rf.width === "number" && typeof rf.height === "number" ? [rf.width, rf.height] : null;
+/** Whether an old draft (no base, no dirty mark) holds the saved copy. Node
+ *  sizes do not count: the canvas grows a node to fit its content on its own
+ *  (a saved 300x160 text node is drafted at 300x208 without anyone touching
+ *  it), so a size tells nothing about edits. */
+function oldDraftMatches(g: Graph, saved: Graph): boolean {
+  return sameGraph(g, saved, () => null);
 }
 /** Persists open/closed state and library mode for both rails. */
 const RAILS_KEY = "boltjar:ui:rails";
@@ -430,7 +431,7 @@ export default function App() {
       // in place of the save. Only a slug the server does not know opens its
       // draft, else empty.
       const saved = loaded.kind === "graph" ? loaded : null;
-      const plan = openPlan(draft, saved, (g) => !!saved && sameGraph(g, saved.graph, canvasSize));
+      const plan = openPlan(draft, saved, (g) => !!saved && oldDraftMatches(g, saved.graph));
       versionRef.current.set(target, saved?.version ?? null);
       if (plan === "draft" && draft) loadHealed({ ...draft.graph, name: target }, { dirty: true });
       else if (saved) loadHealed({ ...saved.graph, name: target });
@@ -1254,7 +1255,7 @@ export default function App() {
     const loaded = await fetchServerGraph(slug);
     if (loaded.kind === "unreadable") return null;
     const saved = loaded.kind === "graph" ? loaded : null;
-    const plan = openPlan(draft, saved, (g) => !!saved && sameGraph(g, saved.graph, canvasSize));
+    const plan = openPlan(draft, saved, (g) => !!saved && oldDraftMatches(g, saved.graph));
     if (plan === "draft" && draft) return draft.graph;
     return saved?.graph ?? null;
   }, []);
