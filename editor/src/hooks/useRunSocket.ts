@@ -255,7 +255,7 @@ export function useRunSocket(slug: string = "_default"): RunSocketState {
         // live. Keep the last known power; the `status` replayed on reconnect sets it.
         onClose: () => setConnected(false),
         onError: () =>
-          handlersRef.current.pushLine({ kind: "error", ts: nowStamp(), level: "bad", message: "socket error: is the backend running on :8770?" }),
+          handlersRef.current.pushLine({ kind: "error", ts: nowStamp(), level: "bad", message: `lost the connection to the Boltjar server at ${window.location.host}; is it still running?` }),
         onMessage: (data) => {
           try {
             handlersRef.current.handleEvent(JSON.parse(String(data)) as RunEvent);
