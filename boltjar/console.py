@@ -840,6 +840,8 @@ class GraphLines:
         self.clock = clock
         # (slug, node, kind) -> (tokens, last refill time, lines skipped)
         self._buckets: dict[tuple, tuple[float, float, int]] = {}
+        # the graphs seen turning On and not off since
+        self._live: set[str] = set()
 
     def feed(self, event: dict) -> None:
         kind = event.get("kind")
@@ -852,9 +854,13 @@ class GraphLines:
             nodes = event.get("nodes") or []
             if nodes:
                 self._release(slug)
+                self._live.add(slug)
                 self._line(slug, "ok", "On", _count(len(nodes), "node"), glyph="on")
         elif kind == "status":
-            if event.get("power") == "off":
+            # an Off for a graph that was not running (the editor, the API or the
+            # MCP server can send one anyway) changes nothing, so it prints nothing
+            if event.get("power") == "off" and slug in self._live:
+                self._live.discard(slug)
                 self._release(slug)
                 self._line(slug, "info", "Off", glyph="off")
         elif kind == "invalid":
@@ -864,6 +870,9 @@ class GraphLines:
                 hints.append(f"and {len(problems) - _PROBLEMS_SHOWN} more, listed in the editor")
             self._line(slug, "warn", "On", f"refused: {_count(len(problems), 'problem')}", hints=hints)
         elif kind == "error":
+            # the power-on stopped whatever ran before it, then failed: nothing runs
+            self._live.discard(slug)
+            self._release(slug)
             self._line(slug, "bad", "On", f"failed: {summarize(event.get('error'), 200)}")
         elif kind == "node_error":
             node = str(event.get("node"))

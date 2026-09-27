@@ -577,18 +577,18 @@ def test_power_changes_and_failures_become_lines(lines):
     graph.feed({"kind": "live_graph", "nodes": ["a", "b", "c"], "edges": [], "slug": "chat"})
     graph.feed({"kind": "invalid", "slug": "chat",
                 "problems": [{"node": "x", "message": "required input 'in' is not connected"}]})
-    graph.feed({"kind": "error", "error": "ValueError('unknown node type: x')", "slug": "chat"})
     graph.feed({"kind": "node_error", "node": "LLM", "error": "RuntimeError('boom')", "slug": "chat"})
     graph.feed({"kind": "status", "power": "off", "slug": "chat"})
     graph.feed({"kind": "live_graph", "nodes": [], "edges": [], "slug": "chat"})
+    graph.feed({"kind": "error", "error": "ValueError('unknown node type: x')", "slug": "chat"})
     assert seen() == [
         ("chat", "ok", "On", "3 nodes"),
         ("chat", "warn", "On", "refused: 1 problem"),
-        ("chat", "bad", "On", "failed: ValueError('unknown node type: x')"),
         ("chat", "bad", "LLM", "RuntimeError('boom')"),
         ("chat", "info", "Off", ""),
+        ("chat", "bad", "On", "failed: ValueError('unknown node type: x')"),
     ]
-    assert [r.glyph for r in caplog.records] == ["on", "warn", "bad", "bad", "off"]
+    assert [r.glyph for r in caplog.records] == ["on", "warn", "bad", "off", "bad"]
 
 
 def test_a_refused_power_on_lists_its_problems_as_hints(lines):
@@ -662,8 +662,30 @@ def test_repeats_are_rate_limited_and_counted(lines):
     assert seen()[-1][3] == "E (15 similar lines skipped)"
 
 
+def test_off_prints_only_for_a_graph_that_was_on(lines):
+    graph, _clock, seen, _caplog = lines
+    off = {"kind": "status", "power": "off"}
+    graph.feed({**off, "slug": "idle"})  # an Off sent to a graph that never ran
+    graph.feed({"kind": "live_graph", "nodes": ["a"], "edges": [], "slug": "chat"})
+    graph.feed({**off, "slug": "chat"})
+    graph.feed({**off, "slug": "chat"})  # and again, once it is already off
+    assert seen() == [("chat", "ok", "On", "1 node"), ("chat", "info", "Off", "")]
+
+
+def test_a_failed_power_on_leaves_nothing_to_turn_off(lines):
+    graph, _clock, seen, _caplog = lines
+    graph.feed({"kind": "live_graph", "nodes": ["a"], "edges": [], "slug": "chat"})
+    for _ in range(8):  # the running graph's errors, three of them held back
+        graph.feed({"kind": "node_error", "node": "LLM", "error": "E", "slug": "chat"})
+    graph.feed({"kind": "error", "error": "ValueError('x')", "slug": "chat"})  # a Restart that failed
+    graph.feed({"kind": "status", "power": "off", "slug": "chat"})
+    assert seen()[-2:] == [("chat", "info", "LLM", "3 more errors skipped"),
+                           ("chat", "bad", "On", "failed: ValueError('x')")]
+
+
 def test_power_off_reports_what_was_held_back(lines):
     graph, _clock, seen, _caplog = lines
+    graph.feed({"kind": "live_graph", "nodes": ["LLM"], "edges": [], "slug": "chat"})
     for _ in range(8):
         graph.feed({"kind": "node_error", "node": "LLM", "error": "E", "slug": "chat"})
     graph.feed({"kind": "status", "power": "off", "slug": "chat"})
