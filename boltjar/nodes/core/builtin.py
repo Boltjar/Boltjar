@@ -16,8 +16,7 @@ import sqlite3
 
 from simpleeval import SimpleEval, DEFAULT_FUNCTIONS
 
-from boltjar.sdk import (node, Kind, NodeFailure, Port, Widget, code, model, select, slider,
-                         store_schema, tmpl)
+from boltjar.sdk import node, Kind, NodeFailure, Port, Widget, code, model, select, slider, tmpl
 from boltjar import endpoints, model_discovery, models
 from boltjar.secrets import resolve_secrets
 
@@ -1615,9 +1614,12 @@ def ensure_declared_schemas(graph: dict) -> dict:
                            "other nodes use.")
 class Database:
     outputs = [Port("db", "db")]
-    # the tables this graph needs: created when the graph runs (open) and when
-    # the editor opens the graph.
-    schema: Widget = store_schema()
+    # the tables this graph needs, as [{name, columns: [{name, type, pk}]}] (the
+    # shape SqliteStore.schema() returns, row counts left out). Saved with the
+    # graph and never drawn as a knob: the schema editor (Edit) keeps it in step
+    # with what it builds. Created when the graph runs (open) and when the editor
+    # opens the graph (ensure_declared_schemas), so a shared graph carries them.
+    schema: Widget = Widget(kind="schema", default=[], surface="hidden", promotable=False)
 
     async def open(self, ctx):
         """The runtime opens a store before any node fires, however the graph

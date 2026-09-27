@@ -97,7 +97,10 @@ class Widget:
     one declaration drives the knob, the right-click menu, promotion, the
     secret/tag autocomplete, and the op-shaped reshape."""
     name: str = ""
-    kind: str = "text"       # text | number | bool | select | code | secret | color | model | schema
+    # text | number | bool | select | code | secret | color | model | schema. A
+    # schema widget holds the core Database node's declared tables, and only that
+    # node's tables are created from one.
+    kind: str = "text"
     default: Any = None
     options: list[Any] = field(default_factory=list)
     label: str = ""
@@ -108,7 +111,8 @@ class Widget:
     step: Any = None
     # --- declared behaviour (the editor reads these, never a per-id table) ---
     # "body" (inline knob) | "modal" (opens the shared modal) | "hidden" (saved with
-    # the graph, never drawn: a value a surface of the node keeps, e.g. a store schema)
+    # the graph, never drawn: a value a surface of the node keeps, e.g. the tables
+    # the Database node's schema editor declares)
     surface: str = "body"
     promotable: bool = True  # offer right-click "Convert to input" (knob -> typed port)
     port_type: str = "any"   # the input port's type when this widget is promoted
@@ -202,16 +206,6 @@ def slider(default: float, min: float, max: float, step: float = 0.1, label: str
 def secret(label: str = "") -> Widget:
     """A masked credential field (never logged, never serialized to the editor)."""
     return Widget(kind="secret", default="", label=label)
-
-
-def store_schema() -> Widget:
-    """A store's declared schema: the tables and columns the graph needs its
-    database to have, as [{name, columns: [{name, type, pk}]}] (the shape
-    SqliteStore.schema() returns, row counts left out). Saved with the graph and
-    never drawn as a knob: the node's schema editor keeps it in step with what is
-    built there, and the server creates what is missing when the graph opens or
-    powers on, so a shared graph carries its tables."""
-    return Widget(kind="schema", default=[], surface="hidden", promotable=False)
 
 
 def code(default: str = "", *, accepts_secrets: bool = False, expand: bool = False) -> Widget:
