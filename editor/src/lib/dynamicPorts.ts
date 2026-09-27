@@ -290,6 +290,7 @@ export function concreteInputs(
   }
   const out: ConcretePort[] = [];
   const declared = new Set(def.inputs.map((p) => p.name));
+  const promoted = new Set(nodePromoted(config));
 
   for (const p of def.inputs) {
     if (!p.growable) {
@@ -348,10 +349,12 @@ export function concreteInputs(
         ghost: true,
       });
     } else {
-      // generic growable (Compute value, LLM tools, …): one socket per existing
-      // wire on this base, in a stable order, then a ghost "add" socket.
+      // generic growable (Compute value, Sync / Queue in, …): one socket per
+      // existing wire on this base, in a stable order, then a ghost "add" socket.
+      // A wired knob promoted to an input is not one of them: it is drawn as
+      // that knob's port below (appendPromotedWidgets).
       const mine = [...connectedPortNames]
-        .filter((n) => belongsToBase(n, p.name, declared))
+        .filter((n) => belongsToBase(n, p.name, def, declared, promoted))
         .sort(compareDynamicNames);
       for (const n of mine) {
         out.push({
@@ -810,20 +813,24 @@ export function ghostBase(handle: string): string {
 }
 
 /**
- * A dynamic socket "belongs" to a growable base when it is not a declared port.
- * Compute/LLM tools name their sockets `value0/value1` or after the source; we
- * accept any non-declared name (the only growable base on those nodes).
+ * Whether the wired socket `name` is one of the growable base `base`'s sockets,
+ * decided the way the server fires and validates it (NodeSpec.growable_base).
+ * Never a declared port (it is drawn as itself) nor a knob promoted to an input
+ * (it is drawn as that knob's port). On a node with one growable input, every
+ * other socket, whatever it is named: Compute names them `value0`, a Queue
+ * after its source. On a node with several, the base its name starts with.
  */
 function belongsToBase(
   name: string,
   base: string,
+  def: NodeDef,
   declared: ReadonlySet<string>,
+  promoted: ReadonlySet<string>,
 ): boolean {
-  if (declared.has(name)) return false;
-  // base-prefixed auto names (value0, value1…) or free tag-like names both ok;
-  // a node has at most one growable base in the core pack, so this is exact.
-  void base;
-  return true;
+  if (declared.has(name) || promoted.has(name)) return false;
+  const bases = def.inputs.filter((p) => p.growable).map((p) => p.name);
+  if (bases.length === 1) return bases[0] === base;
+  return bases.find((b) => name.startsWith(b)) === base;
 }
 
 /** Order auto-generated dynamic names (value0, value1, …) numerically, else lexically. */
