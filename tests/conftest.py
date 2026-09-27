@@ -19,7 +19,7 @@ from typing import Callable
 import httpx
 import pytest
 
-from boltjar import endpoints, model_discovery, security
+from boltjar import endpoints, model_discovery, security, settings
 
 
 def pytest_configure(config):
@@ -32,6 +32,8 @@ def pytest_configure(config):
     model_discovery.CACHE_PATH = tmp / "models-cache.json"
     model_discovery.AUTO_REFRESH = False
     endpoints.PATH = tmp / "endpoints.json"
+    # the install's settings: the suite's own
+    settings.PATH = tmp / "settings.json"
 
 
 def pytest_unconfigure(config):
