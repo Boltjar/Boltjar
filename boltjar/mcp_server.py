@@ -34,9 +34,9 @@ mcp = FastMCP("boltjar")
 # is not up. Every HTTP/WS helper surfaces this same instruction.
 _BACKEND_DOWN = (
     "Cannot reach the Boltjar backend at {url}. Start it first (in a foreground "
-    "terminal): .venv\\Scripts\\python.exe -m uvicorn boltjar.server:app --port "
-    "8770 . Override the address with the BOLTJAR_URL env var if it runs "
-    "elsewhere."
+    "terminal): start.bat on Windows, ./start.sh on macOS or Linux, or "
+    "python -m boltjar serve from the install's virtualenv. Override the address "
+    "with the BOLTJAR_URL env var if it runs elsewhere."
 )
 _BAD_TOKEN = (
     "The Boltjar backend at {url} rejected the token in user/data/token. Run this "

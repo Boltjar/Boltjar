@@ -185,11 +185,11 @@ def test_ws_url_derivation(monkeypatch):
 
 def test_observe_reports_backend_down(monkeypatch):
     # a closed port: the socket connect fails and the tool surfaces the clear
-    # "start uvicorn" instruction rather than a raw connection error.
+    # "start the server" instruction rather than a raw connection error.
     monkeypatch.setenv("BOLTJAR_URL", "http://127.0.0.1:1")
     with pytest.raises(RuntimeError) as exc:
         run(mcp_server.observe("x", 1))
-    assert "uvicorn" in str(exc.value)
+    assert "python -m boltjar serve" in str(exc.value)
 
 
 # ---- the install token -------------------------------------------------------
@@ -210,7 +210,7 @@ def test_no_token_file_sends_no_header(monkeypatch, tmp_path):
 
 
 def test_rejected_token_names_the_token_file(monkeypatch):
-    # the backend is up but refuses the token: say so, rather than "start uvicorn".
+    # the backend is up but refuses the token: say so, rather than "start the server".
     monkeypatch.setattr(mcp_server, "_auth_headers", lambda: {"Authorization": "Bearer wrong"})
     with pytest.raises(RuntimeError) as exc:
         run(mcp_server.list_graphs())
@@ -223,4 +223,4 @@ def test_websocket_401_names_the_token_file():
     from websockets.http11 import Response
     refused = InvalidStatus(Response(401, "Unauthorized", Headers()))
     assert "user/data/token" in str(mcp_server._ws_error(refused))
-    assert "uvicorn" in str(mcp_server._ws_error(OSError("connection refused")))
+    assert "python -m boltjar serve" in str(mcp_server._ws_error(OSError("connection refused")))
