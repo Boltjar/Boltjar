@@ -17,8 +17,8 @@ triggered; the Compute never sits on a clock. A Template has a trigger, so it
 runs when fired and passes the trigger on: `Chat -> Template -> LLM` assembles
 the prompt first, then fires the LLM, which reads it.
 
-A trigger is the only way a node runs, so every trigger input must be wired:
-server.validate_graph keeps a graph with an unwired one from turning On.
+A node with a trigger runs only when one fires, so every trigger input must be
+wired: server.validate_graph keeps a graph with an unwired one from turning On.
 
 Node execution surfaces (selected by Kind):
     VALUE / pulled data   def run(**inputs) -> dict        (or def value() -> dict)

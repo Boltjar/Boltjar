@@ -1,4 +1,4 @@
-"""Every trigger input must be wired: a trigger is the only way a node runs.
+"""Every trigger input must be wired: a node with a trigger runs only when one fires.
 
 Validation names each unwired trigger ("required trigger 'x' is not connected",
 the missing-input kind every unwired required input has), so the graph cannot

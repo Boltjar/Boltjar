@@ -907,8 +907,8 @@ def validate_graph(graph: dict) -> list[dict]:
             has_trigger = True
         for p in spec.inputs:
             if p.trigger:
-                # a trigger is the only way a node runs, so every one must be
-                # wired, a growable one on at least one of its sockets.
+                # a node with a trigger runs only when one fires, so every one
+                # must be wired, a growable one on at least one of its sockets.
                 if not _trigger_wired(spec, n, p, wired_into.get(n["id"], set())):
                     problems.append({"node": n["id"], "kind": "missing-input",
                                      "message": f"required trigger '{p.name}' is not connected"})
