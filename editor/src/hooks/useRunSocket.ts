@@ -25,6 +25,7 @@ import { consoleText } from "../lib/mediaSummary";
 import { resumeNoticeAfter } from "../lib/resumeNotice";
 import { pulseWires } from "../lib/wirePulse";
 import { RunConnection } from "../lib/runConnection";
+import { isReplayed } from "../lib/replayedValues";
 
 export type NodeRunStatus = "idle" | "running" | "ok" | "warn" | "error";
 export type { Power };
@@ -106,6 +107,9 @@ export function useRunSocket(slug: string = "_default"): RunSocketState {
   const lineId = useRef(0);
   const chatId = useRef(0);
   const eventTimes = useRef<number[]>([]);
+  // the last value event id seen per `node:port`, so a replay after a
+  // reconnect is recognised (lib/replayedValues); forgotten with the history.
+  const lastValueIds = useRef<Map<string, string>>(new Map());
   // map a Chat Input node -> the output node whose value is its reply (heuristic:
   // we surface every "deliver"/reply value globally, but tie replies to chats by
   // recency since the runtime has one chat turn at a time).
@@ -140,8 +144,10 @@ export function useRunSocket(slug: string = "_default"): RunSocketState {
       setResumeNotice((showing) => resumeNoticeAfter(showing, evt));
       switch (evt.kind) {
         case "value": {
-          eventTimes.current.push(t);
           const key = `${evt.node}:${evt.port}`;
+          // a replay of a value this editor already holds: nothing happened.
+          if (isReplayed(lastValueIds.current, key, evt.id)) break;
+          eventTimes.current.push(t);
           setLiveValues((p) => ({ ...p, [key]: { value: evt.value, at: t } }));
           setValueHistory((p) => {
             const prev = p[key] ?? [];
@@ -279,6 +285,7 @@ export function useRunSocket(slug: string = "_default"): RunSocketState {
       setNodeStatus({});
       setLiveValues({});
       setValueHistory({});
+      lastValueIds.current.clear();
       // clear the live set until the server echoes the new one; nothing counts as
       // live in the gap, and values were just cleared too, so nothing shows.
       setLiveNodes(new Set());
@@ -302,6 +309,7 @@ export function useRunSocket(slug: string = "_default"): RunSocketState {
       setNodeStatus({});
       setLiveValues({});
       setValueHistory({});
+      lastValueIds.current.clear();
       setLiveNodes(new Set());
       setLiveEdges(new Set());
       setProblems([]);
@@ -368,6 +376,7 @@ export function useRunSocket(slug: string = "_default"): RunSocketState {
     setNodeStatus({});
     setLiveValues({});
     setValueHistory({});
+    lastValueIds.current.clear();
     setLiveNodes(new Set());
     setLiveEdges(new Set());
     setProblems([]);

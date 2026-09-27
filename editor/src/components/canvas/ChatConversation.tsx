@@ -72,21 +72,10 @@ export function ChatConversation({ nodeId, inboundSources, valueHistory, power }
     collect(userWire, userTrigWire, "user");
     collect(replyWire, replyTrigWire, "reply");
     // one timeline, oldest first (the value-stream points carry timestamps).
+    // Each point is one event: a replay after a reconnect never lands in the
+    // history twice (lib/replayedValues), so two equal bubbles are two sends.
     merged.sort((a, b) => a.at - b.at);
-    // dedup consecutive identical (side+text) turns. The WS replays cached value
-    // events on every reconnect (refresh / tab switch / network blip) and each
-    // replay adds a new HistPoint with a fresh Date.now() stamp, so the same
-    // turn would otherwise render N times. Collapsing consecutive same-side
-    // same-text bubbles erases the replay duplication without losing any real
-    // back-to-back repeats from the user (you can still ask "Hi?" twice in a
-    // row and see two USER bubbles, separated by the model's reply turn).
-    const out: Turn[] = [];
-    for (const t of merged) {
-      const prev = out[out.length - 1];
-      if (prev && prev.side === t.side && prev.text === t.text) continue;
-      out.push(t);
-    }
-    return out;
+    return merged;
   }, [userWire, replyWire, userTrigWire, replyTrigWire, valueHistory, power]);
 
   const scrollRef = useRef<HTMLDivElement>(null);

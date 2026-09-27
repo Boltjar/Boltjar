@@ -284,6 +284,8 @@ export interface ValueEvent {
   node: string;
   port: string;
   value: unknown;
+  /** unique per event; the replay on connect repeats it (lib/replayedValues). */
+  id?: string;
 }
 
 export interface LogEvent {
