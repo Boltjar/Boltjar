@@ -51,7 +51,7 @@ except Exception:
 from fastapi import Body
 
 from boltjar.sdk import registry_definitions, types, NODE_REGISTRY, Kind
-from boltjar.nodes.core.builtin import DATABASE_ID, database_key
+from boltjar.nodes.core.builtin import ensure_declared_schemas
 from boltjar.runtime import Runtime, node_config
 from boltjar.sqlite_store import SqliteStore
 from boltjar.file_store import FileStore
@@ -228,10 +228,6 @@ class Hub:
         if problems:
             _tap({"kind": "invalid", "problems": problems, "slug": self.slug})
             return problems
-        # the tables the graph declares exist before any node reads them; what
-        # cannot be made to match is a warning on the console, never a refusal.
-        for warning in (await asyncio.to_thread(ensure_declared_schemas, graph))["warnings"]:
-            self.broadcast({"kind": "warning", **warning})
         async with self._lock:
             await self._stop()
             runtime = Runtime(observer=self.broadcast, stream_observer=self.publish_stream)
@@ -890,41 +886,11 @@ async def kv_info(key: str) -> dict:
     return {**info, "path": _repo_path(info["path"])}
 
 
-def ensure_declared_schemas(graph: dict) -> dict:
-    """Create what the graph's Database nodes declare and their stores lack:
-    missing tables and missing columns, nothing else (SqliteStore.ensure_schema
-    never drops, retypes or touches a row). Runs when the editor opens a graph
-    and before a graph powers on. Returns {stores, warnings}: per node, its key
-    and what was created or added; per conflict, one warning naming the node."""
-    stores: list[dict] = []
-    warnings: list[dict] = []
-    for n in graph.get("nodes") or []:
-        if not isinstance(n, dict) or n.get("type") != DATABASE_ID:
-            continue
-        cfg = n.get("config") or {}
-        tables = cfg.get("schema")
-        if not isinstance(tables, list) or not tables:
-            continue
-        key = database_key(str(n.get("id") or ""), cfg)
-        if not key.strip():
-            continue
-        try:
-            out = STORE.ensure_schema(key, tables)
-        except (sqlite3.Error, OSError) as exc:
-            # a store that cannot be opened is reported like a conflict: the
-            # graph still opens, and its DB nodes name the failure when they run.
-            warnings.append({"node": n.get("id"), "message": f"its database could not be opened: {exc}"})
-            continue
-        stores.append({"node": n.get("id"), "key": key,
-                       "created": out["created"], "added": out["added"]})
-        warnings.extend({"node": n.get("id"), "message": m} for m in out["conflicts"])
-    return {"stores": stores, "warnings": warnings}
-
-
 @app.post("/api/stores/ensure")
 async def stores_ensure(graph: dict = Body(...)):
     """The editor calls this when it opens a graph, so the tables the graph
-    declares exist before a table picker or a node looks for them."""
+    declares exist before a table picker looks for them. A running graph
+    creates them itself (the Database node's open)."""
     try:
         graph = migrate(graph)
     except GraphFormatError as exc:

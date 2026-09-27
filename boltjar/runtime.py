@@ -58,6 +58,12 @@ class Ctx:
         whatever the server keeps out of a live event stays out of the terminal."""
         self._rt.log(self.node_id, " ".join(str(a) for a in args), echo=echo)
 
+    def warn(self, *args: Any) -> None:
+        """A warning on the console naming this node: something the node could
+        not do that does not stop the graph (a declared table its database
+        cannot match)."""
+        self._rt.warn(self.node_id, " ".join(str(a) for a in args))
+
     def emit(self, port: str, value: Any) -> None:
         # a source emitting opens a new turn (a fresh propagation + pull cache)
         self._rt.emit(self.node_id, port, value, self._rt.new_turn())
@@ -527,6 +533,9 @@ class Runtime:
         if echo:
             event["echo"] = True
         self._notify(event)
+
+    def warn(self, node_id: str, msg: str) -> None:
+        self._notify({"kind": "warning", "node": node_id, "message": msg})
 
     def _notify(self, event: dict) -> None:
         if self._observer:

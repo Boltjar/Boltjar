@@ -12,6 +12,7 @@ import logging
 import math
 import os
 import re
+import sqlite3
 
 from simpleeval import SimpleEval, DEFAULT_FUNCTIONS
 
@@ -1560,8 +1561,48 @@ DATABASE_ID = "core.store.database"
 def database_key(node_id: str, cfg: dict | None) -> str:
     """The store key a Database node emits: its stable `db_key` (assigned by the
     editor at creation, persisted with the graph, so it survives a rename), else
-    the node id. The server reads it the same way to make declared tables exist."""
+    the node id. Its declared tables are made to exist under the same key."""
     return str((cfg or {}).get("db_key") or node_id or "")
+
+
+def ensure_database_schema(node_id: str, cfg: dict | None) -> tuple[dict | None, list[str]]:
+    """Create what one Database node declares (its `schema` knob) and its store
+    lacks: missing tables and missing columns, nothing else (ensure_schema never
+    drops, retypes or touches a row). Returns (store, warnings): store is
+    {key, created, added} once the store was reached, None when the node
+    declares nothing or its store could not be opened; each warning is a
+    declaration the database cannot match, or the reason the store was not
+    reached."""
+    tables = (cfg or {}).get("schema")
+    if not isinstance(tables, list) or not tables:
+        return None, []
+    key = database_key(node_id, cfg)
+    if not key.strip():
+        return None, []
+    try:
+        out = _store().ensure_schema(key, tables)
+    except (sqlite3.Error, OSError) as exc:
+        # reported like a conflict: the graph still opens and runs, and its DB
+        # nodes name the failure when they run.
+        return None, [f"its database could not be opened: {exc}"]
+    return {"key": key, "created": out["created"], "added": out["added"]}, out["conflicts"]
+
+
+def ensure_declared_schemas(graph: dict) -> dict:
+    """`ensure_database_schema` for every Database node of a graph, which the
+    editor asks for when it opens one (POST /api/stores/ensure). Returns
+    {stores, warnings}: per store reached, its node, key and what was created or
+    added; per warning, the node it names."""
+    stores: list[dict] = []
+    warnings: list[dict] = []
+    for n in graph.get("nodes") or []:
+        if not isinstance(n, dict) or n.get("type") != DATABASE_ID:
+            continue
+        store, messages = ensure_database_schema(str(n.get("id") or ""), n.get("config") or {})
+        if store is not None:
+            stores.append({"node": n.get("id"), **store})
+        warnings.extend({"node": n.get("id"), "message": m} for m in messages)
+    return {"stores": stores, "warnings": warnings}
 
 
 @node(id=DATABASE_ID, name="Database", kind=Kind.STORE, category="Store",
@@ -1569,8 +1610,19 @@ def database_key(node_id: str, cfg: dict | None) -> str:
                            "other nodes use.")
 class Database:
     outputs = [Port("db", "db")]
-    # the tables this graph needs, created when the graph opens or powers on.
+    # the tables this graph needs: created when the graph runs (open) and when
+    # the editor opens the graph.
     schema: Widget = store_schema()
+
+    async def open(self, ctx):
+        """The runtime opens a store before any node fires, however the graph
+        runs (On in the editor, `python -m boltjar`, a script that builds a
+        Runtime), so the declared tables exist by then. What the database
+        cannot match is a warning on the console, never a failure."""
+        _, warnings = await asyncio.to_thread(
+            ensure_database_schema, ctx.node_id, getattr(self, "_node_cfg", {}))
+        for message in warnings:
+            ctx.warn(message)
 
     # Pulled source: emits the store key. The runtime sets _node_id and
     # _node_cfg on each instance at build time.
@@ -1584,8 +1636,6 @@ class Database:
 # editor surfaces only the relevant ones. Knobs are templates: {tag} pulls from
 # a wired source (mirroring HTTP), {{secret.X}} resolves a secret. Every table/
 # column identifier is quoted with `_quote_ident`; every value is a bound param.
-import sqlite3
-
 from boltjar.sqlite_store import _quote_ident
 
 
@@ -1595,7 +1645,7 @@ def _db_friendly_error(exc: Exception, op: str):
     its schema exists: sqlite raises `OperationalError: no such table: NAME`, an
     opaque message. Surface the table name and say where tables come from: the
     DB node never creates one itself, the Database node declares them (its schema
-    editor) and the server creates them when the graph opens or powers on. A
+    editor) and creates them when the graph runs or the editor opens it. A
     statement the store's authorizer refuses (ATTACH and friends) gets a named
     reason too.
     Returns None for anything we don't specifically translate, so the caller

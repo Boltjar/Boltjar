@@ -17,6 +17,7 @@ import pytest
 from local_client import local_client
 
 import boltjar.server as server
+from boltjar.runtime import Runtime
 from boltjar.sqlite_store import SqliteStore
 
 client = local_client()
@@ -145,9 +146,10 @@ def test_opening_the_chat_example_gives_chat_append_its_table(tmp_path, monkeypa
 
 
 def test_chat_example_first_turn_on_a_fresh_install(tmp_path, monkeypatch, vendor_http):
-    """A fresh install has an empty database: powering the chat example on
-    creates the chat_history table it declares, so the very first message runs
-    without a node error and stores both sides of the turn."""
+    """A fresh install has an empty database: running the chat example creates
+    the chat_history table it declares, so the very first message runs without
+    a node error and stores both sides of the turn. It runs on a bare Runtime,
+    as `python -m boltjar` and tools/verify_chat.py do, not through the server."""
     store = SqliteStore(root=tmp_path)
     monkeypatch.setattr(server, "STORE", store)
     monkeypatch.setenv("XAI_API_KEY", "test-xai-key")  # the TTS call is faked below
@@ -155,24 +157,21 @@ def test_chat_example_first_turn_on_a_fresh_install(tmp_path, monkeypatch, vendo
     graph = _chat_example()
     db_key = _chat_db_key(graph)
 
-    hub = server.Hub()
-    events: asyncio.Queue = asyncio.Queue()
-    hub.subscribers.add(events)
-    seen: list[dict] = []
+    events: list[dict] = []
+    rt = Runtime(observer=events.append)
+    rt.build(graph)
 
     async def drive() -> None:
-        assert await hub.power_on(graph) is None
-        hub.send_chat("chat", "hi")
+        await rt.run()
+        rt.send_chat("chat", "hi")
         for _ in range(60):  # until the spoken reply reaches the audio preview
             await asyncio.sleep(0.05)
-            while not events.empty():
-                seen.append(events.get_nowait())
-            if any(e["kind"] == "value" and e["node"] == "Audio Preview" for e in seen):
+            if any(e["kind"] == "value" and e["node"] == "Audio Preview" for e in events):
                 break
-        await hub.power_off()
+        await rt.stop()
 
     asyncio.run(drive())
-    assert not [e for e in seen if e["kind"] in ("node_error", "warning", "error")], seen
+    assert not [e for e in events if e["kind"] in ("node_error", "warning")], events
     rows = store.query(db_key, "SELECT sender, message FROM chat_history ORDER BY id")
     assert [r["sender"] for r in rows] == ["User", "Assistant"]
     assert rows[0]["message"] == "hi"

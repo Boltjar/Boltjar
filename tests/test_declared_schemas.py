@@ -1,17 +1,23 @@
 """A Database node declares the tables its graph needs (its hidden `schema`
-widget), and the server makes them exist: when the editor opens the graph
-(POST /api/stores/ensure) and before the graph powers on. Only what is missing
-is added; a table or column that exists is never dropped, retyped or emptied,
-and a declaration the database cannot match is a warning, never a refusal."""
+widget), and they are made to exist: when the editor opens the graph (POST
+/api/stores/ensure) and whenever the graph runs, however it runs (the server's
+On, `python -m boltjar`, a script that builds a Runtime), before any node
+fires. Only what is missing is added; a table or column that exists is never
+dropped, retyped or emptied, and a declaration the database cannot match is a
+warning, never a refusal."""
 from __future__ import annotations
 
 import asyncio
+import json
+import pathlib
 import sqlite3
+import sys
 
 import pytest
 from local_client import local_client
 
 import boltjar.server as server
+from boltjar.runtime import Runtime
 from boltjar.sdk import NODE_REGISTRY
 from boltjar.sqlite_store import SqliteStore
 
@@ -145,3 +151,46 @@ def test_power_on_warns_about_a_conflict_and_still_runs(store):
         ("a", "notes.body is declared text but the database holds it as blob"),
     ]
     assert any(e["kind"] == "status" and e["power"] == "on" for e in seen)
+
+
+def _run(graph: dict) -> list[dict]:
+    """Run a graph on a bare Runtime, without the server, and return its events."""
+    events: list[dict] = []
+    rt = Runtime(observer=events.append)
+    rt.build(graph)
+
+    async def drive():
+        await rt.run()
+        await rt.stop()
+
+    asyncio.run(drive())
+    return events
+
+
+def test_a_graph_run_without_the_server_creates_its_tables(store):
+    events = _run(_graph(_db("a", NOTES, db_key="k1")))
+    assert _tables(store, "k1") == ["notes"]
+    assert not [e for e in events if e["kind"] in ("warning", "node_error")], events
+
+
+def test_a_graph_run_without_the_server_warns_about_a_conflict(store):
+    store.create_table("k1", "notes", [{"name": "id", "type": "int", "pk": True},
+                                      {"name": "body", "type": "real"}])
+    events = _run(_graph(_db("a", NOTES, db_key="k1")))
+    assert [(e["node"], e["message"]) for e in events if e["kind"] == "warning"] == [
+        ("a", "notes.body is declared text but the database holds it as real"),
+    ]
+
+
+def test_the_headless_runner_creates_the_chat_example_table(store, monkeypatch, capsys):
+    import boltjar.__main__ as headless
+
+    chat = pathlib.Path(__file__).resolve().parent.parent / "examples" / "chat.json"
+    key = next(n["config"]["db_key"] for n in json.loads(chat.read_text(encoding="utf-8"))["nodes"]
+               if n["type"] == "core.store.database")
+    monkeypatch.setattr(headless.packs, "load_all", lambda: None)  # the core is already loaded
+    monkeypatch.setattr(headless.secrets, "ensure_loaded", lambda: None)
+    monkeypatch.setattr(sys, "argv", ["boltjar", str(chat), "0"])
+    headless.main()
+    assert _tables(store, key) == ["chat_history"]
+    assert '"kind": "warning"' not in capsys.readouterr().out
