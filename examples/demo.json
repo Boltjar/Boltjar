@@ -2,19 +2,19 @@
   "format": 1,
   "name": "demo",
   "nodes": [
-    { "id": "fire", "type": "core.trigger.manual",   "config": {}, "pos": [80, -100] },
-    { "id": "sys",  "type": "core.value.text",       "config": { "text": "You are a friendly, concise assistant." }, "pos": [80, 120] },
-    { "id": "usr",  "type": "core.value.text",       "config": { "text": "Hi there, how are you today?" }, "pos": [80, 340] },
-    { "id": "tpl",  "type": "core.data.template",    "config": { "template": "{system}\n\nUser: {user}" }, "pos": [420, 200] },
-    { "id": "llm",  "type": "core.ai.llm",           "config": {}, "pos": [760, 280] },
-    { "id": "out",  "type": "core.output.log",       "config": { "label": "assistant" }, "pos": [1080, 280] }
+    { "id": "Fire",          "type": "core.trigger.manual", "config": {}, "pos": [0, -20] },
+    { "id": "System prompt", "type": "core.value.text",     "config": { "text": "You are a friendly, concise assistant." }, "pos": [0, 210], "size": [300, 160] },
+    { "id": "User message",  "type": "core.value.text",     "config": { "text": "Hi there, how are you today?" }, "pos": [0, 470], "size": [300, 160] },
+    { "id": "Prompt",        "type": "core.data.template",  "config": { "template": "{system_prompt}\n\nUser: {user_message}" }, "pos": [420, 170], "size": [320, 260] },
+    { "id": "LLM",           "type": "core.ai.llm",         "config": {}, "pos": [840, 110] },
+    { "id": "Log",           "type": "core.output.log",     "config": { "label": "assistant" }, "pos": [1260, 150] }
   ],
   "edges": [
-    { "src": "fire", "src_port": "trigger", "dst": "tpl", "dst_port": "trigger" },
-    { "src": "sys",  "src_port": "out",   "dst": "tpl", "dst_port": "system" },
-    { "src": "usr",  "src_port": "out",   "dst": "tpl", "dst_port": "user" },
-    { "src": "tpl",  "src_port": "trigger", "dst": "llm", "dst_port": "trigger" },
-    { "src": "tpl",  "src_port": "out",   "dst": "llm", "dst_port": "prompt" },
-    { "src": "llm",  "src_port": "response",  "dst": "out", "dst_port": "in" }
+    { "src": "Fire",          "src_port": "trigger",  "dst": "Prompt", "dst_port": "trigger" },
+    { "src": "System prompt", "src_port": "out",      "dst": "Prompt", "dst_port": "system_prompt" },
+    { "src": "User message",  "src_port": "out",      "dst": "Prompt", "dst_port": "user_message" },
+    { "src": "Prompt",        "src_port": "trigger",  "dst": "LLM",    "dst_port": "trigger" },
+    { "src": "Prompt",        "src_port": "out",      "dst": "LLM",    "dst_port": "prompt" },
+    { "src": "LLM",           "src_port": "response", "dst": "Log",    "dst_port": "in" }
   ]
 }

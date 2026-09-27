@@ -151,21 +151,21 @@ def test_demo_one_fire_runs_the_llm_once(fires):
     async def drive() -> None:
         assert await hub.power_on(graph) is None, "the demo turns On"
         # the Manual fires once when the graph turns On, then once per press.
-        await watch.until(lambda ev: len(watch.log_lines("out")) >= 1)
+        await watch.until(lambda ev: len(watch.log_lines("Log")) >= 1)
         for n in range(2, fires + 1):
-            hub.fire_manual("fire")
-            await watch.until(lambda ev, n=n: len(watch.log_lines("out")) >= n)
+            hub.fire_manual("Fire")
+            await watch.until(lambda ev, n=n: len(watch.log_lines("Log")) >= n)
         await hub.power_off()
 
     asyncio.run(drive())
     assert not watch.trouble(), watch.trouble()
-    assert watch.fires() == {"tpl": fires, "llm": fires, "out": fires}, \
+    assert watch.fires() == {"Prompt": fires, "LLM": fires, "Log": fires}, \
         "the Template, then the LLM, then the Log: each once per fire"
-    assert len(watch.emits("llm", "response")) == fires, "one reply per fire"
-    lines = watch.log_lines("out")
+    assert len(watch.emits("LLM", "response")) == fires, "one reply per fire"
+    lines = watch.log_lines("Log")
     assert len(lines) == fires and len(set(lines)) == 1, "one log line per fire"
     assert lines[0].startswith("assistant: ") and "Hi there, how are you today?" in lines[0]
-    assert watch.emits("tpl", "out") == [
+    assert watch.emits("Prompt", "out") == [
         "You are a friendly, concise assistant.\n\nUser: Hi there, how are you today?"] * fires, \
         "the LLM reads the prompt the Template assembled, once per fire"
 
@@ -175,18 +175,18 @@ def test_demo_with_its_template_bypassed_still_fires_the_llm():
     # disabled one passes its trigger through: the LLM runs once per fire, with
     # no prompt, instead of the graph turning On with nothing ever running.
     graph = _example("demo")
-    next(n for n in graph["nodes"] if n["id"] == "tpl")["disabled"] = True
+    next(n for n in graph["nodes"] if n["id"] == "Prompt")["disabled"] = True
     hub = server.Hub()
     watch = Watch(hub)
 
     async def drive() -> None:
         assert await hub.power_on(graph) is None, "a bypassed Template keeps the demo powerable"
-        await watch.until(lambda ev: len(watch.log_lines("out")) >= 1)
-        hub.fire_manual("fire")
-        await watch.until(lambda ev: len(watch.log_lines("out")) >= 2)
+        await watch.until(lambda ev: len(watch.log_lines("Log")) >= 1)
+        hub.fire_manual("Fire")
+        await watch.until(lambda ev: len(watch.log_lines("Log")) >= 2)
         await hub.power_off()
 
     asyncio.run(drive())
     assert not watch.trouble(), watch.trouble()
-    assert watch.fires() == {"llm": 2, "out": 2}, "the LLM and the Log, once per fire"
-    assert watch.log_lines("out") == ["assistant: [mock] "] * 2, "an empty prompt"
+    assert watch.fires() == {"LLM": 2, "Log": 2}, "the LLM and the Log, once per fire"
+    assert watch.log_lines("Log") == ["assistant: [mock] "] * 2, "an empty prompt"
