@@ -724,19 +724,26 @@ button{font-family:inherit;}
 .pv-event .pv-eventmeta{font-family:var(--font-mono); font-size:10px; color:var(--ink-faint);}
 .pv-event .pv-eventmeta b{color:var(--ink);}
 .pv-event .pv-payload{margin-left:auto; font-family:var(--font-mono); font-size:9px; color:var(--ink-dim); max-width:90px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
-/* audio result: play/stop, an equaliser waveform, autoplay */
-.pv-audio{display:flex; flex-direction:column; gap:7px; padding:9px 11px; background:var(--bg-1); border:1px solid var(--line); border-radius:var(--radius-sm);}
-.pv-audio-row{display:flex; align-items:center; gap:9px;}
+/* audio result: the shared AudioScope trace, play/stop with the clip's caption,
+   autoplay. --pc is the wire's type colour (audio green, pcm-audio orange). */
+.pv-audio{--pc:var(--t-audio); display:flex; flex-direction:column; gap:7px;}
+.pv-audio-row{display:flex; align-items:center; gap:9px; min-width:0;}
 .pv-audio-btn{width:28px; height:28px; flex:none; border-radius:50%; cursor:pointer; display:grid; place-items:center; font-size:11px; line-height:1; padding:0;
-  color:var(--t-audio); border:1px solid color-mix(in srgb, var(--t-audio) 45%, var(--line)); background:color-mix(in srgb, var(--t-audio) 12%, transparent);
+  color:var(--pc); border:1px solid color-mix(in srgb, var(--pc) 45%, var(--line)); background:color-mix(in srgb, var(--pc) 12%, transparent);
   transition:border-color var(--dur-1), background var(--dur-1);}
-.pv-audio-btn:hover{border-color:var(--t-audio); background:color-mix(in srgb, var(--t-audio) 22%, transparent);}
-.pv-audio-btn.playing{box-shadow:0 0 10px color-mix(in srgb, var(--t-audio) 55%, transparent);}
-.pv-wave{display:flex; align-items:center; gap:2px; height:24px; flex:1 1 auto; min-width:0;}
-.pv-wave span{flex:1 1 0; min-width:2px; max-width:5px; height:4px; border-radius:2px; align-self:center; background:color-mix(in srgb, var(--t-audio) 45%, transparent);}
-.pv-wave.playing span{background:var(--t-audio); animation:wave 0.66s ease-in-out infinite alternate;}
-.pv-audio-cap{font-family:var(--font-mono); font-size:10px; color:var(--ink-dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
-@keyframes wave{from{height:3px;} to{height:22px;}}
+.pv-audio-btn:hover:not(:disabled){border-color:var(--pc); background:color-mix(in srgb, var(--pc) 22%, transparent);}
+.pv-audio-btn.playing{box-shadow:0 0 10px color-mix(in srgb, var(--pc) 55%, transparent);}
+.pv-audio-btn:disabled{cursor:default; opacity:0.45;}
+.pv-audio-cap{flex:1 1 auto; min-width:0; font-family:var(--font-mono); font-size:10px; color:var(--ink-dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+/* AudioScope: the one audio display. The canvas draws the plot and the time
+   axis; the box gives it the sunken well, and a note sits over the plot when
+   there are no samples to draw (same height in every state). */
+.ascope{--pc:var(--t-audio); position:relative; background:var(--bg-2); border:1px solid var(--line); border-radius:var(--radius-sm); overflow:hidden;}
+.ascope-canvas{display:block; width:100%; touch-action:none;}
+.ascope.seekable .ascope-canvas{cursor:pointer;}
+.ascope-note{position:absolute; left:0; right:0; top:0; display:flex; align-items:center; justify-content:center; pointer-events:none;
+  font-family:var(--font-mono); font-size:9.5px; color:var(--ink-faint);}
+.ascope-note span{padding:1px 6px; border-radius:3px; background:var(--bg-2);}
 .pv-json{font-family:var(--font-mono); font-size:10.5px; line-height:1.55; color:var(--ink-dim);
   background:var(--bg-1); border:1px solid var(--line); border-radius:var(--radius-sm); padding:7px 9px; max-height:140px; overflow:auto;}
 .pv-json .jn{display:flex; gap:5px; align-items:baseline;}

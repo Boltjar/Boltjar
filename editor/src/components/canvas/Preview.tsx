@@ -7,11 +7,16 @@
 //   json   → a collapsible tree
 //   bool   → a lamp
 //   event  → a pulse blink + tick read-out
+//   audio  → the shared AudioScope trace + play/stop + Autoplay
 //   default→ formatted mono text
 // All inputs are values already serialised by the runtime's `_preview`.
 // ============================================================================
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type { HistPoint } from "../../hooks/useRunSocket";
+import { canTap, looksLikeData } from "../../lib/audioScope";
+import { mediaSummary } from "../../lib/mediaSummary";
+import { typeColorVar } from "../../lib/types";
+import { AudioScope, releaseTap, wakeAudio } from "./AudioScope";
 import { Knob } from "./Knob";
 
 export type PreviewType = "text" | "number" | "json" | "bool" | "event" | "audio" | "any";
@@ -29,6 +34,8 @@ export function previewTypeFor(portType: string | undefined, value: unknown): Pr
 
 interface PreviewProps {
   type: PreviewType;
+  /** the upstream port type (audio vs pcm-audio colours the scope) */
+  portType?: string;
   history: HistPoint[];
   latest: HistPoint | undefined;
   /** the Preview node's autoplay config (only the audio renderer uses it). */
@@ -36,11 +43,11 @@ interface PreviewProps {
   onAutoplay: (v: boolean) => void;
 }
 
-export function PreviewBody({ type, history, latest, autoplay, onAutoplay }: PreviewProps) {
+export function PreviewBody({ type, portType, history, latest, autoplay, onAutoplay }: PreviewProps) {
   // an audio preview always shows its player (with the Autoplay knob), even before
   // the first clip arrives, so autoplay can be set up ahead of time.
   if (type === "audio") {
-    return <AudioPlayer value={latest?.value} autoplay={autoplay} onAutoplay={onAutoplay} />;
+    return <AudioPlayer value={latest?.value} portType={portType} autoplay={autoplay} onAutoplay={onAutoplay} />;
   }
   if (latest === undefined && history.length === 0) {
     return <div className="pv-empty">waiting for a value…</div>;
@@ -144,7 +151,7 @@ function audioUrl(v: unknown): string | null {
  *  mock wrapper). A mock TTS emits the line to say; the player voices it. */
 function audioText(v: unknown): string {
   // a real clip (data/blob/http url) has no speakable text behind it; the <audio>
-  // plays it and the caption falls back to "audio" rather than dumping the url.
+  // plays it and the caption names the clip rather than dumping the url.
   if (audioUrl(v)) return "";
   let s = typeof v === "string" ? v : String(v ?? "");
   const m = /^<audio:\s*([\s\S]*?)>?$/.exec(s.trim());
@@ -152,75 +159,112 @@ function audioText(v: unknown): string {
   return s.trim();
 }
 
-/** An audio result: a play/stop button, an equaliser waveform that animates
- *  while playing, and an autoplay toggle. A real clip url plays through <audio>;
- *  a mock TTS line is voiced with the browser's speech synthesis, so the graph
- *  actually speaks. Autoplay voices each freshly arrived clip once. */
-function AudioPlayer({ value, autoplay, onAutoplay }: { value: unknown; autoplay: boolean; onAutoplay: (v: boolean) => void }) {
+/** An audio result: the shared AudioScope trace of the clip, a play/stop button
+ *  with a caption naming the clip, and the Autoplay knob. A real clip url plays
+ *  through <audio> (the scope follows it, seeks it and meters it); a line of
+ *  text on an audio wire (a mock TTS) is voiced with the browser's speech
+ *  synthesis and has no samples to draw. Autoplay plays each new clip once. */
+function AudioPlayer({ value, portType, autoplay, onAutoplay }: {
+  value: unknown;
+  portType: string | undefined;
+  autoplay: boolean;
+  onAutoplay: (v: boolean) => void;
+}) {
   const url = audioUrl(value);
   const text = useMemo(() => audioText(value), [value]);
-  const [speaking, setSpeaking] = useState(false);
-  const audioRef = useRef<HTMLAudioElement>(null);
+  // encoded samples that are not a playable url are never read aloud
+  const raw = !url && looksLikeData(text);
+  const speech = !url && !raw && text !== "";
+  const [playing, setPlaying] = useState(false);
+  const mediaRef = useRef<HTMLAudioElement | null>(null);
+  const [media, setMedia] = useState<HTMLAudioElement | null>(null);
+  const bindMedia = useCallback((el: HTMLAudioElement | null) => {
+    // React hands a new element (or null) only when the old one is gone for good
+    if (mediaRef.current && mediaRef.current !== el) releaseTap(mediaRef.current);
+    mediaRef.current = el;
+    setMedia(el);
+  }, []);
   const lastPlayed = useRef<string | null>(null);
+  // an element routed through Web Audio for the level meter stays routed for
+  // life, so a clip that must not be routed (cross-origin) gets its own element.
+  const tappable = url ? canTap(url, window.location.origin) : false;
 
   const stop = useCallback(() => {
     window.speechSynthesis?.cancel();
-    audioRef.current?.pause();
-    setSpeaking(false);
+    const a = mediaRef.current;
+    if (a) {
+      a.pause();
+      a.currentTime = 0;
+    }
+    setPlaying(false);
   }, []);
 
   const play = useCallback(() => {
     if (url) {
-      const a = audioRef.current;
-      if (a) { a.currentTime = 0; void a.play().catch(() => {}); }
+      const a = mediaRef.current;
+      if (!a) return;
+      // play from where the scope was sought to; from the start once finished
+      if (a.ended || (Number.isFinite(a.duration) && a.currentTime >= a.duration)) a.currentTime = 0;
+      void a.play().catch(() => {});
       return;
     }
     const synth = window.speechSynthesis;
-    if (!synth || !text) return;
+    if (!synth || !speech) return;
     synth.cancel();
     const u = new SpeechSynthesisUtterance(text);
-    u.onstart = () => setSpeaking(true);
-    u.onend = () => setSpeaking(false);
-    u.onerror = () => setSpeaking(false);
+    u.onstart = () => setPlaying(true);
+    u.onend = () => setPlaying(false);
+    u.onerror = () => setPlaying(false);
     synth.speak(u);
-  }, [url, text]);
+  }, [url, text, speech]);
 
-  // voice each newly arrived clip once (not on every re-render)
+  // play each newly arrived clip once (not on every re-render)
   useEffect(() => {
-    const id = url ?? text;
+    const id = url ?? (speech ? text : "");
     if (!id || lastPlayed.current === id) return;
     lastPlayed.current = id;
     if (autoplay) play();
-  }, [url, text, autoplay, play]);
+  }, [url, text, speech, autoplay, play]);
 
   // stop any speech if the node unmounts
   useEffect(() => () => { window.speechSynthesis?.cancel(); }, []);
 
+  const caption = url
+    ? mediaSummary(url) ?? "audio"
+    : speech ? text
+      : raw ? "encoded audio data"
+        : "no clip yet";
+  const note = speech ? "spoken by the browser, no audio data" : raw ? "cannot read this audio" : undefined;
+  const canPlay = !!url || speech;
+
   return (
-    <div className="pv-audio nodrag">
+    <div className="pv-audio nodrag" style={{ ["--pc" as string]: typeColorVar(portType ?? "audio") } as CSSProperties}>
+      <AudioScope src={url} type={portType ?? "audio"} media={media} note={note} />
       <div className="pv-audio-row">
         <button
-          className={`pv-audio-btn ${speaking ? "playing" : ""}`}
-          onClick={() => (speaking ? stop() : play())}
-          title={speaking ? "stop" : "play"}
+          className={`pv-audio-btn ${playing ? "playing" : ""}`}
+          onClick={() => {
+            if (playing) return stop();
+            if (url) wakeAudio(); // the click is the gesture that lets the level meter start
+            play();
+          }}
+          disabled={!canPlay}
+          title={playing ? "stop" : "play"}
         >
-          {speaking ? "◼" : "▶"}
+          {playing ? "◼" : "▶"}
         </button>
-        <div className={`pv-wave ${speaking ? "playing" : ""}`} aria-hidden="true">
-          {Array.from({ length: 13 }).map((_, i) => (
-            <span key={i} style={{ animationDelay: `${(i % 7) * 0.08}s` }} />
-          ))}
-        </div>
+        <div className="pv-audio-cap" title={caption}>{caption}</div>
       </div>
-      <div className="pv-audio-cap" title={text}>{text || "audio"}</div>
       <Knob label="Autoplay" kind="bool" value={autoplay} onChange={(v) => onAutoplay(Boolean(v))} />
       {url && (
         <audio
-          ref={audioRef}
+          key={tappable ? "tap" : "plain"}
+          ref={bindMedia}
           src={url}
-          onPlay={() => setSpeaking(true)}
-          onPause={() => setSpeaking(false)}
-          onEnded={() => setSpeaking(false)}
+          preload="auto"
+          onPlay={() => setPlaying(true)}
+          onPause={() => setPlaying(false)}
+          onEnded={() => setPlaying(false)}
         />
       )}
     </div>

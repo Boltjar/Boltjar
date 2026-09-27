@@ -664,7 +664,7 @@ function PreviewSurface({
         <span className="pv-srcname">{wire.src}.{wire.srcPort}</span>
         <span className="pv-srctype" style={{ ["--pc" as string]: typeColorVar(srcType) } as CSSProperties}>{srcType}</span>
       </div>
-      <PreviewBody type={pvType} history={history} latest={latest} autoplay={autoplay} onAutoplay={onAutoplay} />
+      <PreviewBody type={pvType} portType={srcType} history={history} latest={latest} autoplay={autoplay} onAutoplay={onAutoplay} />
     </div>
   );
 }
