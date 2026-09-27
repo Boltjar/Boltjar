@@ -18,6 +18,7 @@ import { EditorProvider, type InboundWire } from "./lib/editorContext";
 import { outputType, DATABASE_ID, KV_STORE_ID, GRAPH_FORMAT } from "./lib/graphAdapter";
 import { WIRELESS_IN_ID, WIRELESS_OUT_ID, ROUTER_ID, isGhostHandle, type WirelessChannelMap, type WirelessSocket } from "./lib/dynamicPorts";
 import { deadWireNotice, healDeadWires } from "./lib/deadWires";
+import { fetchServerGraph, serverError, unreadableNotice } from "./lib/serverGraph";
 import { mod } from "./lib/platform";
 import { PRESETS } from "./lib/presets";
 import { CommandBar, type PowerPhase, type PrimaryAction } from "./components/CommandBar";
@@ -113,6 +114,20 @@ export default function App() {
   }, []);
   const activeSlug = tabsState.active;
   const openSlugs = tabsState.open;
+  // Take a tab off the strip. When it was the active one, the previous tab (or
+  // the next, or none when the strip goes empty) becomes active.
+  const dropTab = useCallback((slug: string) => {
+    setTabsState((prev) => {
+      const idx = prev.open.indexOf(slug);
+      if (idx < 0) return prev;
+      const open = prev.open.filter((s) => s !== slug);
+      let active = prev.active;
+      if (active === slug) {
+        active = open[idx - 1] ?? open[idx] ?? open[0] ?? null;
+      }
+      return { open, active };
+    });
+  }, [setTabsState]);
 
   // The runtime socket follows the active tab. The hook tears down + reopens
   // the ws when the slug changes, and the Hub replays its status on subscribe.
@@ -216,8 +231,9 @@ export default function App() {
 
   // ── slug-switch effect: when the active tab changes, save the outgoing
   //    slug's draft into localStorage, then load the new slug's draft (or
-  //    fetch from the server, or fall back to an empty graph). Runs on first
-  //    mount with the boot slug (defaultTabs.active) and on every switch. ──
+  //    fetch it from the server; a slug the server does not know starts as an
+  //    empty graph). Runs on first mount with the boot slug
+  //    (defaultTabs.active) and on every switch. ──
   useEffect(() => {
     // wait for BOTH catalogs: every load heals the graph's dead wires, and that
     // judges each node against its definition and (model-driven nodes: LLM, TTS,
@@ -270,21 +286,21 @@ export default function App() {
           }
         }
       } catch { /* corrupt draft, fall through */ }
-      // else fetch the server graph
-      try {
-        const res = await fetch(`/api/graphs/${target}`);
-        if (res.ok) {
-          const g = (await res.json()) as Graph;
-          loadHealed({ ...g, name: target });
-        } else {
-          loadGraph({ ...EMPTY_GRAPH, name: target });
-        }
-      } catch {
-        loadGraph({ ...EMPTY_GRAPH, name: target });
-      } finally {
-        loadedSlugRef.current = target;
+      // else fetch the server graph. Only a slug the server does not know opens
+      // empty; one it cannot serve (a graph from a newer Boltjar, a server error)
+      // is reported and its tab closed, and the canvas keeps what it showed, so
+      // no Save can put an empty graph in that file's place.
+      const loaded = await fetchServerGraph(target);
+      if (loaded.kind === "unreadable") {
+        socket.notice(unreadableNotice(target, loaded.error), "bad");
         setGraphLoading(false);
+        dropTab(target);
+        return;
       }
+      if (loaded.kind === "graph") loadHealed({ ...loaded.graph, name: target });
+      else loadGraph({ ...EMPTY_GRAPH, name: target });
+      loadedSlugRef.current = target;
+      setGraphLoading(false);
     })();
   // intentionally narrow deps: re-run only when slug or catalog readiness flips.
   // toGraph + loadGraph are stable across renders of the same data.
@@ -486,13 +502,15 @@ export default function App() {
         setLastSaved(Date.now());
         return true;
       }
+      // a refused save says why (a saved graph this Boltjar cannot read is kept).
+      socket.notice(`did not save ${target}: ${await serverError(res)}`, "bad");
       return false;
     } catch {
       return false;
     } finally {
       setSaving(false);
     }
-  }, [toGraph, markSaved, activeSlug]);
+  }, [toGraph, markSaved, activeSlug, socket.notice]);
 
   // ── power: validate then start (gated), stop, restart ──
   const powerOn = useCallback(async () => {
@@ -778,19 +796,9 @@ export default function App() {
     // 2) drop the slug's draft (it's no longer represented by an open tab).
     try { localStorage.removeItem(draftKey(slug)); } catch { /* ignore */ }
 
-    // 3) remove from the open list; if it was active, activate the previous
-    //    tab (or the next, or null when the list goes empty).
-    setTabsState((prev) => {
-      const idx = prev.open.indexOf(slug);
-      if (idx < 0) return prev;
-      const open = prev.open.filter((s) => s !== slug);
-      let active = prev.active;
-      if (active === slug) {
-        active = open[idx - 1] ?? open[idx] ?? open[0] ?? null;
-      }
-      return { open, active };
-    });
-  }, [setTabsState]);
+    // 3) take it off the strip (the neighbouring tab becomes active).
+    dropTab(slug);
+  }, [dropTab]);
 
   // ── tab context menu actions ────────────────────────────────────────────
   // Rename: move the draft under a new slug and PUT/DELETE on the server so the
@@ -798,11 +806,9 @@ export default function App() {
   const renameTab = useCallback(async (slug: string, nextSlug: string) => {
     const fresh = nextSlug.trim();
     if (!fresh || fresh === slug) return;
-    // refuse clashes with an already-open or already-saved slug
-    try {
-      const peek = await fetch(`/api/graphs/${encodeURIComponent(fresh)}`);
-      if (peek.ok) return; // already exists on server
-    } catch { /* offline: fall through */ }
+    // refuse clashes with an already-open or already-saved slug: only a slug the
+    // server does not know is free (one it cannot read is still a saved graph).
+    if ((await fetchServerGraph(fresh)).kind !== "missing") return;
     setTabsState((prev) => {
       if (prev.open.includes(fresh)) return prev;
       // copy draft to the new key, drop the old
