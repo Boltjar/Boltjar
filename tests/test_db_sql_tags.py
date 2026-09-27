@@ -100,6 +100,32 @@ def test_bare_template_matches_numbers_and_numeric_text(store):
     assert len(_run("query", "SELECT name FROM people LIMIT {n}", n="2")["rows"]) == 2
 
 
+@pytest.mark.parametrize("text, bound", [
+    ("7", 7), ("-12", -12), ("3.5", 3.5), ("0.1", 0.1),
+    # anything the number would not spell back exactly stays the text it was.
+    ("007", "007"), ("+7", "+7"), (" 7", " 7"), ("1e5", "1e5"), ("1_000", "1_000"),
+    ("nan", "nan"), ("inf", "inf"), (str(2**63), str(2**63)), ("seven", "seven"),
+])
+def test_bare_tag_binds_text_that_spells_a_number_as_the_number(text, bound):
+    sql, params = _bind_sql_tags("WHERE id = {id}", {"id": text})
+    assert params == {"_tag0": bound}
+    assert type(params["_tag0"]) is type(bound)
+    # in quotes it is always text.
+    assert _bind_sql_tags("WHERE id = '{id}'", {"id": text})[1] == {"_tag0": text}
+
+
+def test_numeric_text_matches_where_nothing_gives_it_a_type(store):
+    # an untyped column and json_extract have no affinity to turn '3' into 3: the
+    # pasted template compared numbers there, and the bound tag must too.
+    store.execute("mydb", "CREATE TABLE events(id, data)")
+    store.execute("mydb", """INSERT INTO events VALUES(3, '{"user": 7}')""")
+    assert _run("query", "SELECT id FROM events WHERE id = {id}", id="3")["rows"] == [{"id": 3}]
+    rows = _run("query", "SELECT id FROM events WHERE json_extract(data, '$.user') = {user}", user="7")["rows"]
+    assert rows == [{"id": 3}]
+    # quoted, the tag is text, as the quoted literal always was.
+    assert _run("query", "SELECT id FROM events WHERE id = '{id}'", id="3")["rows"] == []
+
+
 def test_like_pattern_matches_a_substring(store):
     rows = _run("query", "SELECT name FROM people WHERE name LIKE '%{q}%' ORDER BY name", q="li")["rows"]
     assert rows == [{"name": "Alice"}]

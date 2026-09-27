@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import os
 import re
 
@@ -1604,6 +1605,31 @@ def _parse_kv_lines(text: str, resolve=None) -> dict:
 
 
 _SQL_TAG_RE = re.compile(r"\{([A-Za-z_]\w*)\}")
+# SQLite's INTEGER is 64-bit; a wider Python int cannot be bound at all.
+_SQL_INT_RANGE = range(-2**63, 2**63)
+
+
+def _bare_sql_value(value):
+    """What a bare {tag} binds. A number (or bytes) binds as itself, and so does
+    text that spells a number exactly (str(int(s)) == s, or repr(float(s)) == s),
+    the numeric literal the pasted template used to be: an untyped column or
+    `json_extract(...) = {id}` still matches '7'. Anything else binds as text."""
+    if isinstance(value, (int, float, bytes)):
+        return value
+    text = value if isinstance(value, str) else str(value)
+    try:
+        number = int(text)
+        if str(number) == text and number in _SQL_INT_RANGE:
+            return number
+    except ValueError:
+        pass
+    try:
+        number = float(text)
+        if repr(number) == text and math.isfinite(number):
+            return number
+    except ValueError:
+        pass
+    return text
 
 
 def _sql_quoted_end(sql: str, start: int, quote: str) -> int:
@@ -1625,7 +1651,8 @@ def _bind_sql_tags(sql: str, tags: dict) -> tuple[str, dict]:
     wired value (a webhook body, an LLM reply) is always data, never SQL: it can
     never add a clause or name a table or column. By where the tag sits, read the
     way SQLite's own tokenizer reads the text:
-      - bare, `id = {row_id}`: one parameter holding the value as wired;
+      - bare, `id = {row_id}`: one parameter holding the value as wired, text
+        that spells a number exactly bound as that number (_bare_sql_value);
       - in quotes, `name = '{name}'`, `"{name}"` or `'%{q}%'`: the quoted text
         becomes its pieces joined to text parameters with ||, the same string
         the old pasted template spelled out (a double-quoted one included, which
@@ -1676,8 +1703,7 @@ def _bind_sql_tags(sql: str, tags: dict) -> tuple[str, dict]:
             continue
         m = _SQL_TAG_RE.match(sql, i) if c == "{" else None
         if m is not None and m.group(1) in tags:
-            value = tags[m.group(1)]
-            out.append(bind(value if isinstance(value, (str, int, float, bytes)) else str(value)))
+            out.append(bind(_bare_sql_value(tags[m.group(1)])))
             i = m.end()
             continue
         out.append(c)
