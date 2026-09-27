@@ -5,8 +5,11 @@
 //   - what the store's info payload lists, and whether that list is the whole store
 //   - which mode the picker is in: the list, or a text box
 //   - whether the saved value is missing from a list that has loaded
+//   - which store change makes a picker read its list again
 // A saved value is what the graph runs with, so nothing here ever clears it. A
-// value the list lacks stays the selection and is marked "not found".
+// value the list lacks stays the selection and is marked "not found"; the list
+// is read again every time the dropdown opens and whenever the schema editor
+// changes the same store, so a table created later shows up without a remount.
 // ============================================================================
 
 export type StoreKind = "db" | "kv";
@@ -66,4 +69,14 @@ export function isMissing(value: string, list: StoreList | null): boolean {
   if (value === "" || list === null || !list.complete) return false;
   if (hasTemplateRef(value)) return false;
   return !list.names.includes(value);
+}
+
+/** Whether a change to one store is a change to the store a picker lists from.
+ *  The same key names a db and a kv store independently; an unwired picker
+ *  (key null) listens to nothing. */
+export function refreshesOn(
+  watch: { kind: StoreKind; key: string | null },
+  change: { kind: StoreKind; key: string },
+): boolean {
+  return watch.key !== null && watch.kind === change.kind && watch.key === change.key;
 }

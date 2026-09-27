@@ -7,7 +7,8 @@
 // so a node's overflow:hidden never clips it. Placeholder is the trigger's empty
 // label, NOT a selectable row: a value the options lack still shows as itself
 // (hiding a saved value behind the placeholder reads as if it were gone). An
-// optional "＋ new…" action sits at the bottom.
+// optional "＋ new…" action sits at the bottom; `onOpen` runs each time the popup
+// opens (a caller whose options can change re-reads them then).
 // ============================================================================
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -23,13 +24,15 @@ interface SelectProps {
   /** when given, a "＋ <newLabel>" row appears at the bottom and calls this. */
   onNew?: () => void;
   newLabel?: string;
+  /** called each time the popup opens. */
+  onOpen?: () => void;
   /** the value is known to be absent from a fully read list: the trigger still
    *  shows it, with a quiet "not found" mark. */
   missing?: boolean;
   className?: string;
 }
 
-export function Select({ value, options, placeholder, onChange, onNew, newLabel = "new…", missing = false, className }: SelectProps) {
+export function Select({ value, options, placeholder, onChange, onNew, newLabel = "new…", onOpen, missing = false, className }: SelectProps) {
   const opts: SelectOption[] = options.map((o) => (typeof o === "string" ? { value: o, label: o } : o));
   const current = opts.find((o) => o.value === value);
   const shown = current ? current.label : value;
@@ -66,7 +69,7 @@ export function Select({ value, options, placeholder, onChange, onNew, newLabel 
         ref={triggerRef}
         className={`wf-select-trigger nodrag ${shown ? "" : "placeholder"} ${missing ? "missing" : ""}`}
         title={missing ? `${value} is not in the list` : undefined}
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => { if (!open) onOpen?.(); setOpen(!open); }}
       >
         <span className="wf-select-val">{shown || placeholder || "pick…"}</span>
         {missing && <span className="wf-select-note">not found</span>}

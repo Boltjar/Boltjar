@@ -2,15 +2,25 @@
 // StoreSelect: the store-aware dropdown for a widget that declares
 // `options_from` ("db.tables" -> the wired db's tables, "kv.keys" -> the wired
 // kv's keys). It renders the shared `Select` (dark popup, the one dropdown
-// template). A saved value the list lacks stays the selection, marked "not
-// found"; it is never cleared. The text box is only for a kv "new key" or a
-// {tag} value, and its back button returns to the list with the value kept. The
-// decisions live in lib/storeSelect.ts. When no store is wired it shows a
-// disabled hint.
+// template). The list is read when the store is wired, again every time the
+// dropdown opens, and again when the schema editor changes the same store, so a
+// table created later (a DB exec at run time, the schema editor) shows up.
+// A saved value the list lacks stays the selection, marked "not found"; it is
+// never cleared. The text box is only for a kv "new key" or a {tag} value, and
+// its back button returns to the list with the value kept. The decisions live
+// in lib/storeSelect.ts. When no store is wired it shows a disabled hint.
 // ============================================================================
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Icon } from "../../lib/icons";
-import { isMissing, storeListFrom, storeSelectMode, type StoreKind, type StoreList } from "../../lib/storeSelect";
+import { onStoreChanged } from "../../lib/storeEvents";
+import {
+  isMissing,
+  refreshesOn,
+  storeListFrom,
+  storeSelectMode,
+  type StoreKind,
+  type StoreList,
+} from "../../lib/storeSelect";
 import { Select } from "./Select";
 
 interface StoreSelectProps {
@@ -30,20 +40,35 @@ export function StoreSelect({ source, storeKey, value, placeholder, onChange }: 
   // what the picker's own controls chose: "new key" -> true, back -> false,
   // null while neither has been used (the value decides).
   const [typingOverride, setTypingOverride] = useState<boolean | null>(null);
+  // only the latest read may land, so a slow early read never overwrites a newer one
+  const readSeq = useRef(0);
 
-  useEffect(() => {
-    setList(null);
+  const refresh = useCallback(() => {
     if (!storeKey) return;
-    let cancelled = false;
+    const seq = ++readSeq.current;
     fetch(`/api/store/${kind}/${encodeURIComponent(storeKey)}/info`)
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
-        if (!cancelled && data) setList(storeListFrom(listName, data));
+        if (seq === readSeq.current && data) setList(storeListFrom(listName, data));
       })
-      // a failed read says nothing about the value: nothing is marked missing
+      // a failed read says nothing about the value: keep the last list
       .catch(() => {});
-    return () => { cancelled = true; };
   }, [kind, listName, storeKey]);
+
+  // a different store (or none): forget the old list and read the new one.
+  useEffect(() => {
+    setList(null);
+    refresh();
+    return () => { readSeq.current += 1; };   // drop a read still in flight
+  }, [refresh]);
+
+  // the schema editor changed this store: read the list again.
+  useEffect(
+    () => onStoreChanged((changedKind, changedKey) => {
+      if (refreshesOn({ kind, key: storeKey }, { kind: changedKind, key: changedKey })) refresh();
+    }),
+    [kind, storeKey, refresh],
+  );
 
   if (!storeKey) {
     return (
@@ -85,6 +110,7 @@ export function StoreSelect({ source, storeKey, value, placeholder, onChange }: 
       options={list?.names ?? []}
       placeholder={placeholder}
       onChange={onChange}
+      onOpen={refresh}
       missing={isMissing(value, list)}
       // tables are created/managed in the schema editor, so the table picker is
       // pick-only. kv keys can be created on the fly (a `set`), so keys allow it.

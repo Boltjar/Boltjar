@@ -6,14 +6,17 @@
 // a type dropdown, a pk checkbox; destructive actions ask an inline Yes/No), no
 // window.prompt anywhere. Every mutation hits the REST endpoints on the shared
 // store (which return the fresh schema) and the editor adopts that result, so
-// the node's compact body and this editor stay in step. There is deliberately
-// NO delete-database button: whole-DB delete is the normal node-delete flow.
+// the node's compact body and this editor stay in step; each one that succeeds
+// also tells the table pickers wired to the store (lib/storeEvents). There is
+// deliberately NO delete-database button: whole-DB delete is the normal
+// node-delete flow.
 // ============================================================================
 import { useState, type CSSProperties } from "react";
 import type { DbColumn, DbTable } from "../types/protocol";
 import { Icon } from "../lib/icons";
 import { typeColorVar } from "../lib/types";
 import { useDbSchema } from "../hooks/useDbSchema";
+import { notifyStoreChanged } from "../lib/storeEvents";
 import { Select } from "./canvas/Select";
 
 /** The column types offered in the dropdown -> the SQLite affinity sent to the
@@ -67,6 +70,8 @@ export function DbSchemaEditor({ dbKey, disabled }: DbSchemaEditorProps) {
         const txt = await res.text().catch(() => "");
         throw new Error(txt || `${method} ${path} ${res.status}`);
       }
+      // the store changed: every table picker wired to it reads its list again
+      notifyStoreChanged("db", dbKey);
       const json = (await res.json()) as { schema?: DbTable[] };
       if (json.schema) setTables(json.schema);
       else refetch();

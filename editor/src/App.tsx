@@ -19,6 +19,7 @@ import { EditorProvider, type InboundWire } from "./lib/editorContext";
 import { outputType, DATABASE_ID, KV_STORE_ID, GRAPH_FORMAT } from "./lib/graphAdapter";
 import { WIRELESS_IN_ID, WIRELESS_OUT_ID, ROUTER_ID, isGhostHandle, type WirelessChannelMap, type WirelessSocket } from "./lib/dynamicPorts";
 import { deadWireNotice, healDeadWires } from "./lib/deadWires";
+import { notifyStoreChanged } from "./lib/storeEvents";
 import { fetchServerGraph, serverError, unreadableNotice } from "./lib/serverGraph";
 import { mod } from "./lib/platform";
 import { DOCS_URL, FEEDBACK_URL, SPONSOR_URL, bugReportUrl, copyText, diagnosticsText, openExternal, osName } from "./lib/help";
@@ -653,7 +654,10 @@ export default function App() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tables: snap.tables }),
-      }).catch(() => { /* best effort: the node is back, the empty tables will lazily recreate on next edit */ });
+      })
+        // the tables are back: the table pickers wired to this store read them again
+        .then((r) => { if (r.ok) notifyStoreChanged("db", snap.key); })
+        .catch(() => { /* best effort: the node is back, the empty tables will lazily recreate on next edit */ });
     }
   }, [nodes]);
 

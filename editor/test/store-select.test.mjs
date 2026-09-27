@@ -1,13 +1,14 @@
 // ============================================================================
-// Framework-free harness for the store picker's decisions (src/lib/storeSelect.ts).
-// Drives the REAL module, transpiled with the installed TypeScript compiler (it
-// has no imports). Run from editor/: `node test/store-select.test.mjs`.
+// Framework-free harness for the store picker's decisions (src/lib/storeSelect.ts)
+// and the store change notice (src/lib/storeEvents.ts). Drives the REAL modules,
+// transpiled with the installed TypeScript compiler (their only imports are
+// type-only). Run from editor/: `node test/store-select.test.mjs`.
 //
 // The case it guards: a DB insert saved with table "chat_history" whose list was
 // read before the table existed. The picker used to flip that value into a text
 // box whose back button (drawn like the dropdown chevron) cleared it. Now the
 // value stays the selection of the list, marked "not found" only when a whole
-// list truly lacks it.
+// list truly lacks it, and the list is read again on open and on a store change.
 // ============================================================================
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -22,7 +23,8 @@ async function load(rel) {
   }).outputText;
   return import("data:text/javascript," + encodeURIComponent(js));
 }
-const { storeListFrom, hasTemplateRef, storeSelectMode, isMissing } = await load("storeSelect.ts");
+const { storeListFrom, hasTemplateRef, storeSelectMode, isMissing, refreshesOn } = await load("storeSelect.ts");
+const { notifyStoreChanged, onStoreChanged } = await load("storeEvents.ts");
 
 let failures = 0;
 function check(label, got, want) {
@@ -91,6 +93,29 @@ check("the list read again after the table exists clears the mark",
 check("a key beyond a kv preview is not called missing", isMissing("zeta", preview), false);
 check("an empty value is never missing", isMissing("", whole), false);
 check("a {tag} value is never missing", isMissing("{table}", whole), false);
+
+// ---- which store change reads the list again
+check("a change to the same db reads again", refreshesOn({ kind: "db", key: "chat" }, { kind: "db", key: "chat" }), true);
+check("a change to another db does not", refreshesOn({ kind: "db", key: "chat" }, { kind: "db", key: "notes" }), false);
+check("a kv with the same key is another store", refreshesOn({ kind: "db", key: "chat" }, { kind: "kv", key: "chat" }), false);
+check("an unwired picker listens to nothing", refreshesOn({ kind: "db", key: null }, { kind: "db", key: "chat" }), false);
+
+// ---- the change notice
+const heard = [];
+const stopA = onStoreChanged((kind, key) => heard.push(`a:${kind}:${key}`));
+const stopB = onStoreChanged((kind, key) => { heard.push(`b:${kind}:${key}`); stopB(); });
+const stopC = onStoreChanged((kind, key) => heard.push(`c:${kind}:${key}`));
+notifyStoreChanged("db", "chat");
+check("every listener hears a change, even past one that stops while told", heard,
+  ["a:db:chat", "b:db:chat", "c:db:chat"]);
+heard.length = 0;
+stopA();
+notifyStoreChanged("db", "chat");
+check("a listener that stopped hears nothing more", heard, ["c:db:chat"]);
+stopC();
+heard.length = 0;
+notifyStoreChanged("kv", "prefs");
+check("with no listeners a change is a no-op", heard, []);
 
 if (failures) {
   console.log(`\n${failures} store select check${failures === 1 ? "" : "s"} failed`);
