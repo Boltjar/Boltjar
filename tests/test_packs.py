@@ -1,7 +1,8 @@
 """Pack discovery: the core pack plus every packs/<folder>/ with a pack.toml and
 an __init__.py. The shipped example pack (examples/packs/hello) is copied into a
 temp root for each test, so nothing here reads or writes the real packs/ or
-user/ folders.
+user/ folders, and whatever an earlier load_all brought in from them (the
+server's, at import) is set aside while a test runs.
 
 A pack loads under a private module namespace, registers only ids under its own
 prefix, never redefines another node, and a pack that breaks a rule is rolled
@@ -9,6 +10,7 @@ back completely and reported by /api/packs, while the rest keeps loading."""
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import pathlib
 import shutil
 import sys
@@ -17,11 +19,16 @@ import textwrap
 import pytest
 from fastapi.testclient import TestClient
 
+import boltjar.nodes.core  # registers the core nodes before any snapshot below
+# importing the server runs its load_all on the real install; done here, before
+# any test, so what it loads is set aside like any other earlier load.
+import boltjar.server as server
 from boltjar import __version__, models, packs
 from boltjar.runtime import Runtime
-from boltjar.sdk import NODE_REGISTRY, types
+from boltjar.sdk import _CORE_TYPES, NODE_REGISTRY, types
 
 EXAMPLE = pathlib.Path(__file__).resolve().parent.parent / "examples" / "packs" / "hello"
+CORE_MODELS = pathlib.Path(boltjar.nodes.core.__file__).resolve().parent / "models"
 
 MANIFEST = """\
 id = "{id}"
@@ -30,29 +37,65 @@ version = "1.0.0"
 """
 
 
-@pytest.fixture
-def root(tmp_path):
-    """A temp install root, with every registry restored after the test."""
-    packs.load_all(tmp_path)  # the core pack is loaded before the snapshot
+def is_pack_module(name: str) -> bool:
+    return name.startswith(packs.NAMESPACE + ".")
+
+
+@contextlib.contextmanager
+def registries_restored():
+    """Every registry a pack load touches (nodes, types, models, the loaded and
+    skipped packs, the pack modules), put back as it was on exit."""
     registry = dict(NODE_REGISTRY)
     type_meta = {name: dict(meta) for name, meta in types.meta.items()}
     manifests = dict(models.MODELS)
     loaded = dict(packs.LOADED)
-    path = list(sys.path)
-    (tmp_path / "packs").mkdir()
-    yield tmp_path
-    assert sys.path == path, "loading packs must not touch sys.path"
+    skipped = list(packs.FAILED)
+    modules = {name: module for name, module in sys.modules.items() if is_pack_module(name)}
+    try:
+        yield
+    finally:
+        NODE_REGISTRY.clear()
+        NODE_REGISTRY.update(registry)
+        types.meta.clear()
+        types.meta.update(type_meta)
+        models.MODELS.clear()
+        models.MODELS.update(manifests)
+        packs.LOADED.clear()
+        packs.LOADED.update(loaded)
+        packs.FAILED[:] = skipped
+        for name in [m for m in sys.modules if is_pack_module(m)]:
+            del sys.modules[name]
+        sys.modules.update(modules)
+
+
+def only_the_core() -> None:
+    """Set aside every node, type, model and pack module the core pack does not
+    declare, and forget every pack but the core."""
+    core = {nid: spec for nid, spec in NODE_REGISTRY.items() if nid.startswith(packs.CORE_ID + ".")}
     NODE_REGISTRY.clear()
-    NODE_REGISTRY.update(registry)
+    NODE_REGISTRY.update(core)
     types.meta.clear()
-    types.meta.update(type_meta)
+    for name, color, parent in _CORE_TYPES:
+        types.register(name, color, parent)
     models.MODELS.clear()
-    models.MODELS.update(manifests)
+    models.load_models(CORE_MODELS)
     packs.LOADED.clear()
-    packs.LOADED.update(loaded)
     packs.FAILED.clear()
-    for name in [m for m in sys.modules if m.startswith(packs.NAMESPACE + ".")]:
+    for name in [m for m in sys.modules if is_pack_module(m)]:
         del sys.modules[name]
+
+
+@pytest.fixture
+def root(tmp_path):
+    """A temp install root where only the core pack is loaded, with every
+    registry restored after the test."""
+    path = list(sys.path)
+    with registries_restored():
+        only_the_core()
+        packs.load_all(tmp_path)  # the core pack's entry, before packs/ exists
+        (tmp_path / "packs").mkdir()
+        yield tmp_path
+        assert sys.path == path, "loading packs must not touch sys.path"
 
 
 def add_hello(root: pathlib.Path, folder: str = "hello") -> pathlib.Path:
@@ -165,8 +208,6 @@ def test_loading_again_keeps_the_loaded_packs_and_imports_nothing_twice(root):
 
 
 def test_the_packs_route_reports_loaded_and_failed_packs(root):
-    import boltjar.server as server
-
     add_hello(root)
     add_pack(root, "broken", "raise RuntimeError('boom')")
     packs.load_all(root)
@@ -327,3 +368,34 @@ def test_user_models_load_last_and_may_replace_a_declared_one(root):
     packs.load_all(root)
     assert models.MODELS["ollama/user-own"].label == "Mine"
     assert models.MODELS[core_id].label == "Tuned"
+
+
+# --------------------------------------------------------------- the real install
+
+@pytest.fixture
+def installed(tmp_path_factory):
+    """The example pack and a user model that retunes a core one, loaded from
+    another install root before the test's own root is set up: what the
+    server's load_all at import does with the real packs/ and user/models/.
+    Yields the id of the retuned model."""
+    other = tmp_path_factory.mktemp("install")
+    with registries_restored():
+        core_id = next(iter(models.MODELS))
+        add_hello(other)
+        (other / "user" / "models").mkdir(parents=True)
+        (other / "user" / "models" / "tuned.toml").write_text(MODEL.format(id=core_id, label="Installed"),
+                                                            encoding="utf-8")
+        packs.load_all(other)
+        assert "hello" in packs.LOADED and models.MODELS[core_id].label == "Installed"
+        yield core_id
+
+
+def test_what_an_earlier_load_brought_in_is_set_aside(installed, root):
+    assert list(packs.LOADED) == ["core"]
+    assert not [nid for nid in NODE_REGISTRY if nid.startswith("hello.")]
+    assert not [m for m in sys.modules if is_pack_module(m)]
+    assert models.MODELS[installed].label != "Installed"
+    add_hello(root)
+    report = packs.load_all(root)
+    assert report["failed"] == []
+    assert loaded(report)["hello"]["nodes"] == 2

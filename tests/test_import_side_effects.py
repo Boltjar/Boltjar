@@ -23,15 +23,18 @@ from boltjar import models
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 
-def _run_isolated(code: str) -> subprocess.CompletedProcess:
-    """Run `code` in a fresh interpreter (a clean import state) from the repo root."""
-    return subprocess.run([sys.executable, "-c", textwrap.dedent(code)], cwd=ROOT,
+def _run_isolated(code: str, *args: str) -> subprocess.CompletedProcess:
+    """Run `code` in a fresh interpreter (a clean import state) from the repo root;
+    `args` arrive as sys.argv[1:]."""
+    return subprocess.run([sys.executable, "-c", textwrap.dedent(code), *args], cwd=ROOT,
                           capture_output=True, text=True, timeout=120)
 
 
-def test_loading_the_registry_reads_no_secrets_and_opens_no_socket():
+def test_loading_the_registry_reads_no_secrets_and_opens_no_socket(tmp_path):
+    # packs load from an empty install root: a pack in the real packs/ is third
+    # party code, and what it does at import is not Boltjar's to test.
     result = _run_isolated("""
-        import os, socket
+        import os, socket, sys
 
         touched = []
 
@@ -48,7 +51,7 @@ def test_loading_the_registry_reads_no_secrets_and_opens_no_socket():
         import boltjar.nodes.core
         from boltjar import models, packs, secrets
 
-        packs.load_all()
+        packs.load_all(sys.argv[1])
 
         assert not secrets._loaded, "secrets were read at import"
         assert dict(os.environ) == environ, "the environment changed at import"
@@ -56,7 +59,7 @@ def test_loading_the_registry_reads_no_secrets_and_opens_no_socket():
         assert catalog and all(m["available"] is None for m in catalog)
         assert not touched, f"the network was touched: {touched}"
         print(len(boltjar.sdk.NODE_REGISTRY))
-    """)
+    """, str(tmp_path))
     assert result.returncode == 0, result.stderr
     assert int(result.stdout.strip()) > 0
 
