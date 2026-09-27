@@ -50,8 +50,17 @@ const NEWER = "the graph was saved by a newer Boltjar (format 2); this one reads
 // ---- a graph the server serves opens as that graph
 {
   const { get, urls } = answering(json(GRAPH, 200));
-  check("a served graph opens as the graph", await fetchServerGraph("chat", get), { kind: "graph", graph: GRAPH });
+  check("a served graph opens as the graph", await fetchServerGraph("chat", get), { kind: "graph", graph: GRAPH, version: null });
   check("it is asked for by slug", urls, ["/api/graphs/chat"]);
+}
+
+// ---- the saved copy's version comes with it (a draft is judged against it)
+{
+  const res = new Response(JSON.stringify(GRAPH), {
+    status: 200, headers: { "Content-Type": "application/json", "X-Graph-Version": "0123456789abcdef" },
+  });
+  check("the X-Graph-Version header is the graph's version",
+    await fetchServerGraph("chat", answering(res).get), { kind: "graph", graph: GRAPH, version: "0123456789abcdef" });
 }
 
 // ---- only a 404 is a new graph (an empty canvas, a free slug for a rename)

@@ -72,7 +72,7 @@ check("App's show() counts each graph it puts on the canvas",
   /const show = \(g: Graph, opts\?: \{ dirty\?: boolean \}\) => \{[\s\S]{0,200}setOpenedGraphs\(\(n\) => n \+ 1\);/.test(app), true);
 check("and hands the count to the canvas as viewKey", /viewKey=\{openedGraphs\}/.test(app), true);
 check("the load path asks graphSource before any fetch",
-  /const source = graphSource\(tabsState, target, draft\);[\s\S]{0,700}const loaded = await fetchServerGraph\(target\);/.test(app), true);
+  /const source = graphSource\(tabsState, target, draft\?\.graph \?\? null\);[\s\S]{0,1000}const loaded = await fetchServerGraph\(target\);/.test(app), true);
 
 if (failures) {
   console.error(`\n${failures} viewport check(s) failed`);

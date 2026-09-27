@@ -8,7 +8,7 @@
 // ============================================================================
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ReactFlowProvider } from "@xyflow/react";
-import type { Graph } from "./types/protocol";
+import type { Graph, GraphNode } from "./types/protocol";
 import { useObjectInfo } from "./hooks/useObjectInfo";
 import { useModels } from "./hooks/useModels";
 import { useRunSocket } from "./hooks/useRunSocket";
@@ -16,7 +16,7 @@ import { useTabsStatus } from "./hooks/useTabsStatus";
 import { useGraph } from "./hooks/useGraph";
 import { useVersion } from "./hooks/useVersion";
 import { EditorProvider, type InboundWire } from "./lib/editorContext";
-import { migrateGraph, outputType, DATABASE_ID, KV_STORE_ID } from "./lib/graphAdapter";
+import { migrateGraph, outputType, toRFNode, DATABASE_ID, KV_STORE_ID } from "./lib/graphAdapter";
 import { WIRELESS_IN_ID, WIRELESS_OUT_ID, ROUTER_ID, isGhostHandle, type WirelessChannelMap, type WirelessSocket } from "./lib/dynamicPorts";
 import { deadWireNotice, healDeadWires } from "./lib/deadWires";
 import { notifyStoreChanged } from "./lib/storeEvents";
@@ -24,7 +24,8 @@ import { changedStores, declarationSignature, ensureDeclaredStores, ensureNotice
 import { fetchSavedSlugs, fetchServerGraph, serverError, unreadableNotice } from "./lib/serverGraph";
 import { exportFileName, exportText, openedSlug, openFailedNotice, parseWorkflowFile, saveAsName } from "./lib/workflowFile";
 import {
-  freeSlug, graphSource, parseTabs, withTabClosed, withTabOpened, withTabRenamed, withTabSaved, type TabsState,
+  draftRecord, freeSlug, graphSource, openPlan, parseDraft, parseTabs, sameGraph,
+  withTabClosed, withTabOpened, withTabRenamed, withTabSaved, type StoredDraft, type TabsState,
 } from "./lib/tabs";
 import { mod, altShift } from "./lib/platform";
 import { tidyGraph, type TidyNode } from "./lib/tidyLayout";
@@ -58,7 +59,10 @@ const BOOT_GRAPH = "chat";
 /** Per-slug working-draft autosave key. The `:v2` suffix is the draft format
  *  version: bumping it abandons drafts saved in an older shape (e.g. one whose
  *  edges name a firing port that was since renamed, which passes validation but
- *  never fires the graph), so the editor reloads the fresh server graph. */
+ *  never fires the graph), so the editor reloads the fresh server graph. What
+ *  it holds is a lib/tabs draftRecord (the graph, the saved version it started
+ *  from, whether it holds edits); a bare graph stored before that still reads,
+ *  judged against the saved copy (openPlan). */
 function draftKey(slug: string): string {
   return `boltjar:draft:${slug}:v2`;
 }
@@ -74,6 +78,40 @@ function draftSlugs(): string[] {
     }
   } catch { /* storage unavailable */ }
   return out;
+}
+/** A slug's draft as stored (lib/tabs parseDraft: an old bare-graph draft reads
+ *  with its base and dirty unknown), or null. */
+function readDraft(slug: string): StoredDraft | null {
+  try { return parseDraft(localStorage.getItem(draftKey(slug))); } catch { return null; }
+}
+/** Unsaved edits kept aside: made on a saved copy that was then saved over
+ *  elsewhere, so the saved copy opened instead. Kept until the person restores
+ *  or discards them, a refresh included. */
+function asideKey(slug: string): string {
+  return `boltjar:aside:${slug}`;
+}
+function readAside(slug: string): Graph | null {
+  try {
+    const raw = localStorage.getItem(asideKey(slug));
+    const g = raw ? (JSON.parse(raw) as Graph) : null;
+    return g && Array.isArray(g.nodes) ? g : null;
+  } catch { return null; }
+}
+function writeAside(slug: string, g: Graph) {
+  try { localStorage.setItem(asideKey(slug), JSON.stringify(g)); } catch { /* storage full / unavailable */ }
+}
+function dropAside(slug: string) {
+  try { localStorage.removeItem(asideKey(slug)); } catch { /* storage unavailable */ }
+}
+/** The console offer for a slug's kept-aside edits (settled once answered). */
+function asideOffer(slug: string): string {
+  return `aside:${slug}`;
+}
+/** The size a saved node shows at on the canvas (its own, else its type's
+ *  default), so a graph read from a file compares with a draft the canvas wrote. */
+function canvasSize(n: GraphNode): [number, number] | null {
+  const rf = toRFNode(n);
+  return typeof rf.width === "number" && typeof rf.height === "number" ? [rf.width, rf.height] : null;
 }
 /** Persists open/closed state and library mode for both rails. */
 const RAILS_KEY = "boltjar:ui:rails";
@@ -155,8 +193,13 @@ export default function App() {
   // The runtime socket follows the active tab. The hook tears down + reopens
   // the ws when the slug changes, and the Hub replays its status on subscribe.
   const socket = useRunSocket(activeSlug ?? "_default");
-  // One lightweight per-slug ws to drive the green dot on every tab.
-  const tabsStatus = useTabsStatus(openSlugs);
+  // One lightweight per-slug ws to drive the green dot on every tab. It also
+  // reports each save of an open graph (here or anywhere else), which
+  // followSave below answers for the graph on the canvas.
+  const followSaveRef = useRef<(slug: string, version: string) => void>(() => {});
+  const tabsStatus = useTabsStatus(openSlugs, useCallback((slug: string, version: string) => {
+    followSaveRef.current(slug, version);
+  }, []));
 
   const graph = useGraph(defs, models);
   const version = useVersion();
@@ -265,6 +308,38 @@ export default function App() {
   // slug's draft on tab switch (and not stomp the new slug's draft with it).
   const loadedSlugRef = useRef<string | null>(null);
 
+  // ── drafts and the saved copy (lib/tabs openPlan) ──
+  // Each slug's draft records the version of the saved copy it started from
+  // (the server's X-Graph-Version, null for a graph never saved) and whether
+  // it holds edits, so a draft left in this browser never stands in for a
+  // graph saved since in another one.
+  const versionRef = useRef(new Map<string, string | null>());
+  // slugs with a Save under way, and a save announced for one meanwhile
+  const savingRef = useRef(new Set<string>());
+  const heldSaveRef = useRef(new Map<string, string>());
+  const dirtyRef = useRef(dirty);
+  dirtyRef.current = dirty;
+  const writeDraft = useCallback((slug: string, g: Graph, edited: boolean) => {
+    try {
+      localStorage.setItem(draftKey(slug), draftRecord(g, versionRef.current.get(slug) ?? null, edited));
+    } catch { /* storage full / unavailable: drop */ }
+  }, []);
+  // the slug on the canvas whose unsaved edits are kept aside, while they are
+  const [asideSlug, setAsideSlug] = useState<string | null>(null);
+  const restoreAsideRef = useRef<(slug: string) => void>(() => {});
+  const discardAsideRef = useRef<(slug: string) => void>(() => {});
+  // One console notice, with the two answers as its buttons (also in the palette).
+  const offerAside = useCallback((slug: string, message: string) => {
+    setAsideSlug(slug);
+    socket.notice(message, "warn", {
+      id: asideOffer(slug),
+      actions: [
+        { label: "Restore my unsaved edits", run: () => restoreAsideRef.current(slug) },
+        { label: "Discard them", run: () => discardAsideRef.current(slug) },
+      ],
+    });
+  }, [socket.notice]);
+
   // ── slug-switch effect: when the active tab changes, save the outgoing
   //    slug's draft into localStorage, then load the new slug's draft (or
   //    fetch it from the server; a slug the server does not know, or one never
@@ -289,10 +364,11 @@ export default function App() {
     // graph. `loadedSlugRef.current` is the slug whose state is in `toGraph()`.
     const outgoing = loadedSlugRef.current;
     if (outgoing && outgoing !== activeSlug) {
-      try {
-        localStorage.setItem(draftKey(outgoing), JSON.stringify(toGraph()));
-      } catch { /* storage full / unavailable: drop */ }
+      writeDraft(outgoing, toGraph(), dirtyRef.current);
+      // its offer is made again when it is opened again
+      socket.settleNotice(asideOffer(outgoing));
     }
+    setAsideSlug(null);
 
     setGraphLoading(true);
     const target = activeSlug;
@@ -310,40 +386,37 @@ export default function App() {
     // before it reaches the canvas, each removal is reported on the console,
     // and the draft autosave below persists the clean graph. A node whose
     // definition or model manifest is unknown is not judged.
-    const loadHealed = (g: Graph) => {
+    const loadHealed = (g: Graph, opts?: { dirty?: boolean }) => {
       const { graph: current, changed } = migrateGraph(g);
       const { graph: clean, removed } = healDeadWires(current, defs, models);
       // a healed graph differs from the saved file, so it arrives unsaved: the
       // primary button offers Save, and On never runs the file's dead wire. So
       // does a graph the server has never held (a file opened from the file
-      // menu, a clone): there is nothing saved it could match.
+      // menu, a clone): there is nothing saved it could match. So do restored
+      // unsaved edits.
       const neverSaved = tabsState.unsaved.includes(target);
-      show(clean, { dirty: changed || removed.length > 0 || neverSaved });
+      show(clean, { dirty: !!opts?.dirty || changed || removed.length > 0 || neverSaved });
       for (const w of removed) socket.notice(deadWireNotice(w), "warn");
     };
     (async () => {
       // A workflow's identity is its slug; the graph `name` is always forced to
       // the slug on load so the internal name can never diverge from it.
-      let draft: Graph | null = null;
-      try {
-        const saved = localStorage.getItem(draftKey(target));
-        if (saved) draft = JSON.parse(saved) as Graph;
-      } catch { /* corrupt draft: read as none */ }
-      // lib/tabs: the draft when it has nodes; a workflow never saved (New
-      // workflow, Clone) opens empty without asking the server, which does not
-      // have it; any other slug asks the server.
-      const source = graphSource(tabsState, target, draft);
+      const draft = readDraft(target);
+      // lib/tabs: a workflow never saved (New workflow, Clone) opens its draft
+      // or empty without asking the server, which does not have it; any other
+      // slug asks the server, and the draft is judged against its answer.
+      const source = graphSource(tabsState, target, draft?.graph ?? null);
       if (source !== "server") {
-        if (source === "draft" && draft) loadHealed({ ...draft, name: target });
+        versionRef.current.set(target, null);
+        if (source === "draft" && draft) loadHealed({ ...draft.graph, name: target });
         else show({ ...EMPTY_GRAPH, name: target });
         loadedSlugRef.current = target;
         setGraphLoading(false);
         return;
       }
-      // else fetch the server graph. Only a slug the server does not know opens
-      // empty; one it cannot serve (a graph from a newer Boltjar, a server error)
-      // is reported and its tab closed, and the canvas keeps what it showed, so
-      // no Save can put an empty graph in that file's place.
+      // One the server cannot serve (a graph from a newer Boltjar, a server
+      // error) is reported and its tab closed, and the canvas keeps what it
+      // showed, so no Save can put an empty graph in that file's place.
       const loaded = await fetchServerGraph(target);
       if (loaded.kind === "unreadable") {
         socket.notice(unreadableNotice(target, loaded.error), "bad");
@@ -351,10 +424,27 @@ export default function App() {
         dropTab(target);
         return;
       }
-      if (loaded.kind === "graph") loadHealed({ ...loaded.graph, name: target });
+      // lib/tabs openPlan: the draft only when it holds edits on the copy the
+      // server still has; a draft of an older copy (saved since, in another
+      // browser or by another tool) is kept aside and offered back, never shown
+      // in place of the save. Only a slug the server does not know opens its
+      // draft, else empty.
+      const saved = loaded.kind === "graph" ? loaded : null;
+      const plan = openPlan(draft, saved, (g) => !!saved && sameGraph(g, saved.graph, canvasSize));
+      versionRef.current.set(target, saved?.version ?? null);
+      if (plan === "draft" && draft) loadHealed({ ...draft.graph, name: target }, { dirty: true });
+      else if (saved) loadHealed({ ...saved.graph, name: target });
       else show({ ...EMPTY_GRAPH, name: target });
       loadedSlugRef.current = target;
       setGraphLoading(false);
+      if (plan === "server-offer" && draft) {
+        writeAside(target, { ...draft.graph, name: target });
+        offerAside(target, draft.dirty === undefined
+          ? `this browser held other unsaved edits of ${target}: kept aside`
+          : `${target} was saved elsewhere: your unsaved edits are kept aside`);
+      } else if (readAside(target)) {
+        offerAside(target, `your unsaved edits of ${target} are still kept aside`);
+      }
     })();
   // intentionally narrow deps: re-run only when slug or catalog readiness flips.
   // toGraph + loadGraph are stable across renders of the same data.
@@ -368,17 +458,13 @@ export default function App() {
     if (graphLoading) return;
     const target = loadedSlugRef.current;
     if (!target) return;
-    const t = window.setTimeout(() => {
-      try {
-        localStorage.setItem(draftKey(target), JSON.stringify(toGraph()));
-      } catch {
-        /* storage unavailable / full: ignore */
-      }
-    }, 250);
+    // with the saved version it started from and whether it holds edits, so
+    // the next open can tell it from a copy saved since (lib/tabs openPlan)
+    const t = window.setTimeout(() => writeDraft(target, toGraph(), dirty), 250);
     return () => window.clearTimeout(t);
   // activeSlug: a tab change drops a write still pending for the slug before
   // it (Save as hands the canvas to the copy's slug without reloading it).
-  }, [toGraph, graphLoading, activeSlug]);
+  }, [toGraph, graphLoading, activeSlug, dirty, writeDraft]);
 
   // ── declared stores: the tables a graph's store nodes declare (lib/storeSchema)
   //    are created on the server when the graph opens here, and again when a
@@ -561,6 +647,9 @@ export default function App() {
     const target = activeSlug;
     if (!target) return false; // no open tab
     setSaving(true);
+    // this editor's own save comes back over the socket too; it is held until
+    // the save answers with its version, which then matches it (followSave)
+    savingRef.current.add(target);
     try {
       const g = toGraph();
       // save under the active tab's slug so explicit Save round-trips on reload.
@@ -570,12 +659,16 @@ export default function App() {
         body: JSON.stringify(g),
       });
       if (res.ok) {
-        try {
-          localStorage.setItem(draftKey(target), JSON.stringify(g));
-        } catch {
-          /* ignore */
-        }
-        markSaved();
+        const body = (await res.json().catch(() => null)) as { version?: unknown } | null;
+        // what was sent is now the saved copy of this version
+        versionRef.current.set(target, typeof body?.version === "string" ? body.version : null);
+        // an edit made while the save was under way (or another tab now on the
+        // canvas) is not what was saved, so it stays unsaved
+        const onCanvas = loadedSlugRef.current === target;
+        const now = onCanvas ? latestToGraph.current() : g;
+        const caughtUp = sameGraph(now, g);
+        writeDraft(target, now, !caughtUp);
+        if (onCanvas && caughtUp) markSaved();
         // explicit PUT is a clean checkpoint: the active draft now matches what
         // the server holds, so the draft flag should reset too (otherwise the
         // primary stays "Save & Restart" after Save -> On).
@@ -593,8 +686,65 @@ export default function App() {
       return false;
     } finally {
       setSaving(false);
+      savingRef.current.delete(target);
+      const held = heldSaveRef.current.get(target);
+      heldSaveRef.current.delete(target);
+      if (held !== undefined) followSaveRef.current(target, held);
     }
-  }, [toGraph, markSaved, activeSlug, socket.notice, setTabsState]);
+  }, [toGraph, markSaved, activeSlug, socket.notice, setTabsState, writeDraft]);
+
+  // ── live sync: a save of the graph on the canvas made anywhere else (another
+  //    browser, the MCP server, the REST API). A canvas with no edits takes the
+  //    saved copy quietly, in place (the view stays where it is). A canvas with
+  //    edits takes it too, and its edits are kept aside with the same offer an
+  //    open makes (lib/tabs openPlan), never silently dropped. This editor's own
+  //    save matches the version it already holds and changes nothing. ──
+  const followSave = useCallback(async (slug: string, version: string) => {
+    if (slug !== loadedSlugRef.current) return; // another tab: judged when it opens
+    if (savingRef.current.has(slug)) {
+      heldSaveRef.current.set(slug, version);
+      return;
+    }
+    if (versionRef.current.get(slug) === version) return;
+    const loaded = await fetchServerGraph(slug);
+    if (loaded.kind !== "graph" || loadedSlugRef.current !== slug || savingRef.current.has(slug)) return;
+    if (loaded.version !== null && loaded.version === versionRef.current.get(slug)) return;
+    const kept = dirtyRef.current ? latestToGraph.current() : null;
+    versionRef.current.set(slug, loaded.version);
+    const { graph: current, changed } = migrateGraph({ ...loaded.graph, name: slug });
+    const { graph: clean, removed } = healDeadWires(current, defs, models);
+    loadGraph(clean, { dirty: changed || removed.length > 0 });
+    for (const w of removed) socket.notice(deadWireNotice(w), "warn");
+    if (kept) {
+      writeAside(slug, { ...kept, name: slug });
+      offerAside(slug, `${slug} was saved elsewhere: your unsaved edits are kept aside`);
+    } else {
+      socket.notice(`${slug} was saved elsewhere: showing the saved copy`, "info");
+    }
+  }, [defs, models, loadGraph, socket.notice, offerAside]);
+  followSaveRef.current = (slug, version) => { void followSave(slug, version); };
+
+  // the two answers to the offer: the kept edits back on the canvas (unsaved,
+  // on top of the saved copy now open), or gone.
+  restoreAsideRef.current = (slug: string) => {
+    if (loadedSlugRef.current !== slug) return;
+    const kept = readAside(slug);
+    dropAside(slug);
+    setAsideSlug(null);
+    socket.settleNotice(asideOffer(slug));
+    if (!kept) return;
+    const { graph: current } = migrateGraph({ ...kept, name: slug });
+    const { graph: clean, removed } = healDeadWires(current, defs, models);
+    loadGraph(clean, { dirty: true });
+    for (const w of removed) socket.notice(deadWireNotice(w), "warn");
+    socket.notice(`restored your unsaved edits of ${slug}`, "ok");
+  };
+  discardAsideRef.current = (slug: string) => {
+    dropAside(slug);
+    setAsideSlug((s) => (s === slug ? null : s));
+    socket.settleNotice(asideOffer(slug));
+    socket.notice(`discarded your unsaved edits of ${slug}`, "info");
+  };
 
   // ── the file menu (the brand logo) and its palette twins ──
   // Open: pick a .json workflow in the browser (lib/workflowFile checks and
@@ -658,7 +808,7 @@ export default function App() {
     }
     const slug = openedSlug(parsed.graph, file.name, new Set([...tabsState.open, ...draftSlugs(), ...saved]));
     try {
-      localStorage.setItem(draftKey(slug), JSON.stringify({ ...parsed.graph, name: slug }));
+      localStorage.setItem(draftKey(slug), draftRecord({ ...parsed.graph, name: slug }, null, true));
     } catch {
       socket.notice(openFailedNotice(file.name, "the browser's storage is full"), "bad");
       return;
@@ -693,12 +843,15 @@ export default function App() {
       return "The server did not answer. Nothing was saved.";
     }
     if (!res.ok) return `Did not save: ${await serverError(res)}`;
+    const answer = (await res.json().catch(() => null)) as { version?: unknown } | null;
+    versionRef.current.set(slug, typeof answer?.version === "string" ? answer.version : null);
     const originalUnsaved = tabsState.unsaved.includes(original);
-    try {
-      localStorage.setItem(draftKey(slug), JSON.stringify(g));
-      localStorage.removeItem(draftKey(original));
-    } catch { /* storage unavailable: the copy is on the server */ }
+    writeDraft(slug, g, false);
+    try { localStorage.removeItem(draftKey(original)); } catch { /* storage unavailable: the copy is on the server */ }
     // the canvas already shows the copy: hand it the new slug without a reload
+    // (edits kept aside for the original stay with it, offered when it opens)
+    socket.settleNotice(asideOffer(original));
+    setAsideSlug(null);
     loadedSlugRef.current = slug;
     loadGraph(g);
     setLastSaved(Date.now());
@@ -711,7 +864,7 @@ export default function App() {
     setSavedListKey((n) => n + 1);
     socket.notice(`saved a copy of ${original} as ${slug}`, "ok");
     return null;
-  }, [activeSlug, tabsState.open, tabsState.unsaved, toGraph, loadGraph, setTabsState, socket.notice]);
+  }, [activeSlug, tabsState.open, tabsState.unsaved, toGraph, loadGraph, setTabsState, socket.notice, socket.settleNotice, writeDraft]);
 
   // Save as through this computer's own dialog: the copy is written to the
   // file picked, remembered by its path, and takes over the canvas in its own
@@ -748,11 +901,12 @@ export default function App() {
     if (body.cancelled) return;
     const slug: string = body.slug;
     const copy: Graph = { ...g, name: slug };
+    versionRef.current.set(slug, typeof body.version === "string" ? body.version : null);
     const originalUnsaved = tabsState.unsaved.includes(original);
-    try {
-      localStorage.setItem(draftKey(slug), JSON.stringify(copy));
-      localStorage.removeItem(draftKey(original));
-    } catch { /* storage unavailable: the copy is in its file */ }
+    writeDraft(slug, copy, false);
+    try { localStorage.removeItem(draftKey(original)); } catch { /* storage unavailable: the copy is in its file */ }
+    socket.settleNotice(asideOffer(original));
+    setAsideSlug(null);
     loadedSlugRef.current = slug;
     loadGraph(copy);
     setLastSaved(Date.now());
@@ -764,7 +918,7 @@ export default function App() {
     });
     setSavedListKey((n) => n + 1);
     socket.notice(`saved ${original} to ${body.path} as ${slug}`, "ok");
-  }, [activeSlug, tabsState.unsaved, toGraph, loadGraph, setTabsState, socket.notice]);
+  }, [activeSlug, tabsState.unsaved, toGraph, loadGraph, setTabsState, socket.notice, socket.settleNotice, writeDraft]);
 
   // Export: download the workflow as the editor holds it, unsaved edits
   // included, in the saved-file format. It carries no secret values: a knob
@@ -1081,75 +1235,100 @@ export default function App() {
       ws.onerror = () => { try { ws.close(); } catch { /* ignore */ } };
     } catch { /* socket unavailable: backend probably already gone */ }
 
-    // 2) drop the slug's draft (it's no longer represented by an open tab).
+    // 2) drop the slug's draft (it's no longer represented by an open tab),
+    //    and any unsaved edits kept aside for it.
     try { localStorage.removeItem(draftKey(slug)); } catch { /* ignore */ }
+    dropAside(slug);
 
     // 3) take it off the strip (the neighbouring tab becomes active).
     dropTab(slug);
   }, [dropTab]);
 
+  // What a slug holds for this editor: the canvas when it is on it, else what
+  // opening it would show (lib/tabs openPlan: its draft only when that holds
+  // edits on the copy the server still has, else the saved copy; never a draft
+  // of an older copy). Null when there is nothing to show.
+  const workingGraph = useCallback(async (slug: string): Promise<Graph | null> => {
+    if (loadedSlugRef.current === slug) return latestToGraph.current();
+    const draft = readDraft(slug);
+    const loaded = await fetchServerGraph(slug);
+    if (loaded.kind === "unreadable") return null;
+    const saved = loaded.kind === "graph" ? loaded : null;
+    const plan = openPlan(draft, saved, (g) => !!saved && sameGraph(g, saved.graph, canvasSize));
+    if (plan === "draft" && draft) return draft.graph;
+    return saved?.graph ?? null;
+  }, []);
+
   // ── tab context menu actions ────────────────────────────────────────────
-  // Rename: move the draft under a new slug and PUT/DELETE on the server so the
-  // saved workflow list keeps in step. The active selection follows.
+  // Rename: what the workflow holds here (workingGraph, unsaved edits
+  // included) is saved under the new slug and the old one is deleted, so the
+  // saved workflow list keeps in step. The active selection follows, and a
+  // canvas showing it takes the new slug without a reload.
   const renameTab = useCallback(async (slug: string, nextSlug: string) => {
     const fresh = nextSlug.trim();
-    if (!fresh || fresh === slug) return;
-    // refuse clashes with an already-open or already-saved slug: only a slug the
-    // server does not know is free (one it cannot read is still a saved graph).
+    if (!fresh || fresh === slug || tabsState.open.includes(fresh)) return;
+    // refuse clashes with an already-saved slug: only a slug the server does
+    // not know is free (one it cannot read is still a saved graph).
     if ((await fetchServerGraph(fresh)).kind !== "missing") return;
-    setTabsState((prev) => {
-      if (prev.open.includes(fresh)) return prev;
-      // copy draft to the new key, drop the old
+    const g = await workingGraph(slug);
+    let version: string | null = null;
+    if (g) {
+      let put: Response;
       try {
-        const raw = localStorage.getItem(draftKey(slug));
-        if (raw) {
-          const g = JSON.parse(raw);
-          g.name = fresh;
-          localStorage.setItem(draftKey(fresh), JSON.stringify(g));
-        }
-        localStorage.removeItem(draftKey(slug));
-      } catch { /* ignore */ }
-      return withTabRenamed(prev, slug, fresh);
-    });
-    // best-effort: PUT under the new slug + DELETE the old one
-    try {
-      const raw = localStorage.getItem(draftKey(fresh));
-      if (raw) {
-        const put = await fetch(`/api/graphs/${encodeURIComponent(fresh)}`, {
+        put = await fetch(`/api/graphs/${encodeURIComponent(fresh)}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: raw,
+          body: JSON.stringify({ ...g, name: fresh }),
         });
-        // saved under its new name: it loads like any saved graph now
-        if (put.ok) setTabsState((prev) => withTabSaved(prev, fresh));
+      } catch {
+        socket.notice(`did not rename ${slug}: the server did not answer`, "bad");
+        return;
       }
-      await fetch(`/api/graphs/${encodeURIComponent(slug)}`, { method: "DELETE" }).catch(() => {});
-    } catch { /* ignore */ }
-  }, [setTabsState]);
+      if (!put.ok) {
+        socket.notice(`did not rename ${slug}: ${await serverError(put)}`, "bad");
+        return;
+      }
+      const answer = (await put.json().catch(() => null)) as { version?: unknown } | null;
+      version = typeof answer?.version === "string" ? answer.version : null;
+      versionRef.current.set(fresh, version);
+      writeDraft(fresh, { ...g, name: fresh }, false);
+    }
+    try { localStorage.removeItem(draftKey(slug)); } catch { /* storage unavailable */ }
+    // edits kept aside for it move with it
+    const kept = readAside(slug);
+    if (kept) writeAside(fresh, { ...kept, name: fresh });
+    dropAside(slug);
+    if (g && loadedSlugRef.current === slug) {
+      // the canvas already shows what was saved: hand it the new slug
+      socket.settleNotice(asideOffer(slug));
+      setAsideSlug(null);
+      loadedSlugRef.current = fresh;
+      loadGraph({ ...g, name: fresh });
+    }
+    setTabsState((prev) => {
+      if (prev.open.includes(fresh)) return prev;
+      const next = withTabRenamed(prev, slug, fresh);
+      // saved under its new name: it loads like any saved graph now
+      return g ? withTabSaved(next, fresh) : next;
+    });
+    await fetch(`/api/graphs/${encodeURIComponent(slug)}`, { method: "DELETE" }).catch(() => {});
+  }, [tabsState.open, setTabsState, workingGraph, writeDraft, loadGraph, socket.notice, socket.settleNotice]);
 
-  // Clone: fetch the source (draft preferred, else server), mint <slug>-copy /
+  // Clone: copy what the source holds here (workingGraph), mint <slug>-copy /
   // -copy-2 / ... (a slug no open tab, draft or server graph uses), seed a fresh
   // draft, open as a new active tab, unsaved like a new workflow.
   const cloneTab = useCallback(async (slug: string) => {
-    let raw = localStorage.getItem(draftKey(slug));
-    if (!raw) {
-      try {
-        const r = await fetch(`/api/graphs/${encodeURIComponent(slug)}`);
-        if (r.ok) raw = await r.text();
-      } catch { /* ignore */ }
-    }
-    if (!raw) return;
+    const source = await workingGraph(slug);
+    if (!source) return;
     const saved = await fetchSavedSlugs();
     setTabsState((prev) => {
       const next = freeSlug(`${slug}-copy`, new Set([...prev.open, ...draftSlugs(), ...(saved ?? [])]));
       try {
-        const g = JSON.parse(raw!);
-        g.name = next;
-        localStorage.setItem(draftKey(next), JSON.stringify(g));
+        localStorage.setItem(draftKey(next), draftRecord({ ...source, name: next }, null, true));
       } catch { /* ignore */ }
       return withTabOpened(prev, next, { unsaved: saved !== null });
     });
-  }, [setTabsState]);
+  }, [setTabsState, workingGraph]);
 
   // Delete: remove the saved graph from the server, drop the draft, close the tab.
   const deleteTab = useCallback(async (slug: string) => {
@@ -1322,9 +1501,16 @@ export default function App() {
         ? [{ id: "stop-resuming", label: STOP_RESUMING.label, hint: STOP_RESUMING.hint, icon: STOP_RESUMING.icon, run: stopResuming }]
         : []),
       ...(socket.power === "on" ? [{ id: "restart", label: "Save & Restart", hint: "apply live edits", icon: "refresh-outline", run: () => void restart() }] : []),
+      // the console offer for edits kept aside (the saved copy changed elsewhere)
+      ...(asideSlug && asideSlug === activeSlug
+        ? [
+          { id: "aside-restore", label: "Restore my unsaved edits", hint: `put your kept edits of ${asideSlug} back on the canvas`, icon: "arrow-undo-outline", run: () => restoreAsideRef.current(asideSlug) },
+          { id: "aside-discard", label: "Discard my unsaved edits", hint: `keep the saved ${asideSlug}`, icon: "trash-outline", run: () => discardAsideRef.current(asideSlug) },
+        ]
+        : []),
       { id: "settings", label: "Open Settings", hint: "startup, providers and secrets", icon: "settings-outline", run: () => setSettingsTab(SETTINGS_LINKS.openSettings) },
       { id: "connections", label: "Open AI Providers", hint: "provider keys, endpoints and local models", icon: "git-network-outline", run: () => setSettingsTab(SETTINGS_LINKS.openConnections) },
-      { id: "reset", label: "Reset to default graph", hint: "discard local edits", icon: "refresh-outline", run: () => { try { if (activeSlug) localStorage.removeItem(draftKey(activeSlug)); } catch { /* ignore */ } window.location.reload(); } },
+      { id: "reset", label: "Reset to default graph", hint: "discard local edits", icon: "refresh-outline", run: () => { try { if (activeSlug) localStorage.removeItem(draftKey(activeSlug)); } catch { /* ignore */ } if (activeSlug) dropAside(activeSlug); window.location.reload(); } },
       ...(nodes.length >= 2
         ? [{
             id: "tidy",
@@ -1341,7 +1527,7 @@ export default function App() {
       ...fileActions,
       ...helpActions,
     ],
-    [socket.power, socket.resumeNotice, socket.clearLog, powerOn, powerOff, stopResuming, restart, undo, redo, activeSlug, fileActions, helpActions, nodes.length, selectedIds.length, tidyUp],
+    [socket.power, socket.resumeNotice, socket.clearLog, powerOn, powerOff, stopResuming, restart, undo, redo, activeSlug, asideSlug, fileActions, helpActions, nodes.length, selectedIds.length, tidyUp],
   );
 
   const selectedNode = nodes.find((n) => n.id === selectedId) ?? null;

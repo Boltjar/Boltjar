@@ -7,12 +7,16 @@
 // Boltjar), a server error, or no answer at all. The editor reports those and
 // leaves the slug closed, so a Save never writes an empty canvas over a file
 // it could not read.
+//
+// A saved graph comes with its version (the server's X-Graph-Version: a hash
+// of the saved file), which the editor keeps beside a local draft to tell a
+// draft of this saved copy from one of an older copy saved over since.
 // ============================================================================
 import type { Graph } from "../types/protocol";
 
 /** A slug's saved graph, the news that there is none, or why it cannot open. */
 export type ServerGraph =
-  | { kind: "graph"; graph: Graph }
+  | { kind: "graph"; graph: Graph; version: string | null }
   | { kind: "missing" }
   | { kind: "unreadable"; error: string };
 
@@ -29,7 +33,8 @@ export async function fetchServerGraph(slug: string, get: Get = (url) => fetch(u
   if (res.status === 404) return { kind: "missing" };
   if (!res.ok) return { kind: "unreadable", error: await serverError(res) };
   try {
-    return { kind: "graph", graph: (await res.json()) as Graph };
+    const graph = (await res.json()) as Graph;
+    return { kind: "graph", graph, version: res.headers?.get("X-Graph-Version") ?? null };
   } catch {
     return { kind: "unreadable", error: "the server's answer is not a graph" };
   }

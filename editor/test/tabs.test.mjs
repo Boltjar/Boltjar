@@ -7,6 +7,14 @@
 // The case it guards: New workflow seeded an empty draft, the loader skipped a
 // draft with no nodes, and so it asked GET /api/graphs/untitled, which the
 // console logged as a 404. A tab never saved is never fetched now.
+//
+// And the two-browsers case: each browser keeps its own drafts, and a saved
+// tab opened its draft whenever that had nodes, so one browser showed a 14-node
+// draft of "chat" (and said "saved") while the server held the 18-node chat
+// saved from the other. A draft now carries the version of the saved copy it
+// started from and whether it holds edits; openPlan shows it only when it holds
+// edits on the copy the server still has, and otherwise opens the saved copy
+// and offers the draft back. Every row of that table is checked below.
 // ============================================================================
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -19,7 +27,8 @@ const js = ts.transpileModule(src, {
   compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 },
 }).outputText;
 const {
-  freeSlug, graphSource, parseTabs, withTabClosed, withTabOpened, withTabRenamed, withTabSaved,
+  draftRecord, freeSlug, graphSource, openPlan, parseDraft, parseTabs, sameGraph,
+  withTabClosed, withTabOpened, withTabRenamed, withTabSaved,
 } = await import("data:text/javascript," + encodeURIComponent(js));
 
 let failures = 0;
@@ -63,6 +72,8 @@ check("a clone mints around its copies the same way",
 // ---- the other tabs
 check("an opened saved graph is not marked", withTabOpened(BOOT, "demo").unsaved, []);
 check("with no draft a saved graph is fetched", graphSource(withTabOpened(BOOT, "demo"), "demo", null), "server");
+check("with nodes in its draft a saved graph is still fetched (the draft is judged against it)",
+  graphSource(withTabOpened(BOOT, "demo"), "demo", DRAFT), "server");
 check("opening the active tab again changes nothing", withTabOpened(BOOT, "chat"), BOOT);
 check("opening an open tab only activates it",
   withTabOpened({ open: ["chat", "demo"], active: "chat", unsaved: [] }, "demo"),
@@ -97,6 +108,88 @@ check("an active tab that is not open falls back to the first",
 check("empty and non-string slugs are dropped",
   parseTabs(JSON.stringify({ open: ["chat", "", 3], active: "chat", unsaved: [null] })),
   { open: ["chat"], active: "chat", unsaved: [] });
+
+// ---- drafts: what is stored, and old drafts read back
+const node = (id, x = 0, extra = {}) => ({ id, type: "core.value.text", config: { text: id }, pos: [x, 0], ...extra });
+const SAVED = { format: 2, name: "chat", nodes: [node("a"), node("b", 300)], edges: [{ src: "a", src_port: "out", dst: "b", dst_port: "in" }] };
+const EDITED = { ...SAVED, nodes: [...SAVED.nodes, node("c", 600)] };
+check("a draft round-trips with its base and dirty mark",
+  parseDraft(draftRecord(EDITED, "v1", true)), { graph: EDITED, base: "v1", dirty: true });
+check("a never-saved workflow's draft has no base",
+  parseDraft(draftRecord(DRAFT, null, true)), { graph: DRAFT, base: null, dirty: true });
+check("an old draft (a bare graph) reads with base and dirty unknown",
+  parseDraft(JSON.stringify(EDITED)), { graph: EDITED, base: undefined, dirty: undefined });
+check("nothing stored reads as no draft", parseDraft(null), null);
+check("a broken draft reads as no draft", parseDraft("{oops"), null);
+check("something that is not a graph reads as no draft", parseDraft(JSON.stringify({ hello: 1 })), null);
+
+// ---- openPlan: every row of the decision
+const V1 = { version: "v1" };
+const V2 = { version: "v2" };
+const same = (g) => sameGraph(g, SAVED);
+const rec = (graph, base, dirty) => parseDraft(draftRecord(graph, base, dirty));
+check("no draft: the saved copy", openPlan(null, V1, same), "server");
+check("a draft with no edits: the saved copy (the draft is dropped)", openPlan(rec(SAVED, "v1", false), V1, same), "server");
+check("a draft with no edits of an older copy: the saved copy, nothing offered",
+  openPlan(rec(SAVED, "v0", false), V1, same), "server");
+check("edits on the copy the server still has: the draft, marked unsaved", openPlan(rec(EDITED, "v1", true), V1, same), "draft");
+check("edits on an older copy (saved since elsewhere): the saved copy, the draft offered back",
+  openPlan(rec(EDITED, "v1", true), V2, same), "server-offer");
+check("edits that deleted every node still count", openPlan(rec({ ...SAVED, nodes: [], edges: [] }, "v1", true), V1, same), "draft");
+check("edits with no base on a graph the server now holds: offered back, never shown",
+  openPlan(rec(EDITED, null, true), V1, same), "server-offer");
+check("a server that sends no version never matches a base", openPlan(rec(EDITED, "v1", true), { version: null }, same), "server-offer");
+check("an old draft that differs from the saved copy: the saved copy, the draft offered back",
+  openPlan(parseDraft(JSON.stringify(EDITED)), V1, same), "server-offer");
+check("an old draft that holds the saved copy: the saved copy, nothing offered",
+  openPlan(parseDraft(JSON.stringify(SAVED)), V1, same), "server");
+check("an old empty draft never hides the saved copy",
+  openPlan(parseDraft(JSON.stringify(EMPTY_DRAFT)), V1, same), "server");
+check("no saved copy: the draft when it has nodes", openPlan(rec(DRAFT, null, true), null, same), "draft");
+check("no saved copy: an old draft with nodes too", openPlan(parseDraft(JSON.stringify(DRAFT)), null, same), "draft");
+check("no saved copy and an empty draft: empty", openPlan(rec(EMPTY_DRAFT, null, false), null, same), "empty");
+check("no saved copy and no draft: empty", openPlan(null, null, same), "empty");
+
+// ---- the two-browsers case, end to end: the 18-node chat saved in one browser,
+// a 14-node draft of it left in the other from before that save
+{
+  const nodes = (n) => Array.from({ length: n }, (_, i) => node(`n${i}`, i * 10));
+  const saved18 = { format: 2, name: "chat", nodes: nodes(18), edges: [] };
+  const stale14 = { format: 2, name: "chat", nodes: nodes(14), edges: [] };
+  check("an old 14-node draft beside the saved 18-node chat opens the saved chat and offers the draft",
+    openPlan(parseDraft(JSON.stringify(stale14)), V2, (g) => sameGraph(g, saved18)), "server-offer");
+  check("so does a new-format 14-node draft with edits made before the save",
+    openPlan(rec(stale14, "v1", true), V2, (g) => sameGraph(g, saved18)), "server-offer");
+  check("and a 14-node draft with no edits is simply replaced by the saved chat",
+    openPlan(rec(stale14, "v1", false), V2, (g) => sameGraph(g, saved18)), "server");
+}
+
+// ---- sameGraph: order, names and key order never count; content does
+check("the same graph is the same", sameGraph(SAVED, JSON.parse(JSON.stringify(SAVED))), true);
+check("node order, edge order and the name do not count",
+  sameGraph(SAVED, { ...SAVED, name: "other", nodes: [...SAVED.nodes].reverse() }), true);
+check("config key order does not count",
+  sameGraph({ ...SAVED, nodes: [node("a", 0, { config: { x: 1, y: 2 } })] }, { ...SAVED, nodes: [node("a", 0, { config: { y: 2, x: 1 } })] }), true);
+check("a moved node counts", sameGraph(SAVED, { ...SAVED, nodes: [node("a", 5), node("b", 300)] }), false);
+check("sub-pixel moves do not", sameGraph(SAVED, { ...SAVED, nodes: [node("a", 0.2), node("b", 300)] }), true);
+check("a changed knob counts", sameGraph(SAVED, { ...SAVED, nodes: [node("a", 0, { config: { text: "z" } }), node("b", 300)] }), false);
+check("an added node counts", sameGraph(SAVED, EDITED), false);
+check("a removed wire counts", sameGraph(SAVED, { ...SAVED, edges: [] }), false);
+check("a disabled node counts", sameGraph(SAVED, { ...SAVED, nodes: [node("a", 0, { disabled: true }), node("b", 300)] }), false);
+check("without a size rule, a size only one side has does not count",
+  sameGraph(SAVED, { ...SAVED, nodes: [node("a", 0, { size: [260, 140] }), node("b", 300)] }), true);
+check("a size both sides have counts",
+  sameGraph({ ...SAVED, nodes: [node("a", 0, { size: [300, 140] }), node("b", 300)] },
+    { ...SAVED, nodes: [node("a", 0, { size: [260, 140] }), node("b", 300)] }), false);
+{
+  const sizeOf = (n) => n.size ?? [260, 140];
+  check("with a size rule, a default size equals no size",
+    sameGraph(SAVED, { ...SAVED, nodes: [node("a", 0, { size: [260, 140] }), node("b", 300)] }, sizeOf), true);
+  check("and a resize counts", sameGraph(SAVED, { ...SAVED, nodes: [node("a", 0, { size: [400, 140] }), node("b", 300)] }, sizeOf), false);
+}
+check("group member order does not count",
+  sameGraph({ ...SAVED, groups: [{ id: "g", title: "G", color: "blue", members: ["a", "b"] }] },
+    { ...SAVED, groups: [{ id: "g", title: "G", color: "blue", members: ["b", "a"] }] }), true);
 
 if (failures) {
   console.error(`\n${failures} tab check(s) failed`);
