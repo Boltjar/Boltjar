@@ -8,7 +8,8 @@
 //   On  + draft   → "Save & Restart"  (PUT then ws restart)
 //   On  + clean   → running           (the primary collapses; Off/Restart remain)
 // Plus undo/redo, a live telemetry cluster, the palette trigger, settings and
-// the Help menu button.
+// the Help menu button. The brand logo opens the file menu (Open, Save, Save as,
+// Export), which App builds and hangs under it, as it does the Help menu.
 // ============================================================================
 import { useState } from "react";
 import { Icon } from "../lib/icons";
@@ -48,8 +49,7 @@ interface CommandBarProps {
   canRedo: boolean;
   saving: boolean;
   /** Receives `true` when the library rail is open. Drives nothing visual
-   *  beyond an unobtrusive `data-rail-open` hook; the brand never recolors
-   *  on click anymore (it only opens the rail when closed). */
+   *  beyond an unobtrusive `data-rail-open` hook on the brand. */
   libraryRailOpen: boolean;
   onPrimary: () => void;
   onOff: () => void;
@@ -60,7 +60,11 @@ interface CommandBarProps {
   onShowProblems: () => void;
   /** the gear: opens Settings on its General tab. */
   onOpenSettings: () => void;
-  onBrandClick: () => void;
+  /** the file menu is showing (the logo stays lit while it is). */
+  fileOpen: boolean;
+  /** open the file menu under the logo whose box is `anchor`. */
+  onOpenFile: (anchor: DOMRect) => void;
+  onCloseFile: () => void;
   /** the Help menu is showing (the button stays lit while it is). */
   helpOpen: boolean;
   /** open the Help menu under the button whose box is `anchor`. */
@@ -115,7 +119,9 @@ export function CommandBar(props: CommandBarProps) {
     onOpenPalette,
     onShowProblems,
     onOpenSettings,
-    onBrandClick,
+    fileOpen,
+    onOpenFile,
+    onCloseFile,
     helpOpen,
     onOpenHelp,
     onCloseHelp,
@@ -145,18 +151,24 @@ export function CommandBar(props: CommandBarProps) {
   return (
     <header className="cmdbar">
       <button
+        type="button"
         className="brand brand-btn"
         data-rail-open={libraryRailOpen}
-        onClick={onBrandClick}
-        title={libraryRailOpen ? "Boltjar" : "Open library"}
-        aria-label="Boltjar"
+        title="Open, save and export"
+        aria-label="Boltjar file menu"
+        aria-haspopup="menu"
+        aria-expanded={fileOpen}
+        // as on Help: the menu closes on any press outside it, and a press on
+        // the logo must not count, or the click that follows would reopen it.
+        onMouseDown={(e) => { if (fileOpen) e.stopPropagation(); }}
+        onClick={(e) => (fileOpen ? onCloseFile() : onOpenFile(e.currentTarget.getBoundingClientRect()))}
       >
         <img className="brand-logo" src={logoUrl} alt="" draggable={false} />
       </button>
       {/* workflow tabs sit inside the bar, right after the brand: each open
           workflow as a browser-like tab, the active one brighter. There is no
           '+' here by design; new tabs come from the Saved Workflows panel
-          (opened via the brand). Per-tab status dot + close X. */}
+          and the file menu. Per-tab status dot + close X. */}
       <WorkflowTabs
         tabs={tabs}
         activeSlug={activeSlug}

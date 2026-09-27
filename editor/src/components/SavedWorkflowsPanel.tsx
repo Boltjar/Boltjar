@@ -28,11 +28,14 @@ interface SavedWorkflowsPanelProps {
    *  lives in this panel's header (replaces the one that was on the Node
    *  Library mid-rail). */
   onCloseRail: () => void;
+  /** bumped when a workflow was saved elsewhere (Save, the file menu's Save
+   *  as): the list reads the server again. */
+  refreshKey?: number;
 }
 
 export function SavedWorkflowsPanel({
   onOpenTab, onNewWorkflow, onRenameWorkflow, onCloneWorkflow, onDeleteWorkflow,
-  openSlugs = [], onCloseRail,
+  openSlugs = [], onCloseRail, refreshKey = 0,
 }: SavedWorkflowsPanelProps) {
   const [names, setNames] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,7 +62,7 @@ export function SavedWorkflowsPanel({
         if (!cancelled) setLoading(false);
       });
     return () => { cancelled = true; };
-  }, [tick]);
+  }, [tick, refreshKey]);
 
   const openSet = new Set(openSlugs);
   const refetch = () => setTick((n) => n + 1);

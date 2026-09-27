@@ -22,6 +22,7 @@ import { deadWireNotice, healDeadWires } from "./lib/deadWires";
 import { notifyStoreChanged } from "./lib/storeEvents";
 import { changedStores, declarationSignature, ensureDeclaredStores, ensureNotices } from "./lib/storeSchema";
 import { fetchSavedSlugs, fetchServerGraph, serverError, unreadableNotice } from "./lib/serverGraph";
+import { exportFileName, exportText, openedSlug, openFailedNotice, parseWorkflowFile, saveAsName } from "./lib/workflowFile";
 import {
   freeSlug, graphSource, parseTabs, withTabClosed, withTabOpened, withTabRenamed, withTabSaved, type TabsState,
 } from "./lib/tabs";
@@ -39,6 +40,7 @@ import { ContextMenu, type MenuItem } from "./components/ContextMenu";
 import { ProblemsPanel } from "./components/ProblemsPanel";
 import { StatusBar } from "./components/StatusBar";
 import { ConnectionsWindow } from "./components/ConnectionsWindow";
+import { SaveAsDialog } from "./components/SaveAsDialog";
 import { GEAR_TAB, SETTINGS_LINKS, type SettingsTab } from "./lib/settingsTabs";
 import { STOP_RESUMING } from "./lib/resumeNotice";
 import { type WorkflowTab } from "./components/WorkflowTabs";
@@ -85,6 +87,19 @@ function readTabs(): TabsState {
 
 function writeTabs(s: TabsState) {
   try { localStorage.setItem(TABS_KEY, JSON.stringify(s)); } catch { /* ignore */ }
+}
+
+/** Hand the browser `text` as a file download named `fileName`. */
+function downloadText(fileName: string, text: string) {
+  const url = URL.createObjectURL(new Blob([text], { type: "application/json" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // the download has its own copy once the click is handled
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 type RailsState = {
@@ -150,6 +165,12 @@ export default function App() {
   // the Help menu hangs from the top bar's Help button (its bottom-right corner).
   const [helpAnchor, setHelpAnchor] = useState<{ x: number; y: number } | null>(null);
   const [aboutOpen, setAboutOpen] = useState(false);
+  // the file menu hangs from the brand logo (its bottom-left corner).
+  const [fileAnchor, setFileAnchor] = useState<{ x: number; y: number } | null>(null);
+  const [saveAsOpen, setSaveAsOpen] = useState(false);
+  // bumped after a save, so the Workflows list reads the server again.
+  const [savedListKey, setSavedListKey] = useState(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ── rail open/closed + library mode (persisted to localStorage) ──
   const [rails, setRailsRaw] = useState<RailsState>(readRails);
@@ -289,8 +310,11 @@ export default function App() {
       const { graph: current, changed } = migrateGraph(g);
       const { graph: clean, removed } = healDeadWires(current, defs, models);
       // a healed graph differs from the saved file, so it arrives unsaved: the
-      // primary button offers Save, and On never runs the file's dead wire.
-      show(clean, { dirty: changed || removed.length > 0 });
+      // primary button offers Save, and On never runs the file's dead wire. So
+      // does a graph the server has never held (a file opened from the file
+      // menu, a clone): there is nothing saved it could match.
+      const neverSaved = tabsState.unsaved.includes(target);
+      show(clean, { dirty: changed || removed.length > 0 || neverSaved });
       for (const w of removed) socket.notice(deadWireNotice(w), "warn");
     };
     (async () => {
@@ -348,7 +372,9 @@ export default function App() {
       }
     }, 250);
     return () => window.clearTimeout(t);
-  }, [toGraph, graphLoading]);
+  // activeSlug: a tab change drops a write still pending for the slug before
+  // it (Save as hands the canvas to the copy's slug without reloading it).
+  }, [toGraph, graphLoading, activeSlug]);
 
   // ── declared stores: the tables a graph's store nodes declare (lib/storeSchema)
   //    are created on the server when the graph opens here, and again when a
@@ -553,6 +579,7 @@ export default function App() {
         setLastSaved(Date.now());
         // the server holds it now: a new workflow loads like any saved one
         setTabsState((prev) => withTabSaved(prev, target));
+        setSavedListKey((n) => n + 1);
         return true;
       }
       // a refused save says why (a saved graph this Boltjar cannot read is kept).
@@ -564,6 +591,102 @@ export default function App() {
       setSaving(false);
     }
   }, [toGraph, markSaved, activeSlug, socket.notice, setTabsState]);
+
+  // ── the file menu (the brand logo) and its palette twins ──
+  // Open: pick a .json workflow in the browser (lib/workflowFile checks and
+  // migrates it). It opens in a new tab, unsaved, under a slug no open tab,
+  // draft or saved graph uses, so it never replaces a saved workflow; the
+  // usual load then heals its dead wires. Models and {{secret.NAME}}
+  // references come through as the file has them.
+  const openWorkflowFile = useCallback((): void => { fileInputRef.current?.click(); }, []);
+  const onWorkflowFilePicked = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const input = e.currentTarget;
+    const file = input.files?.[0];
+    input.value = ""; // picking the same file again fires again
+    if (!file) return;
+    let text: string;
+    try {
+      text = await file.text();
+    } catch {
+      socket.notice(openFailedNotice(file.name, "the browser could not read it"), "bad");
+      return;
+    }
+    const parsed = parseWorkflowFile(text);
+    if (!parsed.ok) {
+      socket.notice(openFailedNotice(file.name, parsed.error), "bad");
+      return;
+    }
+    const saved = await fetchSavedSlugs();
+    if (saved === null) {
+      socket.notice(openFailedNotice(file.name, "the saved workflows could not be read, so its name could clash with one"), "bad");
+      return;
+    }
+    const slug = openedSlug(parsed.graph, file.name, new Set([...tabsState.open, ...draftSlugs(), ...saved]));
+    try {
+      localStorage.setItem(draftKey(slug), JSON.stringify({ ...parsed.graph, name: slug }));
+    } catch {
+      socket.notice(openFailedNotice(file.name, "the browser's storage is full"), "bad");
+      return;
+    }
+    setTabsState((prev) => withTabOpened(prev, slug, { unsaved: true }));
+    socket.notice(`opened ${file.name} as ${slug}, not saved yet`, "ok");
+  }, [socket.notice, tabsState.open, setTabsState]);
+
+  // Save as: a copy of the workflow on the canvas (unsaved edits included) is
+  // saved under a new slug and takes over the canvas in its own tab. The
+  // original keeps what it last saved: its draft is dropped. One never saved
+  // is not left behind as an empty tab: the copy takes its place in the strip.
+  const saveWorkflowAs = useCallback(async (name: string): Promise<string | null> => {
+    const original = activeSlug;
+    if (!original) return "No workflow is open.";
+    const saved = await fetchSavedSlugs();
+    if (saved === null) return "The saved workflows could not be read. Try again.";
+    const checked = saveAsName(name, new Set([...tabsState.open, ...draftSlugs(), ...saved]));
+    if (!checked.ok) return checked.error;
+    const slug = checked.slug;
+    // as Rename does: only a slug the server does not know is free
+    if ((await fetchServerGraph(slug)).kind !== "missing") return `"${slug}" is already a workflow. Pick another name.`;
+    const g: Graph = { ...toGraph(), name: slug };
+    let res: Response;
+    try {
+      res = await fetch(`/api/graphs/${encodeURIComponent(slug)}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(g),
+      });
+    } catch {
+      return "The server did not answer. Nothing was saved.";
+    }
+    if (!res.ok) return `Did not save: ${await serverError(res)}`;
+    const originalUnsaved = tabsState.unsaved.includes(original);
+    try {
+      localStorage.setItem(draftKey(slug), JSON.stringify(g));
+      localStorage.removeItem(draftKey(original));
+    } catch { /* storage unavailable: the copy is on the server */ }
+    // the canvas already shows the copy: hand it the new slug without a reload
+    loadedSlugRef.current = slug;
+    loadGraph(g);
+    setLastSaved(Date.now());
+    setTabsState((prev) => {
+      const next = originalUnsaved && !prev.open.includes(slug)
+        ? withTabRenamed(prev, original, slug)
+        : withTabOpened(prev, slug);
+      return withTabSaved(next, slug);
+    });
+    setSavedListKey((n) => n + 1);
+    socket.notice(`saved a copy of ${original} as ${slug}`, "ok");
+    return null;
+  }, [activeSlug, tabsState.open, tabsState.unsaved, toGraph, loadGraph, setTabsState, socket.notice]);
+
+  // Export: download the workflow as the editor holds it, unsaved edits
+  // included, in the saved-file format. It carries no secret values: a knob
+  // holds a {{secret.NAME}} reference, never the key.
+  const exportWorkflow = useCallback(() => {
+    if (!activeSlug) return;
+    const fileName = exportFileName(activeSlug);
+    downloadText(fileName, exportText(toGraph(), activeSlug));
+    socket.notice(`exported ${fileName}`, "ok");
+  }, [activeSlug, toGraph, socket.notice]);
 
   // ── power: validate then start (gated), stop, restart ──
   const powerOn = useCallback(async () => {
@@ -901,12 +1024,8 @@ export default function App() {
   }, [setRails]);
 
   // ── rail callbacks ──
-  // The brand logo button no longer toggles a mode: both Workflows and
-  // Node Library always render together. Click opens the rail when closed.
-  const handleBrandClick = useCallback(() => {
-    setRails((prev) => prev.library === "open" ? prev : { ...prev, library: "open" });
-  }, [setRails]);
-
+  // Both Workflows and Node Library always render together in the rail; its
+  // edge tab opens it again once closed (the brand logo opens the file menu).
   const handleLibraryClose = useCallback(() => {
     setRails((prev) => ({ ...prev, library: "closed" }));
   }, [setRails]);
@@ -1009,6 +1128,38 @@ export default function App() {
     [helpActions],
   );
 
+  // ── file: one list feeds both the logo's file menu and the palette ──
+  // Save, Save as and Export act on the open workflow, so they need one.
+  const fileCommands = useMemo((): Array<Omit<PaletteAction, "group"> & { enabled: boolean }> => {
+    const open = activeSlug !== null;
+    return [
+      { id: "file-open", label: "Open...", hint: "open a workflow file in a new tab", icon: "folder-open-outline", enabled: true, run: openWorkflowFile },
+      { id: "save", label: "Save", hint: "save the open workflow", icon: "save-outline", kbd: mod("S"), enabled: open, run: () => void putGraph() },
+      { id: "file-save-as", label: "Save as...", hint: "save a copy under a new name", icon: "duplicate-outline", enabled: open, run: () => setSaveAsOpen(true) },
+      { id: "file-export", label: "Export", hint: activeSlug ? `download ${exportFileName(activeSlug)}` : "download the workflow", icon: "download-outline", enabled: open, run: exportWorkflow },
+    ];
+  }, [activeSlug, openWorkflowFile, putGraph, exportWorkflow]);
+
+  const fileActions: PaletteAction[] = useMemo(
+    () => fileCommands.filter((c) => c.enabled).map(({ enabled: _e, ...c }) => ({ ...c, group: "File" as const })),
+    [fileCommands],
+  );
+
+  // the menu keeps every row (one that needs a workflow is greyed out while
+  // none is open) and sets Export apart: it is the one that leaves Boltjar.
+  const fileItems: MenuItem[] = useMemo(
+    () => fileCommands.map((c) => ({
+      id: c.id,
+      label: c.label,
+      icon: c.icon,
+      kbd: c.kbd,
+      disabled: !c.enabled,
+      separatorBefore: c.id === "file-export",
+      run: c.run,
+    })),
+    [fileCommands],
+  );
+
   // a graph the launch could not turn back On is Off, so its toggle offers no
   // Off: this is that Off (the server stops retrying it at each launch).
   const stopResuming = useCallback(() => socket.off(), [socket]);
@@ -1023,16 +1174,16 @@ export default function App() {
         ? [{ id: "stop-resuming", label: STOP_RESUMING.label, hint: STOP_RESUMING.hint, icon: STOP_RESUMING.icon, run: stopResuming }]
         : []),
       ...(socket.power === "on" ? [{ id: "restart", label: "Save & Restart", hint: "apply live edits", icon: "refresh-outline", run: () => void restart() }] : []),
-      { id: "save", label: "Save graph", hint: "PUT /api/graphs", icon: "save-outline", kbd: mod("S"), run: () => void putGraph() },
       { id: "settings", label: "Open Settings", hint: "startup, providers and secrets", icon: "settings-outline", run: () => setSettingsTab(SETTINGS_LINKS.openSettings) },
       { id: "connections", label: "Open AI Providers", hint: "provider keys, endpoints and local models", icon: "git-network-outline", run: () => setSettingsTab(SETTINGS_LINKS.openConnections) },
       { id: "reset", label: "Reset to default graph", hint: "discard local edits", icon: "refresh-outline", run: () => { try { if (activeSlug) localStorage.removeItem(draftKey(activeSlug)); } catch { /* ignore */ } window.location.reload(); } },
       { id: "undo", label: "Undo", hint: "step back", icon: "arrow-undo-outline", kbd: mod("Z"), run: undo },
       { id: "redo", label: "Redo", hint: "step forward", icon: "arrow-redo-outline", kbd: mod("Y"), run: redo },
       { id: "clear", label: "Clear console", hint: "empty the log feed", icon: "trash-outline", run: socket.clearLog },
+      ...fileActions,
       ...helpActions,
     ],
-    [socket.power, socket.resumeNotice, socket.clearLog, powerOn, powerOff, stopResuming, restart, putGraph, undo, redo, activeSlug, helpActions],
+    [socket.power, socket.resumeNotice, socket.clearLog, powerOn, powerOff, stopResuming, restart, undo, redo, activeSlug, fileActions, helpActions],
   );
 
   const selectedNode = nodes.find((n) => n.id === selectedId) ?? null;
@@ -1175,7 +1326,9 @@ export default function App() {
           onOpenPalette={() => setPaletteOpen(true)}
           onShowProblems={() => setProblemsOpen(true)}
           onOpenSettings={() => setSettingsTab(GEAR_TAB)}
-          onBrandClick={handleBrandClick}
+          fileOpen={fileAnchor !== null}
+          onOpenFile={(r) => setFileAnchor({ x: r.left, y: r.bottom + 6 })}
+          onCloseFile={() => setFileAnchor(null)}
           helpOpen={helpAnchor !== null}
           onOpenHelp={(r) => setHelpAnchor({ x: r.right, y: r.bottom + 6 })}
           onCloseHelp={() => setHelpAnchor(null)}
@@ -1193,6 +1346,7 @@ export default function App() {
               onDeleteWorkflow={deleteTab}
               openSlugs={openSlugs}
               onCloseRail={handleLibraryClose}
+              refreshKey={savedListKey}
             />
           </div>
           <div className="rail-library">
@@ -1331,6 +1485,29 @@ export default function App() {
           items={helpItems}
           onClose={() => setHelpAnchor(null)}
         />
+      )}
+
+      {fileAnchor && (
+        <ContextMenu
+          x={fileAnchor.x}
+          y={fileAnchor.y}
+          label="File"
+          items={fileItems}
+          onClose={() => setFileAnchor(null)}
+        />
+      )}
+
+      {/* Open...: the browser's own file picker, for a workflow file */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".json,application/json"
+        hidden
+        onChange={(e) => void onWorkflowFilePicked(e)}
+      />
+
+      {saveAsOpen && activeSlug && (
+        <SaveAsDialog from={activeSlug} onSave={saveWorkflowAs} onClose={() => setSaveAsOpen(false)} />
       )}
 
       {aboutOpen && (

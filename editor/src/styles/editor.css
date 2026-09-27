@@ -1269,15 +1269,19 @@ button{font-family:inherit;}
 @keyframes railTabIn{ from{opacity:0; transform:translateY(-50%) scale(0.9);} to{opacity:1; transform:translateY(-50%) scale(1);} }
 
 /* ============================================================================
-   BRAND BUTTON (CommandBar): interactive toggle for saved workflows
+   BRAND BUTTON (CommandBar): opens the file menu (Open, Save, Save as, Export).
+   Lit like the other top-bar buttons (.icon-btn) on hover and while its menu is
+   open. The 1px transparent border comes out of the padding, so the button
+   keeps its 25px height and nothing beside it moves.
    ========================================================================== */
 .brand-btn{
-  background:none; border:none; cursor:pointer;
-  padding:4px 7px; border-radius:var(--radius-xs);
-  transition:background var(--dur-1);
+  background:transparent; border:1px solid transparent; cursor:pointer;
+  padding:3px 6px; border-radius:var(--radius-sm);
+  transition:background var(--dur-1) var(--ease-out), border-color var(--dur-1), transform var(--dur-1);
 }
-.brand-btn:hover{ background:rgba(var(--accent-rgb),0.09); }
-.brand-btn.brand-active{ background:rgba(var(--accent-rgb),0.12); }
+.brand-btn:hover,
+.brand-btn[aria-expanded="true"]{ background:var(--panel-3); border-color:var(--line); }
+.brand-btn:active{ transform:scale(0.96); }
 /* the logo fills the 17px line box the mono wordmark it replaced had (13px
    JetBrains Mono at line-height normal), so the button keeps its 25px height. */
 .brand-logo{ display:block; height:17px; width:auto; pointer-events:none; }
@@ -2512,6 +2516,13 @@ button{font-family:inherit;}
 .confirm-actions .confirm-del{ background:color-mix(in srgb, var(--bad) 22%, var(--bg-2));
   border-color:rgba(var(--bad-rgb),0.5); color:var(--ink-bright); }
 .confirm-actions .confirm-del:hover{ filter:brightness(1.12); }
+.confirm-actions .confirm-ok{ background:color-mix(in srgb, var(--accent) 16%, var(--bg-2));
+  border-color:rgba(var(--accent-rgb),0.5); color:var(--ink-bright); }
+.confirm-actions .confirm-ok:hover:not(:disabled){ filter:brightness(1.12); }
+.confirm-actions button:disabled{ opacity:.5; cursor:default; }
+/* a field inside a confirm body (Save as): the shared .field / .input pair. */
+.confirm-modal .field{ margin-bottom:14px; }
+.confirm-modal .field-hint{ margin-top:5px; font-family:var(--font-mono); font-size:var(--fs-micro); color:var(--ink-faint); }
 
 /* About body inside the shared NodeModal: the logo over the running version. */
 .about-modal{ display:flex; flex-direction:column; align-items:center; gap:var(--space-3); padding:var(--space-5) 0 var(--space-4); }
