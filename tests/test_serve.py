@@ -177,7 +177,8 @@ def test_a_loopback_or_wildcard_bind_opens_loopback_without_the_token(host):
 
 def test_any_other_bind_opens_the_one_time_token_link():
     from boltjar import security
-    assert serve.editor_url("192.168.1.20", 8770) ==         f"http://192.168.1.20:8770/?token={security.get_token()}"
+    assert serve.editor_url("192.168.1.20", 8770) == \
+        f"http://192.168.1.20:8770/?token={security.get_token()}"
 
 
 # ---------------------------------------------------------------- the port
@@ -252,7 +253,8 @@ def test_editor_row(tmp_path):
 
 
 def test_port_row():
-    assert serve.port_row("127.0.0.1", 8770, ["localhost", "127.0.0.1", "::1"]) ==         console.Row("Port", "8770 free")
+    assert serve.port_row("127.0.0.1", 8770, ["localhost", "127.0.0.1", "::1"]) == \
+        console.Row("Port", "8770 free")
     row = serve.port_row("0.0.0.0", 8770, ["localhost", "127.0.0.1", "::1", "studio"])
     assert row.tone == "warn" and row.detail == "0.0.0.0:8770, reachable from other machines as studio"
 
