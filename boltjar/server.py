@@ -86,6 +86,7 @@ DATA_DIR = USER_DIR / "data"
 STREAM_MAX_CHANNELS = 256
 STREAM_MAX_SUBS_PER_CHANNEL = 64
 AUDIO_POST_MAX_BYTES = 25 * 1024 * 1024  # 25 MB; a mic clip is well under this
+HOOK_POST_MAX_BYTES = 10 * 1024 * 1024  # 10 MB; a webhook payload is well under this
 EDITOR_DIST = ROOT / "editor" / "dist"
 
 # One shared embedded-db store the Database/Query/Exec nodes resolve handles
@@ -958,7 +959,9 @@ async def webhook_handler(slug: str, path: str, request: Request):
         if not hmac.compare_digest(provided.encode("utf-8"), secret_expected.encode("utf-8")):
             return JSONResponse({"error": "forbidden"}, status_code=401)
 
-    body_bytes = await request.body()
+    body_bytes = await _read_capped(request, HOOK_POST_MAX_BYTES)
+    if body_bytes is None:
+        return JSONResponse({"error": "body too large"}, status_code=413)
     try:
         body_text = body_bytes.decode("utf-8", errors="replace")
     except Exception:
@@ -1262,12 +1265,32 @@ async def post_audio(slug: str, node: str, request: Request):
     if hub is None or hub.runtime is None:
         return JSONResponse({"error": "graph not running"}, status_code=404)
     # cap the body (audio clips are MB-scale; reject an absurd payload up front).
-    clen = request.headers.get("content-length")
-    if clen and clen.isdigit() and int(clen) > AUDIO_POST_MAX_BYTES:
+    raw = await _read_capped(request, AUDIO_POST_MAX_BYTES)
+    if raw is None:
         return JSONResponse({"error": "audio too large"}, status_code=413)
-    body = await request.json()
+    try:
+        body = json.loads(raw)
+    except ValueError:
+        body = None
+    if not isinstance(body, dict):
+        return JSONResponse({"error": "body must be a JSON object"}, status_code=400)
     hub.send_audio(node, body.get("audio", ""), body.get("lang", ""))
     return {"ok": True}
+
+
+async def _read_capped(request: Request, limit: int) -> bytes | None:
+    """The request body, or None once it passes `limit` bytes. Counts the bytes
+    that actually arrive, so a chunked upload (no content-length) is capped too;
+    a declared content-length over the limit is refused before reading."""
+    clen = request.headers.get("content-length")
+    if clen and clen.isdigit() and int(clen) > limit:
+        return None
+    body = bytearray()
+    async for chunk in request.stream():
+        body += chunk
+        if len(body) > limit:
+            return None
+    return bytes(body)
 
 
 def _safe(name: str) -> str:
