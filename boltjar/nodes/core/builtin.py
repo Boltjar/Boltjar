@@ -1551,10 +1551,15 @@ def _db_friendly_error(exc: Exception, op: str):
     when it is actionable. The common first-run trap is writing to a table before
     its schema exists: sqlite raises `OperationalError: no such table: NAME`, an
     opaque message. Surface the table name and tell the user to create it first;
-    we do NOT auto-create tables (an open design question). Returns None for
-    anything we don't specifically translate, so the caller re-raises the original
-    (still visible via the runtime's node_error path)."""
+    we do NOT auto-create tables (an open design question). A statement the
+    store's authorizer refuses (ATTACH and friends) gets a named reason too.
+    Returns None for anything we don't specifically translate, so the caller
+    re-raises the original (still visible via the runtime's node_error path)."""
     msg = str(exc)
+    if msg in ("not authorized", "authorization denied"):
+        return ValueError(
+            "DB: ATTACH, DETACH and VACUUM INTO are refused: they reach database "
+            "files outside this store.")
     if isinstance(exc, sqlite3.OperationalError) and "no such table" in msg.lower():
         table = msg.split(":", 1)[1].strip() if ":" in msg else "?"
         return ValueError(
@@ -1645,7 +1650,7 @@ class DBNode:
             missing table) into the node's actionable visible error."""
             try:
                 return await asyncio.to_thread(fn, *args)
-            except sqlite3.OperationalError as exc:
+            except sqlite3.DatabaseError as exc:
                 friendly = _db_friendly_error(exc, op)
                 if friendly is not None:
                     raise friendly from exc

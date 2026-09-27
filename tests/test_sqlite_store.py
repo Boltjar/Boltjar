@@ -68,3 +68,49 @@ def test_close_releases_connections(tmp_path):
     store.execute("k6", "CREATE TABLE t(x INTEGER)")
     store.close()
     assert store._conns == {}
+
+
+# ---- no statement reaches a file outside the store ---------------------------
+
+def _refused(store, sql):
+    import sqlite3
+    try:
+        store.execute("k", sql)
+    except sqlite3.DatabaseError as exc:
+        return str(exc)
+    return None
+
+
+def _sql_str(path) -> str:
+    return "'" + str(path).replace("'", "''") + "'"
+
+
+def test_attach_is_refused(tmp_path):
+    store = SqliteStore(root=tmp_path / "dbs")
+    target = tmp_path / "elsewhere.db"
+    assert _refused(store, f"ATTACH {_sql_str(target)} AS x") == "not authorized"
+    # a computed name, and an in-memory database, are refused the same way.
+    assert _refused(store, f"ATTACH '' || {_sql_str(target)} AS x") == "not authorized"
+    assert _refused(store, "ATTACH ':memory:' AS m") == "not authorized"
+    assert not target.exists()
+
+
+def test_vacuum_into_is_refused(tmp_path):
+    store = SqliteStore(root=tmp_path / "dbs")
+    store.execute("k", "CREATE TABLE t(x TEXT)")
+    target = tmp_path / "copy.db"
+    assert _refused(store, f"VACUUM INTO {_sql_str(target)}") == "authorization denied"
+    assert _refused(store, f"VACUUM main INTO {_sql_str(target)}") == "authorization denied"
+    assert not target.exists()
+
+
+def test_detach_is_refused(tmp_path):
+    assert _refused(SqliteStore(root=tmp_path), "DETACH main") == "not authorized"
+
+
+def test_plain_vacuum_still_runs(tmp_path):
+    store = SqliteStore(root=tmp_path)
+    store.execute("k", "CREATE TABLE t(x TEXT)")
+    store.execute("k", "INSERT INTO t VALUES('kept')")
+    store.execute("k", "VACUUM")
+    assert store.query("k", "SELECT x FROM t") == [{"x": "kept"}]

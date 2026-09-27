@@ -53,6 +53,19 @@ def _safe_coltype(coltype: str | None) -> str:
     return _COLTYPES.get((coltype or "").strip().lower(), "TEXT")
 
 
+def _authorize(action: int, arg1, arg2, db_name, trigger) -> int:
+    """The authorizer on every store connection: no statement may reach a file
+    outside the store. ATTACH (and VACUUM INTO, which runs one with its target
+    file) could create or read an SQLite file anywhere the user can write, such
+    as a startup folder. Plain VACUUM attaches a private temporary database
+    whose name is '', so that one stays allowed."""
+    if action == sqlite3.SQLITE_ATTACH and arg1 != "":
+        return sqlite3.SQLITE_DENY
+    if action == sqlite3.SQLITE_DETACH:
+        return sqlite3.SQLITE_DENY
+    return sqlite3.SQLITE_OK
+
+
 class SqliteStore:
     def __init__(self, root: pathlib.Path | str = "user/data/dbs") -> None:
         self.root = pathlib.Path(root)
@@ -66,6 +79,11 @@ class SqliteStore:
         if conn is None:
             conn = sqlite3.connect(str(self.root / f"{key}.db"), check_same_thread=False)
             conn.row_factory = sqlite3.Row
+            conn.set_authorizer(_authorize)
+            if hasattr(conn, "setlimit"):  # Python 3.11+
+                # one slot, for the temporary database plain VACUUM attaches (0
+                # would refuse VACUUM itself); the authorizer refuses every file.
+                conn.setlimit(sqlite3.SQLITE_LIMIT_ATTACHED, 1)
             self._conns[key] = conn
         return conn
 

@@ -597,3 +597,23 @@ def test_db_tag_substitutes_into_fields_and_where(tmp_path, monkeypatch):
     assert [r["body"] for r in rows] == ["seed", "second"]
     assert all(r["owner"] == "ada" for r in rows)
     asyncio.run(rt.stop())
+
+
+def test_db_exec_attach_is_refused_with_a_reason(tmp_path, monkeypatch):
+    """ATTACH through the DB node's exec gets a named reason, and no file."""
+    _db(tmp_path, monkeypatch)
+    target = tmp_path / "startup" / "planted.db"
+    target.parent.mkdir()
+
+    rt = Runtime()
+    rt.build({
+        "nodes": [
+            {"id": "mydb", "type": "core.store.database", "config": {}},
+            {"id": "x", "type": "core.db",
+             "config": {"operation": "exec", "sql": f"ATTACH '{target}' AS planted"}},
+        ],
+        "edges": [{"src": "mydb", "src_port": "db", "dst": "x", "dst_port": "db"}],
+    })
+    with pytest.raises(ValueError, match="ATTACH, DETACH and VACUUM INTO are refused"):
+        asyncio.run(rt._fire(rt.nodes["x"], "trigger", "go", rt.new_turn()))
+    assert not target.exists()
