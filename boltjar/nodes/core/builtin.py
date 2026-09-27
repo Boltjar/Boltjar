@@ -15,7 +15,7 @@ import re
 
 from simpleeval import SimpleEval, DEFAULT_FUNCTIONS
 
-from boltjar.sdk import node, Kind, NodeFailure, Port, Widget, code, select, slider, tmpl
+from boltjar.sdk import node, Kind, NodeFailure, Port, Widget, code, model, select, slider, tmpl
 from boltjar import models
 from boltjar.secrets import resolve_secrets
 
@@ -1068,7 +1068,7 @@ def _model_params(obj, manifest, wired: dict) -> dict:
               "params to the capabilities of the selected model. A provider "
               "failure fires `error` (with the message) instead of a reply.")
 class LLM:
-    model: Widget = Widget(kind="model", default="", label="Model")
+    model: Widget = model("llm")
     inputs = [Port("trigger", "event", trigger=True),
               Port("prompt", "text"),
               Port("tools", "tool", growable=True, optional=True)]
@@ -1194,7 +1194,7 @@ class ToolArgs:
 class STT:
     # The same rich model picker the LLM uses (kind=model); filtered to kind=stt
     # manifests by the editor. With nothing picked the node uses this default.
-    model: Widget = Widget(kind="model", default="fish/asr", label="Model")
+    model: Widget = model("stt", "fish/asr")
     # fires on a dedicated `trigger` (like the LLM); `audio` is pulled data.
     inputs = [Port("trigger", "event", trigger=True),
               Port("audio", "audio")]
@@ -1224,7 +1224,7 @@ class TTS:
     # Per-model params (voice, speed, ...) come from the selected manifest and
     # render as ordinary knobs below, like the LLM's temperature/top_p. With
     # nothing picked the node uses this default.
-    model: Widget = Widget(kind="model", default="xai/tts", label="Model")
+    model: Widget = model("tts", "xai/tts")
     # fires on a dedicated `trigger` (like the LLM); `text` is pulled data. `lang`
     # wires straight from the STT `lang` output (or an Audio Input's).
     inputs = [Port("trigger", "event", trigger=True),
@@ -1338,7 +1338,7 @@ async def _rerank_model(manifest, query: str, docs: list, endpoint: str) -> list
 class Embed:
     # With nothing picked the node runs this declared default, so the picker shows
     # the model that actually runs (the TTS/STT precedent).
-    model: Widget = Widget(kind="model", default="ollama/bge-m3", label="Model")
+    model: Widget = model("embed", "ollama/bge-m3")
     inputs = [Port("trigger", "event", trigger=True),
               Port("text", "text")]
     outputs = [Port("embedding", "embedding"), Port("trigger", "event")]
@@ -1362,7 +1362,7 @@ class Rerank:
     # visible and editable on the node (and named in the error when the backend is down).
     # With nothing picked the node runs the declared default model, which the picker
     # therefore shows (the TTS/STT precedent).
-    model: Widget = Widget(kind="model", default="rerank/bge-v2-m3", label="Model")
+    model: Widget = model("rerank", "rerank/bge-v2-m3")
     url: Widget = Widget(kind="text", default="http://localhost:8181/rerank",
                          label="rerank url", port_type="text")
     inputs = [Port("trigger", "event", trigger=True),

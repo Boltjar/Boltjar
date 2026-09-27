@@ -127,6 +127,12 @@ class Widget:
     # height (proportionally if several), every other knob stays fixed. The design
     # system enforces a min so the node can never shrink to clip content.
     expand: bool = False
+    # a model picker (kind="model") lists the models of this family: llm, tts, stt,
+    # embed or rerank (the manifest `kind`). Declared here so any pack node can
+    # carry a model picker; the editor never keys the family off a node id. Its
+    # `options` are the special values the picker offers above the model list
+    # ("auto" on the LLM: the runtime picks the model, see boltjar.model_discovery).
+    model_kind: Optional[str] = None
 
     def as_dict(self) -> dict:
         return {
@@ -139,6 +145,8 @@ class Widget:
             "op_field": self.op_field, "op_values": list(self.op_values),
             "placeholder": self.placeholder, "options_from": self.options_from,
             "expand": self.expand,
+            # a model picker with no declared family lists LLMs (the manifest default).
+            "model_kind": (self.model_kind or "llm") if self.kind == "model" else None,
         }
 
     def coerce(self, value: Any) -> Any:
@@ -171,6 +179,16 @@ def select(options: list[Any], default: Any = None) -> Widget:
     """A dropdown config field. The default is the first option unless given."""
     return Widget(kind="select", options=list(options),
                   default=default if default is not None else (options[0] if options else None))
+
+
+def model(model_kind: str = "llm", default: str = "", *, auto: bool = False,
+          label: str = "Model") -> Widget:
+    """A model picker listing the models of one family (llm, tts, stt, embed,
+    rerank). `default` is the model id the node runs with when nothing is picked.
+    `auto` offers the "auto" value, which the node must resolve itself at run time
+    (the LLM does, through boltjar.model_discovery.resolve_auto)."""
+    return Widget(kind="model", model_kind=model_kind, default=default,
+                  options=["auto"] if auto else [], label=label)
 
 
 def slider(default: float, min: float, max: float, step: float = 0.1, label: str = "") -> Widget:
