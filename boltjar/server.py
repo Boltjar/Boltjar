@@ -10,7 +10,7 @@ WS protocol (the editor is the client):
     <- { kind: "status",  power: "on"|"off" }
     <- { kind: "invalid", problems: [...] }   On rejected (broken graph)
     <- { kind: "value",   node, port, value } live value on a wire
-    <- { kind: "log",     node, message }
+    <- { kind: "log",     node, message, echo? }   echo: the Log node's terminal line
     <- { kind: "node_error", node, error }
 
 Power persistence: the live runtime lives in a module-level Hub singleton, not in
@@ -59,6 +59,7 @@ from boltjar.vector_store import VectorStore
 from boltjar.graph_format import GraphFormatError, format_of, migrate
 from boltjar import __version__, models
 from boltjar import packs as _packs
+from boltjar.console import GraphLines
 import boltjar.secrets as _secrets
 import boltjar.security as _security
 
@@ -112,6 +113,10 @@ KV_STORE = KvStore(DATA_DIR / "kv")
 # memory pack).
 VECTOR_STORE = VectorStore(DATA_DIR / "vectors")
 
+# The terminal's view of the live graphs: every Hub broadcast passes through it
+# and it logs power changes, rejections and errors (never a wire value).
+GRAPH_LINES = GraphLines()
+
 
 class Hub:
     """A backend-resident live runtime for ONE graph slug, shared across every
@@ -154,6 +159,7 @@ class Hub:
             except Exception:
                 # a full or closed subscriber queue must never stall the runtime.
                 pass
+        _tap(event)
 
     def close_connections(self) -> None:
         """End every live connection on this Hub: each editor websocket and each
@@ -213,9 +219,11 @@ class Hub:
         try:
             graph = migrate(graph)
         except GraphFormatError as exc:
-            return [_format_problem(exc)]
-        problems = validate_graph(graph)
+            problems = [_format_problem(exc)]
+        else:
+            problems = validate_graph(graph)
         if problems:
+            _tap({"kind": "invalid", "problems": problems, "slug": self.slug})
             return problems
         async with self._lock:
             await self._stop()
@@ -268,6 +276,14 @@ def get_hub(slug: str) -> Hub:
         hub.slug = slug
         HUBS[slug] = hub
     return hub
+
+
+def _tap(event: dict) -> None:
+    """Show a live event in the terminal. A console fault never reaches the runtime."""
+    try:
+        GRAPH_LINES.feed(event)
+    except Exception:
+        _log.debug("graph line failed", exc_info=True)
 
 
 async def shutdown_all() -> int:
