@@ -293,7 +293,19 @@ class Runtime:
                 self._tasks.append(asyncio.create_task(self._consume(inst)))
         for inst in self.nodes.values():
             if inst.spec.kind == Kind.TRIGGER and hasattr(inst.obj, "start"):
-                self._tasks.append(asyncio.create_task(_run_start(inst)))
+                self._tasks.append(asyncio.create_task(self._run_start(inst)))
+
+    async def _run_start(self, inst: NodeInstance) -> None:
+        """A trigger's own loop. When it dies the trigger stops firing, so the
+        failure is reported like any node error (log + node_error), never left
+        for stop() to collect in silence."""
+        try:
+            await inst.obj.start(inst.ctx)
+        except asyncio.CancelledError:
+            pass
+        except Exception as exc:
+            self.log(inst.id, f"ERROR trigger stopped: {exc!r}")
+            self._notify({"kind": "node_error", "node": inst.id, "error": f"trigger stopped: {exc!r}"})
 
     async def _consume(self, inst: NodeInstance) -> None:
         while self.alive:
@@ -582,13 +594,6 @@ def _redact(value: Any) -> Any:
     if isinstance(value, (list, tuple)):
         return [_redact(v) for v in value]
     return value
-
-
-async def _run_start(inst: NodeInstance) -> None:
-    try:
-        await inst.obj.start(inst.ctx)
-    except asyncio.CancelledError:
-        pass
 
 
 async def _aw(value: Any) -> Any:
