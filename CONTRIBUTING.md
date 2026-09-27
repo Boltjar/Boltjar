@@ -123,6 +123,8 @@ A few things to know:
 - Put behavior on the `Port` and `Widget` declarations (`growable`, `optional`, `op_field` and the rest). The editor reads those generically.
 - `icon=` and `subline=` on `@node` set how the node looks. `icon` is an Ionicons name the editor ships (the list is in `editor/src/lib/icons.tsx`). `subline` is the line under the title, a template over the node's knobs such as `every · {seconds}s`, with the filters listed in `SUBLINE_FILTERS` in `boltjar/sdk.py`. Leave `icon` out and the node draws its kind's icon. Leave `subline` out and a node with a model widget shows its model (`provider · model`), any other its category in lower case.
 - Raise `NodeFailure` to fail and still emit outputs on a declared error branch.
+- Build blocks, not clients. A client is composed from generic nodes: an HTTP client is a Webhook set to reply from Respond to Webhook, the nodes that make the answer, and a Respond to Webhook, never a node shaped to one client's wire format.
+- A node that holds work and hands it on in a later fire, as the Queue does, keeps each item's `ctx.scope` and calls `ctx.carry_scope(scope)` when it hands the item on (with `opens_turn=True`), so a waiting webhook call is still answered by its own Respond to Webhook.
 - Core ids start with `core.` (`core.text.strip`). Saved graphs store the id, so it stays fixed once shipped.
 - Add a test in `tests/`. `tests/test_split_node.py` is a short one to copy.
 

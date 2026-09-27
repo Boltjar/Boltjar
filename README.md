@@ -54,6 +54,10 @@ npm run build --prefix editor
 
 **Headless run:** `python -m boltjar run examples/demo.json 6` (with the `.venv` Python) runs a graph in the terminal for 6 seconds and prints every live event.
 
+## Answering HTTP calls
+
+A game, a script or any other HTTP client talks to a graph through generic nodes, never a node shaped for that client. A **Webhook** receives the call at `http://127.0.0.1:8770/hook/<graph>/<path>`. Set its **reply** to **from Respond to Webhook** and the caller waits, up to the Webhook's **timeout** (30 seconds unless you change it), for the **Respond to Webhook** its run reaches. That node writes its `body` with the status, headers and content type you set; `auto` sends a JSON object or list as JSON and anything else as text. Fire it with **last** off to stream the answer piece by piece, one line per piece or as server-sent events when the caller sends `Accept: text/event-stream`, and with **last** on to end it. Each call gets its own run, so calls in flight at the same time never read each other's data. A call with no answer in time gets 504, and one still waiting when the graph turns Off gets 503. One graph holds up to 64 waiting calls, and one response carries up to 8 MB.
+
 ## Tests
 
 ```powershell
