@@ -252,3 +252,17 @@ def test_ensure_schema_skips_malformed_entries_and_reports_refused_names(store):
     assert out["created"] == ["ok"]
     assert _colnames(out["schema"], "ok") == ["a"]
     assert len(out["conflicts"]) == 1 and out["conflicts"][0].startswith("sqlite_reserved: ")
+
+
+def test_ensure_schema_reads_a_malformed_declaration_without_raising(store):
+    # graphs are shared, so a declaration can hold anything a JSON file can
+    out = store.ensure_schema("k", [
+        {"name": "five", "columns": 5},
+        {"name": "typed", "columns": [{"name": "a", "type": 7}, {"name": "b", "type": None}]},
+    ])
+    assert out["created"] == ["five", "typed"] and out["conflicts"] == []
+    assert _colnames(out["schema"], "five") == ["id"]  # declares no columns: the default id
+    typed = {c["name"]: c["type"] for c in _table(out["schema"], "typed")["columns"]}
+    assert typed == {"a": "NUMERIC", "b": "TEXT"}  # 7 reads as SQLite reads a type named 7
+    again = store.ensure_schema("k", [{"name": "typed", "columns": [{"name": "a", "type": 7}]}])
+    assert again == {**again, "created": [], "added": [], "conflicts": []}

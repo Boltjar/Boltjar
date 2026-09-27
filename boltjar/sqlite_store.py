@@ -210,9 +210,13 @@ class SqliteStore:
                 if not isinstance(t, dict) or not str(t.get("name") or "").strip():
                     continue
                 name = str(t["name"]).strip()
+                # a declaration comes from a graph file, maybe someone else's: a
+                # `columns` that is not a list declares none, a type is read as text.
+                declared_cols = t.get("columns")
                 cols = [
-                    {"name": str(c["name"]).strip(), "type": c.get("type"), "pk": bool(c.get("pk"))}
-                    for c in (t.get("columns") or [])
+                    {"name": str(c["name"]).strip(), "type": str(c.get("type") or ""),
+                     "pk": bool(c.get("pk"))}
+                    for c in (declared_cols if isinstance(declared_cols, list) else [])
                     if isinstance(c, dict) and str(c.get("name") or "").strip()
                 ]
                 try:
@@ -230,7 +234,7 @@ class SqliteStore:
                         ).fetchall()
                     }
                     for c in cols:
-                        col, declared = c["name"], str(c["type"] or "").strip()
+                        col, declared = c["name"], c["type"].strip()
                         if col.lower() in existing:
                             have = existing[col.lower()]
                             if declared and _column_kind(have) != _column_kind(declared):

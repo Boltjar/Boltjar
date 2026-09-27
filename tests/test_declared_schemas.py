@@ -111,6 +111,36 @@ def test_a_store_that_cannot_open_is_a_warning(store, monkeypatch):
     ]}
 
 
+# what a hand-edited or someone else's graph file can hold in a declaration
+MALFORMED = [{"name": "five", "columns": 5},
+             {"name": "typed", "columns": [{"name": "a", "type": 7}]}]
+
+
+def test_a_malformed_declaration_still_opens(store):
+    r = client.post("/api/stores/ensure", json=_graph(_db("a", MALFORMED, db_key="k1"),
+                                                      {"id": "b", "type": "core.store.database",
+                                                       "config": {"schema": {"not": "a list"}}}))
+    assert r.status_code == 200
+    assert r.json() == {"stores": [
+        {"node": "a", "key": "k1", "created": ["five", "typed"], "added": []},
+    ], "warnings": []}
+
+
+def test_a_declaration_the_store_cannot_check_is_a_warning_on_its_node(store, monkeypatch):
+    def broken(key, tables):
+        raise TypeError("'int' object is not iterable")
+
+    monkeypatch.setattr(store, "ensure_schema", broken)
+    message = "its declared tables could not be checked: TypeError(\"'int' object is not iterable\")"
+    r = client.post("/api/stores/ensure", json=_graph(_db("a", NOTES, db_key="k1")))
+    assert r.status_code == 200
+    assert r.json() == {"stores": [], "warnings": [{"node": "a", "message": message}]}
+    problems, seen = _power_on(_graph(_db("a", NOTES, db_key="k1")))
+    assert problems is None
+    assert [(e["node"], e["message"]) for e in seen if e["kind"] == "warning"] == [("a", message)]
+    assert any(e["kind"] == "status" and e["power"] == "on" for e in seen)
+
+
 def test_ensure_refuses_a_graph_from_a_newer_boltjar(store):
     r = client.post("/api/stores/ensure", json={**_graph(_db("a", NOTES)), "format": 999})
     assert r.status_code == 422
@@ -139,6 +169,14 @@ def test_power_on_creates_declared_tables_first(store):
     assert problems is None
     assert _tables(store, "k1") == ["notes"]
     assert [e for e in seen if e["kind"] == "status"][0]["power"] == "on"
+
+
+def test_a_malformed_declaration_still_powers_on(store):
+    problems, seen = _power_on(_graph(_db("a", MALFORMED, db_key="k1")))
+    assert problems is None
+    assert not [e for e in seen if e["kind"] in ("warning", "error")], seen
+    assert any(e["kind"] == "status" and e["power"] == "on" for e in seen)
+    assert _tables(store, "k1") == ["five", "typed"]
 
 
 def test_power_on_warns_about_a_conflict_and_still_runs(store):

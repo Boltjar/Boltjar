@@ -1572,8 +1572,11 @@ def ensure_database_schema(node_id: str, cfg: dict | None) -> tuple[dict | None,
     {key, created, added} once the store was reached, None when the node
     declares nothing or its store could not be opened; each warning is a
     declaration the database cannot match, or the reason the store was not
-    reached."""
-    tables = (cfg or {}).get("schema")
+    reached. It never raises: a graph opens and runs whatever its declaration
+    holds, and graphs are shared, so the declaration may be someone else's."""
+    if not isinstance(cfg, dict):
+        return None, []
+    tables = cfg.get("schema")
     if not isinstance(tables, list) or not tables:
         return None, []
     key = database_key(node_id, cfg)
@@ -1585,6 +1588,8 @@ def ensure_database_schema(node_id: str, cfg: dict | None) -> tuple[dict | None,
         # reported like a conflict: the graph still opens and runs, and its DB
         # nodes name the failure when they run.
         return None, [f"its database could not be opened: {exc}"]
+    except Exception as exc:  # a declaration must never stop a graph
+        return None, [f"its declared tables could not be checked: {exc!r}"]
     return {"key": key, "created": out["created"], "added": out["added"]}, out["conflicts"]
 
 
@@ -1598,7 +1603,7 @@ def ensure_declared_schemas(graph: dict) -> dict:
     for n in graph.get("nodes") or []:
         if not isinstance(n, dict) or n.get("type") != DATABASE_ID:
             continue
-        store, messages = ensure_database_schema(str(n.get("id") or ""), n.get("config") or {})
+        store, messages = ensure_database_schema(str(n.get("id") or ""), n.get("config"))
         if store is not None:
             stores.append({"node": n.get("id"), **store})
         warnings.extend({"node": n.get("id"), "message": m} for m in messages)
