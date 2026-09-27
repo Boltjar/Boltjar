@@ -87,7 +87,9 @@ GLYPHS: dict[bool, dict[str, str]] = {
 }
 SPINNER: dict[bool, str] = {True: "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏", False: "|/-\\"}
 
-TAGLINE = "Catch the spark. Keep it running."
+# the line after the version in the banner
+CREDIT_BY, CREDIT_NAME = "Designed by", "DKLRD"
+CREDIT = f"{CREDIT_BY} {CREDIT_NAME}"
 LABEL_WIDTH = 11   # a checklist label, "Python" and the rest
 RULE_WIDTH = 48    # a section rule, `── Title ───...`
 NAME_WIDTH = 12    # a graph name in a graph line
@@ -486,7 +488,8 @@ class Console:
     def banner_lines(self, version: str, rows: Sequence[Row]) -> list[str]:
         s = self.style
         width = self.width()
-        heading = f"{s(f'v{version}', 'soft', bold=True)}  {s(TAGLINE, dim=True)}"
+        credit = f"{s(CREDIT_BY, dim=True)} {s(CREDIT_NAME, 'soft')}"
+        heading = f"{s(f'v{version}', 'soft', bold=True)}  {credit}"
         need = max(max(map(len, banner_art.WORD)), visible_len(heading))
         flask_width = max(map(len, banner_art.FLASK))
         room = width - 2 - flask_width - ART_GAP
@@ -500,8 +503,8 @@ class Console:
             lines = self._word() + ["", heading, ""]
         else:
             name = f"{s('Boltjar', bold=True)} {s(f'v{version}', 'soft', bold=True)}"
-            fits = 2 + visible_len(name) + 2 + len(TAGLINE) <= width
-            lines = [f"{name}  {s(TAGLINE, dim=True)}" if fits else name, ""]
+            fits = 2 + visible_len(name) + 2 + len(CREDIT) <= width
+            lines = [f"{name}  {credit}" if fits else name, ""]
         lines += self._checklist(rows, width - 2)
         return ["", *(f"  {line}".rstrip() for line in lines), ""]
 

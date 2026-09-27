@@ -239,9 +239,11 @@ ROWS = [
 ]
 
 
-HEADING = "v0.1.0  Catch the spark. Keep it running."
+HEADING = "v0.1.0  Designed by DKLRD"
+# the column beside the flask: as wide as the word or the version line
+BESIDE = max(len(HEADING), *map(len, banner_art.WORD))
 # the widest window that still leaves the flask out (its last column stays free)
-NO_FLASK = 2 + max(map(len, banner_art.FLASK)) + console.ART_GAP + len(HEADING)
+NO_FLASK = 2 + max(map(len, banner_art.FLASK)) + console.ART_GAP + BESIDE
 
 
 def banner(width: int, rows=ROWS, caps: Caps | None = None) -> list[str]:
@@ -262,7 +264,7 @@ def test_a_wide_window_shows_the_flask_beside_the_word_and_the_checklist():
     lines = banner(120)
     (word_line,) = [line for line in lines if line.endswith(banner_art.WORD[2])]
     assert any(word_line.startswith("  " + row + " ") for row in banner_art.FLASK)
-    assert any(line.endswith("v0.1.0  Catch the spark. Keep it running.") for line in lines)
+    assert any(line.endswith(HEADING) for line in lines)
     assert any(line.endswith("✓ Python     3.12.9  .venv") for line in lines)
     assert any(line.endswith("✓ Packs      core (63 nodes)") for line in lines)
     # the flask and the word start on the same row, under the blank that opens the banner
@@ -276,7 +278,7 @@ def test_the_word_is_followed_by_a_blank_the_version_a_blank_and_the_checklist()
     word = len(banner_art.WORD)
     assert lines[start:start + word] == banner_art.WORD
     assert lines[start + word] == ""
-    assert lines[start + word + 1] == "v0.1.0  Catch the spark. Keep it running."
+    assert lines[start + word + 1] == HEADING
     assert lines[start + word + 2] == ""
     assert lines[start + word + 3].startswith("✓ Python")
 
@@ -291,12 +293,12 @@ def test_a_window_too_narrow_for_the_flask_keeps_the_word_and_the_checklist():
 def test_a_terminal_without_braille_gets_the_name_on_one_line():
     lines = banner(120, caps=Caps(unicode=False))
     assert not any(banner_art.FLASK[5].strip() in line or banner_art.WORD[2].strip() in line for line in lines)
-    assert "  Boltjar v0.1.0  Catch the spark. Keep it running." in lines
+    assert "  Boltjar v0.1.0  Designed by DKLRD" in lines
     assert "  + Editor     bundle ready" in lines
 
 
 def test_a_window_narrower_still_gets_one_plain_line():
-    lines = banner(40)
+    lines = banner(2 + BESIDE)  # one column short of the word
     assert not any(banner_art.WORD[3] in line for line in lines)
     assert "  Boltjar v0.1.0" in lines
     assert "  ✓ Port       8770 free" in lines
@@ -331,7 +333,7 @@ def test_a_command_wider_than_the_column_breaks_at_its_spaces():
 
 def test_the_flask_needs_room_for_the_whole_column_beside_it():
     flask = max(map(len, banner_art.FLASK))
-    fits = 2 + flask + console.ART_GAP + len(HEADING) + 1  # the last column stays free
+    fits = 2 + flask + console.ART_GAP + BESIDE + 1  # the last column stays free
     assert any(banner_art.FLASK[5] in line for line in banner(fits))
     assert not any(banner_art.FLASK[5] in line for line in banner(fits - 1))
 
@@ -347,7 +349,9 @@ def test_a_checklist_row_aligns_and_carries_its_fixes():
 
 def test_an_aside_that_does_not_fit_takes_its_own_line():
     rows = [Row("Packs", "core; failed: " + "x" * 40, "warn", aside="(63 nodes)")]
-    assert banner(NO_FLASK, rows)[-3:] == [f"  ! Packs      core; failed: {'x' * 40}", "               (63 nodes)", ""]
+    # no art: an 80 column checklist, where the detail fits and the aside does not
+    assert banner(80, rows, Caps(unicode=False))[-3:] == [
+        f"  ! Packs      core; failed: {'x' * 40}", "               (63 nodes)", ""]
 
 
 def test_the_flask_steps_aside_before_a_link_beside_it_would_break():
@@ -366,7 +370,7 @@ def test_asides_and_fixes_are_dim_and_the_version_bold_soft_white():
                                       fixes=("run it again",))], COLOUR["truecolor"]))
     assert "\x1b[2m.venv\x1b[0m" in text
     assert "\x1b[2mfix: run it again\x1b[0m" in text
-    assert "\x1b[1;38;2;248;250;252mv0.1.0\x1b[0m  \x1b[2mCatch the spark. Keep it running.\x1b[0m" in text
+    assert "\x1b[1;38;2;248;250;252mv0.1.0\x1b[0m  \x1b[2mDesigned by\x1b[0m \x1b[38;2;248;250;252mDKLRD\x1b[0m" in text
 
 
 @pytest.mark.parametrize("tier, allowed", [
