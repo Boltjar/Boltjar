@@ -32,7 +32,7 @@ export const DB_ID = "core.db";
 
 /** Op-shaping, read from the declaration (no per-id table): a widget or port is
  *  visible when it declares no op_field, or when config[op_field] is one of its
- *  op_values. Used for both inline knobs and the output-port reshape. */
+ *  op_values. Used for the inline knobs and the input and output reshape. */
 export function opVisible(
   d: { op_field?: string | null; op_values?: string[] },
   config: Record<string, unknown>,
@@ -270,8 +270,30 @@ export function hasGrowable(def: NodeDef): boolean {
  * input modality, then the growable `tools` base (if the model tool-calls), then
  * one typed port per promoted param. No model / missing manifest falls back to
  * the declared base ports (so the node still works).
+ *
+ * A declared input whose op_field names other operations is left out, as an
+ * op-shaped output is (a Vectors `embedding` under clear): the backend does not
+ * require it there either. The operation is read as the backend reads it, the
+ * saved value else the knob's declared default, so a node saved untouched
+ * (`config: {}`) shows the inputs its default operation needs.
  */
 export function concreteInputs(
+  def: NodeDef,
+  config: Record<string, unknown>,
+  connectedPortNames: ReadonlySet<string>,
+  models?: ModelLookup,
+): ConcretePort[] {
+  const ports = inputsFor(def, config, connectedPortNames, models);
+  const running = (field: string) => ({
+    [field]: config[field] ?? def.widgets.find((w) => w.name === field)?.default,
+  });
+  const hidden = new Set(def.inputs
+    .filter((p) => !p.growable && p.op_field && !opVisible(p, running(p.op_field)))
+    .map((p) => p.name));
+  return hidden.size ? ports.filter((p) => p.dynamic || !hidden.has(p.name)) : ports;
+}
+
+function inputsFor(
   def: NodeDef,
   config: Record<string, unknown>,
   connectedPortNames: ReadonlySet<string>,

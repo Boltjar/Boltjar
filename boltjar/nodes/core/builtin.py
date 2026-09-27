@@ -1523,7 +1523,7 @@ class VectorStoreNode:
 
 @node(id="core.vectors", name="Vectors", kind=Kind.TRANSFORM, category="Store",
       summary="Index and search an embedded vector store. The operation knob "
-              "reshapes the knobs and outputs. Search takes one or more query "
+              "reshapes the knobs, inputs and outputs. Search takes one or more query "
               "embeddings, keeps each item's best score across them and returns the "
               "top k. It compares every stored vector by cosine similarity, which "
               "suits thousands of items.",
@@ -1541,11 +1541,13 @@ class VectorsNode:
     ref: Widget = tmpl("", kind="text", port_type="text", op_field="operation",
                        op_values=("delete",), placeholder="external ref to delete")
     # `embedding` is ONE growable-free port that takes a single vector OR a list of
-    # vectors (multi-probe union, e.g. a List of an Embed + a HyDE Embed). One
-    # growable base (`tag`) keeps the editor's per-node socket reshaping exact.
+    # vectors (multi-probe union, e.g. a List of an Embed + a HyDE Embed). Only
+    # search and index read it, so only they have it: delete and clear run
+    # without one. One growable base (`tag`) keeps the editor's per-node socket
+    # reshaping exact.
     inputs = [Port("trigger", "event", trigger=True),
               Port("vectors", "vectors"),
-              Port("embedding", "embedding"),
+              Port("embedding", "embedding", op_field="operation", op_values=("search", "index")),
               Port("text", "text", optional=True),
               Port("tag", "any", growable=True, optional=True, ghost_base="tag")]
     outputs = [Port("results", "memory-set", op_field="operation", op_values=("search",)),

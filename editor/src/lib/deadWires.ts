@@ -12,7 +12,9 @@
 // socket the canvas can draw (Template tags, HTTP / KV / DB tags, the LLM's
 // `tools`, Wireless sockets) is alive. An output the node's definition declares
 // is alive too while a knob hides it (a DB `rows` under `insert`, the LLM's
-// `reasoning` with thinking off): the port still exists, the knob brings it back.
+// `reasoning` with thinking off), and so is an input declared for some
+// operations (a Vectors `embedding` under `clear`): the port still exists, the
+// knob brings it back.
 //
 // SAFETY: a wire is judged only when each of its nodes is fully known: its
 // definition is loaded and, for a model-driven node (LLM / TTS / STT / Embed /
@@ -108,8 +110,11 @@ function wireJudge(
     if (picker && !models.has(String(node.config?.[picker.name] ?? ""))) return undefined;
     return def;
   };
+  // a declared input is a port of the node even while its operation hides it
+  // (a Vectors `embedding` under clear).
   const hasInput = (node: GraphNode, def: NodeDef, handle: string): boolean =>
-    concreteInputs(def, node.config ?? {}, connected.get(node.id) ?? new Set<string>(), models)
+    def.inputs.some((p) => p.name === handle && !!p.op_field)
+    || concreteInputs(def, node.config ?? {}, connected.get(node.id) ?? new Set<string>(), models)
       .some((p) => p.name === handle);
   // a declared output is a port of the node even while a knob hides it.
   const hasOutput = (node: GraphNode, def: NodeDef, handle: string): boolean =>

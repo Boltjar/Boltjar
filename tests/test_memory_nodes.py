@@ -173,3 +173,62 @@ def test_vectors_multi_probe_union(monkeypatch, tmp_path):
     # a single vector still works as one probe.
     one = asyncio.run(srch.run(vectors="s", embedding=[1, 0, 0]))
     assert one["results"][0]["ref"] == "a"
+
+
+def _vectors_graph(operation: str, *, embedding: bool) -> dict:
+    """Manual -> Vectors, with a Vector Store wired and an Embed on `embedding`
+    only when asked."""
+    nodes = [{"id": "go", "type": "core.trigger.manual"},
+             {"id": "vs", "type": "core.store.vectors"},
+             {"id": "op", "type": "core.vectors",
+              "config": {"operation": operation, "namespace": "facts", "ref": "a"}}]
+    edges = [{"src": "go", "src_port": "trigger", "dst": "op", "dst_port": "trigger"},
+             {"src": "vs", "src_port": "vectors", "dst": "op", "dst_port": "vectors"}]
+    if embedding:
+        nodes.append({"id": "emb", "type": "core.ai.embed"})
+        edges.append({"src": "emb", "src_port": "embedding", "dst": "op", "dst_port": "embedding"})
+    return {"nodes": nodes, "edges": edges}
+
+
+def test_vectors_needs_an_embedding_only_to_search_and_index():
+    from boltjar.server import validate_graph
+
+    def missing(graph: dict) -> list[str]:
+        """The Vectors node's unwired inputs (the Embed's own are not the point)."""
+        return [p["message"] for p in validate_graph(graph)
+                if p["kind"] == "missing-input" and p["node"] == "op"]
+
+    for op in ("search", "index"):
+        assert missing(_vectors_graph(op, embedding=False)) == [
+            "required input 'embedding' is not connected"], op
+        assert missing(_vectors_graph(op, embedding=True)) == [], op
+    for op in ("delete", "clear"):
+        assert missing(_vectors_graph(op, embedding=False)) == [], op
+    # a node saved before its operation was picked runs the default, search
+    untouched = _vectors_graph("search", embedding=False)
+    untouched["nodes"][2]["config"] = {}
+    assert missing(untouched) == ["required input 'embedding' is not connected"]
+
+
+@pytest.mark.parametrize("operation", ["delete", "clear"])
+def test_vectors_delete_and_clear_run_without_an_embedding(operation, monkeypatch, tmp_path):
+    from boltjar.runtime import Runtime
+
+    vs = VectorStore(root=tmp_path)
+    monkeypatch.setattr(builtin, "_vector_store", lambda: vs)
+    vs.index("vs", "facts", [1.0, 0.0], "east", "a", {})  # the store the Vector Store node names
+    events: list[dict] = []
+    runtime = Runtime(observer=events.append)
+    runtime.build(_vectors_graph(operation, embedding=False))
+
+    async def drive() -> None:
+        await runtime.run()
+        await asyncio.sleep(0.3)
+        await runtime.stop()
+
+    asyncio.run(drive())
+    assert not [e for e in events if e["kind"] == "node_error"], events
+    affected = [e["value"] for e in events
+                if e["kind"] == "value" and e["node"] == "op" and e["port"] == "affected"]
+    assert affected == ["1"]  # a live value event carries its preview text
+    assert vs.search("vs", "facts", [1.0, 0.0], 5, 0.0) == []

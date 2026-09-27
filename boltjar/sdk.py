@@ -82,7 +82,9 @@ class Port:
     default: Any = None
     # op-shaping: show this port only when the named config field equals one of
     # `op_values` (e.g. the KV `value` output only exists for operation="get").
-    # Empty op_field means "always shown" (the common case).
+    # An op-shaped input is required only under those operations (the Vectors
+    # `embedding` for search and index). Empty op_field means "always shown"
+    # (the common case).
     op_field: Optional[str] = None
     op_values: tuple[str, ...] = ()
     # a growable port names each minted socket after the wired source node; when

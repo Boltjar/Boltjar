@@ -927,6 +927,7 @@ def validate_graph(graph: dict) -> list[dict]:
             continue
         if spec.kind == Kind.TRIGGER:
             has_trigger = True
+        cfg = node_config(spec, n.get("config"))
         for p in spec.inputs:
             if p.trigger:
                 # a trigger fires its node, so every one must be wired, a growable
@@ -937,6 +938,10 @@ def validate_graph(graph: dict) -> list[dict]:
                     problems.append({"node": n["id"], "kind": "missing-input", "message": message})
                 continue
             if p.optional or p.growable:
+                continue
+            # an op-shaped input exists only under its operations (a Vectors
+            # `embedding` for search and index), so only they need it wired
+            if p.op_field and cfg.get(p.op_field) not in p.op_values:
                 continue
             if (n["id"], p.name) not in edges_in and p.default is None:
                 problems.append({"node": n["id"], "kind": "missing-input",

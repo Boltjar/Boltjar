@@ -31,7 +31,7 @@ function toDataUrl(file) {
 }
 const load = (rel) => import(toDataUrl(resolve(here, "../src/lib", rel)));
 const { healDeadWires, deadWireNotice } = await load("deadWires.ts");
-const { concreteOutputs } = await load("dynamicPorts.ts");
+const { concreteInputs, concreteOutputs } = await load("dynamicPorts.ts");
 
 let failures = 0;
 function check(label, got, want) {
@@ -75,6 +75,12 @@ const DEFS = [
   def("core.flow.wireless_in", [port("in", "any", { growable: true, optional: true, ghost_base: "wire" })], [],
     [widget("channel", "select", "1")]),
   def("core.flow.wireless_out", [], [], [widget("channel", "select", "1")]),
+  def("core.store.vectors", [], [port("vectors", "vectors")]),
+  def("core.ai.embed", [trigger, port("text", "text")], [port("embedding", "embedding"), port("trigger", "event")]),
+  def("core.vectors", [trigger, port("vectors", "vectors"),
+    port("embedding", "embedding", { op_field: "operation", op_values: ["search", "index"] })],
+    [opOut("affected", "int", ["delete", "clear"]), port("trigger", "event")],
+    [widget("operation", "select", "search")]),
 ];
 const defs = new Map(DEFS.map((d) => [d.id, d]));
 const manifest = (id, kind, extra) => ({
@@ -154,6 +160,19 @@ check("(precondition) the insert operation hides the DB's rows output",
   concreteOutputs(defs.get("core.db"), { operation: "insert" }).map((p) => p.name).includes("rows"), false);
 check("a wire on a declared output a knob hides survives (DB rows under insert)",
   kept(heal(db, [edge("append", "rows", "preview", "in")])), ["append.rows -> preview.in"]);
+
+const socketsOf = (operation) => concreteInputs(defs.get("core.vectors"),
+  operation === undefined ? {} : { operation }, new Set()).map((p) => p.name);
+check("Vectors has an embedding socket to search and index",
+  [socketsOf("search"), socketsOf("index")], [["trigger", "vectors", "embedding"], ["trigger", "vectors", "embedding"]]);
+check("Vectors has no embedding socket to delete or clear",
+  [socketsOf("delete"), socketsOf("clear")], [["trigger", "vectors"], ["trigger", "vectors"]]);
+check("a Vectors saved untouched runs its default search, so it has an embedding socket",
+  socketsOf(undefined), ["trigger", "vectors", "embedding"]);
+const vectors = [node("store", "core.store.vectors"), node("embed", "core.ai.embed"),
+  node("forget", "core.vectors", { operation: "clear" })];
+check("a wire on an input its operation hides survives (Vectors embedding under clear)",
+  kept(heal(vectors, [edge("embed", "embedding", "forget", "embedding")])), ["embed.embedding -> forget.embedding"]);
 
 const wireless = [node("Username", "core.value.text"), node("win", "core.flow.wireless_in", { channel: "1" }),
   node("wout", "core.flow.wireless_out", { channel: "1" }), node("preview", "core.output.preview")];
