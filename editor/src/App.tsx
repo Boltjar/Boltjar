@@ -36,6 +36,7 @@ import { ContextMenu, type MenuItem } from "./components/ContextMenu";
 import { ProblemsPanel } from "./components/ProblemsPanel";
 import { StatusBar } from "./components/StatusBar";
 import { ConnectionsWindow } from "./components/ConnectionsWindow";
+import { GEAR_TAB, SETTINGS_LINKS, type SettingsTab } from "./lib/settingsTabs";
 import { type WorkflowTab } from "./components/WorkflowTabs";
 import { isPermutation, bringToFront } from "./components/WorkflowTabs.test.helper";
 
@@ -144,7 +145,8 @@ export default function App() {
 
   const [graphLoading, setGraphLoading] = useState(true);
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [connectionsOpen, setConnectionsOpen] = useState(false);
+  // the Settings panel: the tab it opened on, or null while it is closed.
+  const [settingsTab, setSettingsTab] = useState<SettingsTab | null>(null);
   // the Help menu hangs from the top bar's Help button (its bottom-right corner).
   const [helpAnchor, setHelpAnchor] = useState<{ x: number; y: number } | null>(null);
   const [aboutOpen, setAboutOpen] = useState(false);
@@ -1029,7 +1031,8 @@ export default function App() {
         : [{ id: "off", label: "Power off", hint: "stop the runtime", icon: "power-outline", run: powerOff }]),
       ...(socket.power === "on" ? [{ id: "restart", label: "Save & Restart", hint: "apply live edits", icon: "refresh-outline", run: () => void restart() }] : []),
       { id: "save", label: "Save graph", hint: "PUT /api/graphs", icon: "save-outline", kbd: mod("S"), run: () => void putGraph() },
-      { id: "connections", label: "Open Connections", hint: "manage providers and secrets", icon: "git-network-outline", run: () => setConnectionsOpen(true) },
+      { id: "settings", label: "Open Settings", hint: "startup, providers and secrets", icon: "settings-outline", run: () => setSettingsTab(SETTINGS_LINKS.openSettings) },
+      { id: "connections", label: "Open Connections", hint: "manage providers and secrets", icon: "git-network-outline", run: () => setSettingsTab(SETTINGS_LINKS.openConnections) },
       { id: "reset", label: "Reset to default graph", hint: "discard local edits", icon: "refresh-outline", run: () => { try { if (activeSlug) localStorage.removeItem(draftKey(activeSlug)); } catch { /* ignore */ } window.location.reload(); } },
       { id: "undo", label: "Undo", hint: "step back", icon: "arrow-undo-outline", kbd: mod("Z"), run: undo },
       { id: "redo", label: "Redo", hint: "step forward", icon: "arrow-redo-outline", kbd: mod("Y"), run: redo },
@@ -1073,7 +1076,7 @@ export default function App() {
       wirelessChannels,
       wirelessInOwners,
       effectiveOutput,
-      openConnections: () => setConnectionsOpen(true),
+      openConnections: () => setSettingsTab(SETTINGS_LINKS.addConnection),
       storeKeyForInput: (nodeId: string, port: string): string | null => {
         const wire = (inboundSources.get(nodeId) ?? []).find((w) => w.dstPort === port);
         if (!wire) return null;
@@ -1178,7 +1181,7 @@ export default function App() {
           onRedo={redo}
           onOpenPalette={() => setPaletteOpen(true)}
           onShowProblems={() => setProblemsOpen(true)}
-          onOpenConnections={() => setConnectionsOpen(true)}
+          onOpenSettings={() => setSettingsTab(GEAR_TAB)}
           onBrandClick={handleBrandClick}
           helpOpen={helpAnchor !== null}
           onOpenHelp={(r) => setHelpAnchor({ x: r.right, y: r.bottom + 6 })}
@@ -1357,9 +1360,10 @@ export default function App() {
       )}
 
       <ConnectionsWindow
-        open={connectionsOpen}
+        open={settingsTab !== null}
+        initialTab={settingsTab}
         onClose={() => {
-          setConnectionsOpen(false);
+          setSettingsTab(null);
           // a key added or removed changes which models can run.
           void reloadModels();
         }}

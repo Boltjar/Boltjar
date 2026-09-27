@@ -1013,6 +1013,8 @@ button{font-family:inherit;}
   background:var(--ink-faint); transform:translateY(-50%); transition:transform var(--dur-2), background var(--dur-2);}
 .knob-toggle.on .kt-track{background:rgba(var(--accent-rgb),0.22); border-color:var(--accent);}
 .knob-toggle.on .kt-knob{transform:translate(14px,-50%); background:var(--accent);}
+.knob-toggle:disabled{cursor:default;}
+.knob-toggle:disabled .kt-track{opacity:.45;}
 /* promote-to-input plug (on every knob) */
 .knob-promote{flex:none; display:grid; place-items:center; width:22px; height:22px; padding:0; border-radius:var(--radius-xs);
   border:1px solid var(--line); background:var(--bg-1); color:var(--ink-faint); cursor:pointer;
@@ -1543,6 +1545,26 @@ button{font-family:inherit;}
   font-family:var(--font-mono); font-size:var(--fs-micro); color:var(--bad); margin-top:4px;
 }
 .conn-input-err{border-color:rgba(var(--bad-rgb),0.55) !important;}
+
+/* ── Settings: General tab (a section card per GENERAL_SECTIONS entry) ──
+   Each row is the shared bool Knob with one plain line under it. The knob keeps
+   its look; only its label steps up from the node size to the panel's. */
+.set-rows{gap:14px;}
+.set-row{display:flex; flex-direction:column; gap:5px;}
+.set-row .knob-lbl{font-size:var(--fs-micro); color:var(--ink);}
+.set-row .knob.bool{padding:8px 11px;}
+.set-row.saving .kt-track{opacity:.6;}
+.set-hint{
+  font-family:var(--font-sans); font-size:var(--fs-xs); color:var(--ink-faint); line-height:1.45;
+  padding:0 2px;
+}
+.set-where{
+  display:flex; align-items:center; gap:6px; padding:0 2px;
+  font-family:var(--font-mono); font-size:var(--fs-micro); color:var(--ink-ghost);
+  overflow-wrap:anywhere;
+}
+.set-where svg{width:12px; height:12px; flex:none;}
+.set-where.warn{color:var(--warn);}
 
 /* ============================================================================
    OLLAMA PULL + LOCAL LIBRARY PANEL (appended: do not reorder above)

@@ -30,10 +30,12 @@ export interface KnobProps {
   onConvert?: () => void;
   /** reset this knob to its declared default (right-click "Reset to default"). */
   onReset?: () => void;
+  /** shown, but not changeable here (a bool knob: the toggle does not flip). */
+  disabled?: boolean;
 }
 
 export function Knob(props: KnobProps) {
-  const { label, kind, value, onChange, onConvert, onReset } = props;
+  const { label, kind, value, onChange, onConvert, onReset, disabled } = props;
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   // a draft buffer for the text knob so the caret holds while the value round-trips.
   const [textDraft, emitText] = useDraft(String(value ?? props.default ?? ""), onChange as (v: string) => void);
@@ -59,7 +61,14 @@ export function Knob(props: KnobProps) {
     const on = knobBool(value, props.default);
     return (
       <div className="knob bool" onContextMenu={openMenu}>
-        <button type="button" className={`knob-toggle nodrag ${on ? "on" : ""}`} onClick={() => onChange(!on)}>
+        <button
+          type="button"
+          className={`knob-toggle nodrag ${on ? "on" : ""}`}
+          onClick={() => onChange(!on)}
+          disabled={disabled}
+          role="switch"
+          aria-checked={on}
+        >
           <span className="knob-lbl">{label}</span>
           <span className="kt-track"><span className="kt-knob" /></span>
         </button>

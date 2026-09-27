@@ -79,7 +79,7 @@ export interface EditorContextValue {
    *  `type` follows the wire into `in`. null for a plain port. Used for edge colour,
    *  the live pulse, and downstream type detection. */
   effectiveOutput: (srcId: string, srcPort: string) => { type: string; src: string; srcPort: string } | null;
-  /** Open the Connections window (AI Providers tab). Provided by App. */
+  /** Open Settings on its AI Providers tab ("Add a connection"). Provided by App. */
   openConnections: () => void;
   /** Resolve the store key feeding a DB/KV transform node: walk the inbound
    *  wire on `port` ("db" | "kv") back to the source node and return its

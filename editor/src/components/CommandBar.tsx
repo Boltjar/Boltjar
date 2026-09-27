@@ -58,7 +58,8 @@ interface CommandBarProps {
   onRedo: () => void;
   onOpenPalette: () => void;
   onShowProblems: () => void;
-  onOpenConnections: () => void;
+  /** the gear: opens Settings on its General tab. */
+  onOpenSettings: () => void;
   onBrandClick: () => void;
   /** the Help menu is showing (the button stays lit while it is). */
   helpOpen: boolean;
@@ -113,7 +114,7 @@ export function CommandBar(props: CommandBarProps) {
     onRedo,
     onOpenPalette,
     onShowProblems,
-    onOpenConnections,
+    onOpenSettings,
     onBrandClick,
     helpOpen,
     onOpenHelp,
@@ -226,7 +227,7 @@ export function CommandBar(props: CommandBarProps) {
         <button className="icon-btn" title={`Command palette (${mod("K")})`} onClick={onOpenPalette}>
           <Icon name="search-outline" />
         </button>
-        <button className="icon-btn" title="Connections &amp; settings" onClick={onOpenConnections}>
+        <button className="icon-btn" title="Settings" onClick={onOpenSettings}>
           <Icon name="settings-outline" />
         </button>
         <button

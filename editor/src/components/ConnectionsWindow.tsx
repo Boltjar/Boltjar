@@ -1,13 +1,17 @@
 // ============================================================================
-// ConnectionsWindow: the single place to manage every provider connection and
-// generic API secret that feeds the LLM/TTS/STT model pickers and the HTTP node.
+// ConnectionsWindow: the Settings panel. The one place for how Boltjar starts
+// (General), every provider connection that feeds the LLM/TTS/STT model
+// pickers (AI Providers), and the generic API secrets the HTTP node uses
+// (Secrets).
 //
-// Opens from the Settings button in CommandBar, the command palette "Open
-// Connections" action, and the model picker's "Add a connection" row.
+// Opens from the gear in CommandBar (on GENERAL), the command palette ("Open
+// Settings", "Open Connections") and the model picker's "Add a connection"
+// row, each on its own tab (lib/settingsTabs SETTINGS_LINKS).
 //
 // Structure: a .scrim + a centered .conn-modal card (reuses .palette + rise
-// animation grammar). Two segmented tabs: AI Providers (a card per provider,
-// then the OpenAI-compatible endpoints) | Secrets. Closes on scrim click or Esc.
+// animation grammar). Three segmented tabs: General (GeneralSettings) | AI
+// Providers (a card per provider, then the OpenAI-compatible endpoints) |
+// Secrets. Closes on scrim click or Esc.
 // ============================================================================
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Icon } from "../lib/icons";
@@ -15,6 +19,8 @@ import { useEditor } from "../lib/editorContext";
 import { baseUrlProblem, endpointKeySecret, endpointNameProblem, type EndpointInfo } from "../lib/endpoints";
 import { listingNote } from "../lib/modelMeta";
 import { serverError } from "../lib/serverGraph";
+import { SETTINGS_TABS, openingTab, type SettingsTab } from "../lib/settingsTabs";
+import { GeneralSettings } from "./GeneralSettings";
 
 // ── API shapes ──────────────────────────────────────────────────────────────
 
@@ -1089,15 +1095,22 @@ function SecretsTab({ secrets, onRefetch }: SecretsTabProps) {
 
 // ── Main window ──────────────────────────────────────────────────────────────
 
-type Tab = "providers" | "secrets";
-
 interface ConnectionsWindowProps {
   open: boolean;
+  /** the tab to open on (lib/settingsTabs); none: the gear's, General */
+  initialTab?: SettingsTab | null;
   onClose: () => void;
 }
 
-export function ConnectionsWindow({ open, onClose }: ConnectionsWindowProps) {
-  const [tab, setTab] = useState<Tab>("providers");
+export function ConnectionsWindow({ open, initialTab, onClose }: ConnectionsWindowProps) {
+  const [tab, setTab] = useState<SettingsTab>(() => openingTab(initialTab));
+  // each opening lands on the tab it asked for, set while rendering (not in an
+  // effect) so the panel never shows another tab first for a frame.
+  const [openedAs, setOpenedAs] = useState({ open, initialTab });
+  if (openedAs.open !== open || openedAs.initialTab !== initialTab) {
+    setOpenedAs({ open, initialTab });
+    if (open) setTab(openingTab(initialTab));
+  }
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [secrets, setSecrets] = useState<SecretInfo[]>([]);
   const [loadingProviders, setLoadingProviders] = useState(false);
@@ -1169,42 +1182,35 @@ export function ConnectionsWindow({ open, onClose }: ConnectionsWindowProps) {
         className="conn-modal"
         role="dialog"
         aria-modal="true"
-        aria-label="Connections"
+        aria-label="Settings"
       >
         {/* Header */}
         <div className="conn-head">
           <div className="conn-head-left">
             <div className="conn-head-tile">
-              <Icon name="git-network-outline" />
+              <Icon name="settings-outline" />
             </div>
             <div className="conn-head-text">
-              <div className="conn-title">CONNECTIONS</div>
-              <div className="conn-sub">providers &amp; secrets</div>
+              <div className="conn-title">SETTINGS</div>
+              <div className="conn-sub">startup, providers &amp; secrets</div>
             </div>
           </div>
 
           {/* Segmented tab control */}
           <div className="conn-tabs" role="tablist">
-            <button
-              type="button"
-              role="tab"
-              className={`conn-tab ${tab === "providers" ? "active" : ""}`}
-              onClick={() => setTab("providers")}
-              aria-selected={tab === "providers"}
-            >
-              <Icon name="server-outline" />
-              AI Providers
-            </button>
-            <button
-              type="button"
-              role="tab"
-              className={`conn-tab ${tab === "secrets" ? "active" : ""}`}
-              onClick={() => setTab("secrets")}
-              aria-selected={tab === "secrets"}
-            >
-              <Icon name="lock-closed-outline" />
-              Secrets
-            </button>
+            {SETTINGS_TABS.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                role="tab"
+                className={`conn-tab ${tab === t.id ? "active" : ""}`}
+                onClick={() => setTab(t.id)}
+                aria-selected={tab === t.id}
+              >
+                <Icon name={t.icon} />
+                {t.label}
+              </button>
+            ))}
           </div>
 
           <button type="button" className="pp-close" onClick={onClose} title="Close (Esc)">
@@ -1214,6 +1220,8 @@ export function ConnectionsWindow({ open, onClose }: ConnectionsWindowProps) {
 
         {/* Body */}
         <div className="conn-body">
+          {tab === "general" && <GeneralSettings />}
+
           {tab === "providers" && (
             <>
               {loadingProviders && providers.length === 0 && (
