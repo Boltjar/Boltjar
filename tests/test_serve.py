@@ -7,6 +7,7 @@ import asyncio
 import logging.config
 import os
 import socket
+import types
 
 import pytest
 
@@ -148,6 +149,19 @@ def test_names_already_allowed_are_kept_once():
 ])
 def test_local_url(host, url):
     assert serve.local_url(host, 8770) == url
+
+
+@pytest.mark.parametrize("platform, env, opens", [
+    ("win32", {}, True),
+    ("darwin", {}, True),
+    ("linux", {"DISPLAY": ":0"}, True),
+    ("linux", {"WAYLAND_DISPLAY": "wayland-0"}, True),
+    ("linux", {"TERM": "xterm-256color"}, False),  # a server's console: only lynx or w3m
+    ("linux", {"DISPLAY": "localhost:10.0", "SSH_CONNECTION": "10.0.0.2 50000 10.0.0.5 22"}, False),
+    ("darwin", {"SSH_CONNECTION": "10.0.0.2 50000 10.0.0.5 22"}, False),
+])
+def test_the_browser_opens_only_on_a_screen_in_front_of_the_user(platform, env, opens):
+    assert serve.browser_can_open(platform, env) is opens
 
 
 # ---------------------------------------------------------------- the port
@@ -324,3 +338,34 @@ def test_a_remote_bind_lists_the_names_it_answers_to(boot, monkeypatch, capsys):
     assert "0.0.0.0:9001" in shown
     assert "reachable from other machines as proxy.example, studio, 192.168.1.20" in shown
     assert "add it to BOLTJAR_ALLOWED_HOSTS" in shown
+
+
+def test_a_boot_over_ssh_leaves_the_browser_closed(boot, monkeypatch):
+    import boltjar.server  # noqa: F401  (imported up front, so the boot's import step is instant)
+
+    class Server:
+        graphs_stopped = 0
+
+        def __init__(self, on_ready):
+            self.on_ready = on_ready
+
+        def run(self, sockets=None):
+            self.on_ready()
+
+    class Thread:  # runs the browser call at once, so the assertion never races it
+        def __init__(self, target, args, daemon):
+            self.run = lambda: target(*args)
+
+        def start(self):
+            self.run()
+
+    opened: list[str] = []
+    monkeypatch.setenv("SSH_CONNECTION", "10.0.0.2 50000 10.0.0.5 22")
+    monkeypatch.setattr(serve.webbrowser, "open", opened.append)
+    monkeypatch.setattr(serve, "threading", types.SimpleNamespace(Thread=Thread))
+    monkeypatch.setattr(serve, "bind", lambda host, port: socket.socket())
+    monkeypatch.setattr(serve, "packs_check", lambda: ("core", "ok", None))
+    monkeypatch.setattr(serve, "providers_check", lambda: ("none yet", "info", None))
+    monkeypatch.setattr(serve, "make_server", lambda config, shutdown_app, on_ready, on_stop: Server(on_ready))
+    assert boot(port=9001) == 0
+    assert opened == []

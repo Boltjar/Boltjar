@@ -8,8 +8,9 @@ It prints the banner and a boot checklist (Python, the virtualenv, the
 requirements, the editor bundle, the port, the node packs, the providers),
 binds the port itself so a busy one is reported before anything starts, runs
 uvicorn in this process with the console's quiet log setup, opens the browser
-once the server reports ready, and on Ctrl+C stops every graph and ends every
-live connection BEFORE uvicorn waits on them, so one press exits.
+once the server reports ready (when a screen is in front of whoever started it,
+see browser_can_open), and on Ctrl+C stops every graph and ends every live
+connection BEFORE uvicorn waits on them, so one press exits.
 
 The server learns its bind through the environment: BOLTJAR_ALLOWED_HOSTS (the
 host names a request may carry, a comma list) and BOLTJAR_PORT.
@@ -26,7 +27,7 @@ import socket
 import sys
 import threading
 import webbrowser
-from typing import Awaitable, Callable, Optional
+from typing import Awaitable, Callable, Mapping, Optional
 
 from boltjar import __version__, console, deps
 
@@ -245,6 +246,20 @@ def providers_check() -> Check:
 
 
 # ---------------------------------------------------------------- the server
+def browser_can_open(platform: str | None = None, env: Mapping[str, str] | None = None) -> bool:
+    """Whether opening the editor reaches a browser window in front of the
+    person who started it. Not over SSH, and not on a Linux or BSD box without
+    a graphical session, where Python's webbrowser falls back to a text browser
+    (lynx, w3m) that would take over this terminal. The ready line has the URL."""
+    platform = sys.platform if platform is None else platform
+    env = os.environ if env is None else env
+    if env.get("SSH_CONNECTION"):
+        return False
+    if platform in ("win32", "darwin"):
+        return True
+    return bool(env.get("DISPLAY") or env.get("WAYLAND_DISPLAY"))
+
+
 def make_server(config, shutdown_app: Callable[[], Awaitable[int]],
                 on_ready: Callable[[], None], on_stop: Callable[[], None]):
     """uvicorn's Server with Boltjar's start and stop around it: `on_ready` once
@@ -345,7 +360,7 @@ def _serve(out: console.Console, host: str, port: int, open_browser: bool,
         with out.step("providers") as step:
             step.done(*providers_check())
         out.ready(url, f"Ctrl+C stops the server {sep} log times are local ({console.local_zone()})")
-        if open_browser:
+        if open_browser and browser_can_open():
             threading.Thread(target=webbrowser.open, args=(url,), daemon=True).start()
 
     config = uvicorn.Config(
