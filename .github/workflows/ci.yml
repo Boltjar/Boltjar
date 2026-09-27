@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Run it by hand on any branch (Actions tab, or `gh workflow run ci.yml --ref <branch>`)
+  # to test a branch on GitHub before it merges.
+  workflow_dispatch:
 
 permissions:
   contents: read
