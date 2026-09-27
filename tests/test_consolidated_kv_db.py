@@ -498,11 +498,12 @@ def test_db_insert_into_missing_table_raises_friendly_error(tmp_path, monkeypatc
         "edges": [{"src": "mydb", "src_port": "db", "dst": "ins", "dst_port": "db"}],
     })
     inst = rt.nodes["ins"]
-    with pytest.raises(ValueError, match="no such table 'chat_history'"):
+    # the table name, and the actionable hint: where tables come from.
+    with pytest.raises(ValueError) as raised:
         asyncio.run(rt._fire(inst, "trigger", "go", rt.new_turn()))
-    # the actionable hint (create it first, on the Database node) is part of the message.
-    with pytest.raises(ValueError, match="Create it first: add it with Edit on the Database node"):
-        asyncio.run(rt._fire(inst, "trigger", "go", rt.new_turn()))
+    assert str(raised.value) == (
+        "DB: no such table 'chat_history' for this 'insert'. Add it with Edit on the "
+        "Database node; the graph keeps it and creates it whenever it runs.")
     # NOT auto-created: the table still does not exist.
     assert store.query(
         "mydb",

@@ -1665,9 +1665,8 @@ def _db_friendly_error(exc: Exception, op: str):
     if isinstance(exc, sqlite3.OperationalError) and "no such table" in msg.lower():
         table = msg.split(":", 1)[1].strip() if ":" in msg else "?"
         return ValueError(
-            f"DB: no such table {table!r}. Create it first: add it with Edit on the "
-            f"Database node, which saves it with the graph and creates it when the "
-            f"graph opens or powers on, before this '{op}' runs.")
+            f"DB: no such table {table!r} for this '{op}'. Add it with Edit on the "
+            f"Database node; the graph keeps it and creates it whenever it runs.")
     return None
 
 
