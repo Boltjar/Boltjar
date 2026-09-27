@@ -28,6 +28,7 @@ import { functionColorVar } from "../../lib/kinds";
 import { typeColorVar } from "../../lib/types";
 import { mod } from "../../lib/platform";
 import { panHintCenter } from "../../lib/panHint";
+import { FIT_VIEW, openingView } from "../../lib/viewport";
 import type { NodeDef } from "../../types/protocol";
 
 const nodeTypes: NodeTypes = { workflow: WorkflowNode };
@@ -74,6 +75,8 @@ interface CanvasProps {
   fitRef?: React.MutableRefObject<(() => void) | null>;
   rejectionReason: string | null;
   loading: boolean;
+  /** changes each time a graph is opened on the canvas, which frames it anew. */
+  viewKey: number;
   graphName: string;
   /** runtime stats, surfaced inline on the canvas overlay so the top bar
    *  stays minimal. liveCount: nodes currently emitting; eventsPerSec: 1s
@@ -125,6 +128,7 @@ export function Canvas(props: CanvasProps) {
     fitRef,
     rejectionReason,
     loading,
+    viewKey,
     liveCount,
     eventsPerSec,
     problemCount,
@@ -219,14 +223,18 @@ export function Canvas(props: CanvasProps) {
     return () => ro.disconnect();
   }, []);
 
-  // fit to the graph once it first loads
-  const fittedRef = useRef(false);
+  // frame every graph the canvas opens (lib/viewport): one React Flow instance
+  // serves every tab, so its zoom and pan would otherwise carry over from the
+  // previous graph. A graph with nodes is fitted (React Flow waits until it has
+  // measured them), an empty one opens at 100%. `viewKey` changes once per open.
+  const framedRef = useRef<number | null>(null);
   useEffect(() => {
-    if (!fittedRef.current && instance && nodes.length > 0) {
-      fittedRef.current = true;
-      window.setTimeout(() => instance.fitView({ padding: 0.22, duration: 400, maxZoom: 1.1 }), 60);
-    }
-  }, [instance, nodes.length]);
+    if (!instance || loading || framedRef.current === viewKey) return;
+    framedRef.current = viewKey;
+    const view = openingView(nodes.length);
+    if (view.kind === "fit") void instance.fitView(view.options);
+    else void instance.setViewport(view.viewport);
+  }, [instance, loading, viewKey, nodes.length]);
 
   const onDrop = useCallback(
     (event: React.DragEvent) => {
@@ -344,7 +352,7 @@ export function Canvas(props: CanvasProps) {
     [defs],
   );
 
-  const fitView = useCallback(() => rf.fitView({ padding: 0.22, duration: 300, maxZoom: 1.1 }), [rf]);
+  const fitView = useCallback(() => rf.fitView({ ...FIT_VIEW, duration: 300 }), [rf]);
   const zoomIn = useCallback(() => rf.zoomIn({ duration: 160 }), [rf]);
   const zoomOut = useCallback(() => rf.zoomOut({ duration: 160 }), [rf]);
 

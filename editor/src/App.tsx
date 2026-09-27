@@ -42,6 +42,9 @@ import { type WorkflowTab } from "./components/WorkflowTabs";
 import { isPermutation, bringToFront } from "./components/WorkflowTabs.test.helper";
 
 const EMPTY_GRAPH: Graph = { name: "untitled", nodes: [], edges: [] };
+/** Where a node added from the palette lands (flow coordinates) until a
+ *  right-click on the canvas picks another spot. */
+const NEW_NODE_AT = { x: 280, y: 200 };
 /** The chat console loaded on startup. */
 const BOOT_GRAPH = "chat";
 /** Per-slug working-draft autosave key. The `:v2` suffix is the draft format
@@ -173,7 +176,9 @@ export default function App() {
   const [renameGroupTarget, setRenameGroupTarget] = useState<{ id: string; nonce: number } | null>(null);
   // a live drag-from-port (its source type) so compatible targets highlight.
   const [connecting, setConnecting] = useState<{ fromType: string; fromId: string } | null>(null);
-  const lastFlowPos = useRef({ x: 280, y: 200 });
+  const lastFlowPos = useRef({ ...NEW_NODE_AT });
+  // one more each time a graph is put on the canvas (the Canvas frames it anew).
+  const [openedGraphs, setOpenedGraphs] = useState(0);
 
   const {
     nodes,
@@ -270,6 +275,14 @@ export default function App() {
 
     setGraphLoading(true);
     const target = activeSlug;
+    // A graph put on the canvas is framed anew there (the Canvas `viewKey`:
+    // fitted, or 100% when empty), and a node added from the palette lands at
+    // the default spot rather than at a point picked on the previous graph.
+    const show = (g: Graph, opts?: { dirty?: boolean }) => {
+      loadGraph(g, opts);
+      lastFlowPos.current = { ...NEW_NODE_AT };
+      setOpenedGraphs((n) => n + 1);
+    };
     // Every graph loads healed (lib/deadWires): a wire on a port its node no
     // longer has is dropped before it reaches the canvas, each removal is
     // reported on the console, and the draft autosave below persists the clean
@@ -278,7 +291,7 @@ export default function App() {
       const { graph: clean, removed } = healDeadWires(g, defs, models);
       // a healed graph differs from the saved file, so it arrives unsaved: the
       // primary button offers Save, and On never runs the file's dead wire.
-      loadGraph(clean, { dirty: removed.length > 0 });
+      show(clean, { dirty: removed.length > 0 });
       for (const w of removed) socket.notice(deadWireNotice(w), "warn");
     };
     (async () => {
@@ -308,7 +321,7 @@ export default function App() {
         return;
       }
       if (loaded.kind === "graph") loadHealed({ ...loaded.graph, name: target });
-      else loadGraph({ ...EMPTY_GRAPH, name: target });
+      else show({ ...EMPTY_GRAPH, name: target });
       loadedSlugRef.current = target;
       setGraphLoading(false);
     })();
@@ -1260,6 +1273,7 @@ export default function App() {
                 onConnectingChange={setConnecting}
                 rejectionReason={rejectionReason}
                 loading={graphLoading}
+                viewKey={openedGraphs}
                 graphName={graphName}
                 liveCount={liveCount}
                 eventsPerSec={socket.counters.eventsPerSec}
