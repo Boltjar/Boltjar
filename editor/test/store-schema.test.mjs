@@ -8,8 +8,9 @@
 // The case it guards: the chat example used a "Chat Setup" node that ran
 // CREATE TABLE, so Chat Append's table list stayed empty until it fired. Now
 // the Database node declares its tables in the graph; the schema editor writes
-// that declaration after each change and the editor asks the server to create
-// what a graph declares when it opens and when a declaration changes.
+// that declaration after each change and when it reads tables the declaration
+// lacks, and the editor asks the server to create what a graph declares when
+// it opens and when a declaration changes.
 // ============================================================================
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -26,6 +27,7 @@ async function load(rel) {
 }
 const {
   schemaWidget, declaredSchema, sameDeclaration, declarationSignature, changedStores, ensureNotices,
+  adoptLiveSchema,
 } = await load("storeSchema.ts");
 const { onBody } = await load("dynamicPorts.ts");
 
@@ -84,6 +86,40 @@ check("an added column changes the declaration",
   sameDeclaration(CHAT, declaredSchema([{ ...live[0], columns: [...live[0].columns, { name: "x", type: "TEXT", pk: false }] }])), false);
 check("a node that never declared reads as none", sameDeclaration(undefined, []), true);
 check("a first table is a change from none", sameDeclaration(undefined, CHAT), false);
+
+// ---- a read of the live schema: the graph comes to declare what the database holds
+const col = (name, type = "TEXT", pk = false) => ({ name, type, pk });
+const table = (name, columns, rows = 0) => ({ name, rows, columns });
+check("a declaration that says what the database holds is kept as is",
+  adoptLiveSchema(CHAT, live), null);
+check("tables made before they were declared are adopted",
+  adoptLiveSchema(undefined, live), CHAT);
+check("an empty declaration adopts the live tables", adoptLiveSchema([], live), CHAT);
+check("a table made by SQL in a DB node is adopted",
+  adoptLiveSchema(CHAT, [...live, table("facts", [col("fact")])]),
+  [...CHAT, { name: "facts", columns: [col("fact")] }]);
+// the undo drift: a table built in Edit, then Ctrl+Z took the declaration back
+check("a declaration an undo took back is written again",
+  adoptLiveSchema([], [table("notes", [col("id", "INTEGER", true)], 3)]),
+  [{ name: "notes", columns: [col("id", "INTEGER", true)] }]);
+check("the database's column type wins over the declared one",
+  adoptLiveSchema([{ name: "chat_history", columns: [col("id", "INTEGER", true), col("time", "REAL")] }], live),
+  CHAT);
+// a read that lands before the server made what the graph declares drops nothing
+check("a declared table the database lacks is kept after the live ones",
+  adoptLiveSchema([{ name: "later", columns: [col("x")] }], live),
+  [...CHAT, { name: "later", columns: [col("x")] }]);
+check("a declared column the database lacks is kept after the live ones",
+  adoptLiveSchema([{ name: "chat_history", columns: [col("id", "INTEGER", true), col("mood")] }], live),
+  [{ name: "chat_history", columns: [col("id", "INTEGER", true), col("time"), col("mood")] }]);
+check("nothing is declared from an empty database with nothing declared",
+  adoptLiveSchema(undefined, []), null);
+check("names match ignoring case, as SQLite matches them",
+  adoptLiveSchema([{ name: "CHAT_HISTORY", columns: [col("ID", "INTEGER", true), col("Time")] }], live),
+  CHAT);
+check("a malformed declaration is read for what it names and rewritten",
+  adoptLiveSchema([7, { name: "" }, { name: "five", columns: 5 }, { name: "t", columns: [{ name: "a", type: 7 }, null] }], []),
+  [{ name: "five", columns: [] }, { name: "t", columns: [col("a", "7")] }]);
 
 // ---- the signature that asks the server again: only declaring nodes count
 const node = (id, typeId, config) => ({ id, data: { typeId, config } });

@@ -3,10 +3,11 @@
 // its declaration in a hidden widget of kind "schema" (the Database node's
 // `schema`), in the shape the schema endpoints return minus the row counts:
 // [{name, columns: [{name, type, pk}]}]. The schema editor writes it after each
-// change it makes, and the editor asks the server to create what a graph
-// declares (POST /api/stores/ensure) when the graph opens and whenever a
-// declaration changes (a pasted, duplicated or restored node). Found by widget
-// kind, never by node id. Its only imports are types, so the tests load it as is.
+// change it makes and when it reads what the database holds (adoptLiveSchema),
+// and the editor asks the server to create what a graph declares (POST
+// /api/stores/ensure) when the graph opens and whenever a declaration changes
+// (a pasted, duplicated or restored node). Found by widget kind, never by node
+// id. Its only imports are types, so the tests load it as is.
 // ============================================================================
 import type { DbTable, Graph, NodeDef, Widget } from "../types/protocol";
 
@@ -47,6 +48,52 @@ export function declaredSchema(tables: DbTable[]): DeclaredTable[] {
 export function sameDeclaration(saved: unknown, next: DeclaredTable[]): boolean {
   const current = Array.isArray(saved) ? saved : [];
   return JSON.stringify(current) === JSON.stringify(next);
+}
+
+/** A saved declaration as tables, whatever the graph file holds: entries that
+ *  are not a named table, and columns that are not a named column, are left out. */
+function savedTables(saved: unknown): DeclaredTable[] {
+  if (!Array.isArray(saved)) return [];
+  const out: DeclaredTable[] = [];
+  for (const t of saved) {
+    if (!t || typeof t !== "object" || typeof t.name !== "string" || !t.name.trim()) continue;
+    const columns: DeclaredColumn[] = [];
+    for (const c of Array.isArray(t.columns) ? t.columns : []) {
+      if (!c || typeof c !== "object" || typeof c.name !== "string" || !c.name.trim()) continue;
+      columns.push({ name: c.name, type: String(c.type ?? ""), pk: !!c.pk });
+    }
+    out.push({ name: t.name, columns });
+  }
+  return out;
+}
+
+/** The declaration to write when the schema editor reads the live schema, or
+ *  null when the saved one already says it. The database as it is wins: each
+ *  live table with its live columns, in order. What the saved declaration adds
+ *  is kept after them (a declared column or table the database lacks), because
+ *  the server creates what a graph declares and a read that lands before it
+ *  has must not drop it. Names match ignoring case, as SQLite matches them.
+ *  So a graph whose tables were made another way (before tables were declared,
+ *  or by SQL in a DB node) comes to carry them, and a declaration an undo took
+ *  back is written again. */
+export function adoptLiveSchema(saved: unknown, live: DbTable[]): DeclaredTable[] | null {
+  const next = declaredSchema(live);
+  const byName = new Map(next.map((t) => [t.name.toLowerCase(), t]));
+  for (const t of savedTables(saved)) {
+    const table = byName.get(t.name.toLowerCase());
+    if (!table) {
+      next.push(t);
+      byName.set(t.name.toLowerCase(), t);
+      continue;
+    }
+    const have = new Set(table.columns.map((c) => c.name.toLowerCase()));
+    for (const c of t.columns) {
+      if (have.has(c.name.toLowerCase())) continue;
+      table.columns.push(c);
+      have.add(c.name.toLowerCase());
+    }
+  }
+  return sameDeclaration(saved, next) ? null : next;
 }
 
 /** One string that changes whenever a node that declares a store schema is

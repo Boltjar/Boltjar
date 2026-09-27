@@ -10,16 +10,18 @@
 // also tells the table pickers wired to the store (lib/storeEvents) and writes
 // the resulting tables into the node's declared schema (lib/storeSchema), so the
 // graph carries what was built here and the server can create it wherever the
-// graph is opened. There is deliberately NO delete-database button: whole-DB
-// delete is the normal node-delete flow.
+// graph is opened. Each read of the live schema writes the declaration too when
+// it does not say what the database holds (tables made before they were
+// declared or by SQL, or a declaration an undo took back). There is deliberately
+// NO delete-database button: whole-DB delete is the normal node-delete flow.
 // ============================================================================
-import { useState, type CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import type { DbColumn, DbTable } from "../types/protocol";
 import { Icon } from "../lib/icons";
 import { typeColorVar } from "../lib/types";
 import { useDbSchema } from "../hooks/useDbSchema";
 import { notifyStoreChanged } from "../lib/storeEvents";
-import { declaredSchema, sameDeclaration, type DeclaredTable } from "../lib/storeSchema";
+import { adoptLiveSchema, declaredSchema, sameDeclaration, type DeclaredTable } from "../lib/storeSchema";
 import { Select } from "./canvas/Select";
 
 /** The column types offered in the dropdown -> the SQLite affinity sent to the
@@ -48,7 +50,8 @@ interface DbSchemaEditorProps {
   disabled: boolean;
   /** the node's declared schema as saved in the graph. */
   declared?: unknown;
-  /** write the declaration after a change built here (absent: nothing is kept). */
+  /** write the declaration after a change built here, or after a read of the
+   *  live schema shows what it does not say (absent: nothing is kept). */
   onDeclare?: (tables: DeclaredTable[]) => void;
 }
 
@@ -59,6 +62,17 @@ export function DbSchemaEditor({ dbKey, disabled, declared, onDeclare }: DbSchem
   // add-table inline form (name draft); null = form closed.
   const [newTable, setNewTable] = useState<string | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
+
+  // A read of the live schema landed: the graph comes to declare what the
+  // database holds (adoptLiveSchema keeps what only the declaration has). Only
+  // on a read, since a mutation writes its own declaration below, and never on
+  // a bypassed node, whose editor is read-only.
+  useEffect(() => {
+    if (loading || error || disabled || !onDeclare) return;
+    const next = adoptLiveSchema(declared, tables);
+    if (next) onDeclare(next);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]);
 
   /** Run a schema mutation; adopt the fresh schema it returns (then refetch as a
    *  safety net). Serialised behind `busy` so rapid clicks cannot interleave.
