@@ -52,7 +52,7 @@ class Text:
 
 @node(id="core.value.integer", name="Integer", kind=Kind.VALUE, category="Values",
       pulled=True, summary="A constant integer.",
-      icon="calculator-outline", subline="int · {number}")
+      icon="keypad-outline", subline="int · {number}")
 class Integer:
     number: int = 0
     outputs = [Port("out", "int")]
@@ -63,7 +63,7 @@ class Integer:
 
 @node(id="core.value.float", name="Float", kind=Kind.VALUE, category="Values",
       pulled=True, summary="A constant float.",
-      icon="calculator-outline", subline="float · {number}")
+      icon="options-outline", subline="float · {number}")
 class Float:
     number: float = 0.0
     outputs = [Port("out", "float")]
@@ -173,7 +173,8 @@ _IMAGE_MIME = {
 
 @node(id="core.value.image", name="Image", kind=Kind.VALUE, category="Values",
       pulled=True, summary="An image source: an https URL, or a local file in "
-                           "user/data/files or examples/ (read into a data: URL).")
+                           "user/data/files or examples/ (read into a data: URL).",
+      icon="image-outline")
 class Image:
     src: Widget = Widget(kind="text", default="", label="URL or path")
     outputs = [Port("out", "image")]
@@ -191,7 +192,8 @@ _AUDIO_MIME = {
 @node(id="core.value.audio", name="Audio", kind=Kind.VALUE, category="Values",
       pulled=True, summary="An audio source: an https URL, or a local file in "
                            "user/data/files or examples/ (read into a data: URL). "
-                           "It works like Image.")
+                           "It works like Image.",
+      icon="musical-notes-outline")
 class Audio:
     src: Widget = Widget(kind="text", default="", label="URL or path")
     outputs = [Port("out", "audio")]
@@ -244,7 +246,8 @@ def _safe_json_obj(text: str, fallback: str) -> dict:
 @node(id="core.parse.tags", name="Tag Parse", kind=Kind.TRANSFORM, category="Data",
       pulled=True, summary="Read inline [bracket] tags in text: emit a mood (the "
                            "highest-priority mood tag), the clean display "
-                           "text (tags -> emoji, capped, or stripped), and an action.")
+                           "text (tags -> emoji, capped, or stripped), and an action.",
+      icon="pricetags-outline")
 class TagParse:
     moods: Widget = Widget(kind="code", default=_DEFAULT_MOODS, label="tag -> mood", expand=True)
     actions: Widget = Widget(kind="code", default=_DEFAULT_ACTIONS, label="tag -> action", expand=True)
@@ -376,7 +379,8 @@ def _strip_text(s: str, emoji: bool, markdown: bool, tags: bool,
       pulled=True, summary="Clean text for TTS and more: drop emoji, markdown "
                            "markers, [bracket] tags, *action* stage directions and "
                            "URLs. Each cleaner has its own toggle, and the leftover "
-                           "whitespace collapses.")
+                           "whitespace collapses.",
+      icon="backspace-outline")
 class Strip:
     # every cleaner defaults ON and is promotable to a bool input (drive it from
     # the graph). Reuses Tag Parse's tag regex, so the tag syntax has one owner.
@@ -528,7 +532,8 @@ def _list_windows() -> list:
 
 @node(id="core.sensor.screen", name="Screen Capture", kind=Kind.SENSOR, category="Sensors",
       pulled=True, volatile=True, summary="Grab a fresh screenshot on every pull (a "
-                                          "live frame for a vision LLM). Cross-platform.")
+                                          "live frame for a vision LLM). Cross-platform.",
+      icon="desktop-outline")
 class ScreenCapture:
     monitor: Widget = select(["Primary", "1", "2", "3", "All"], default="Primary")
     max_dim: Widget = Widget(kind="number", default=1280, min=320, max=3840, step=10, label="max dimension")
@@ -546,7 +551,8 @@ class ScreenCapture:
 
 @node(id="core.sensor.window", name="Window Capture", kind=Kind.SENSOR, category="Sensors",
       pulled=True, volatile=True, summary="Grab a specific window by title hint (a fresh "
-                                          "frame each pull). Windows only; empty elsewhere.")
+                                          "frame each pull). Windows only; empty elsewhere.",
+      icon="browsers-outline")
 class WindowCapture:
     title: Widget = tmpl("", kind="text", port_type="text", placeholder="window title hint (substring)")
     max_dim: Widget = Widget(kind="number", default=1280, min=320, max=3840, step=10, label="max dimension")
@@ -566,7 +572,8 @@ class WindowCapture:
 
 @node(id="core.sensor.foreground", name="Foreground Window", kind=Kind.SENSOR, category="Sensors",
       pulled=True, volatile=True, summary="The focused window's title (and optionally the "
-                                          "open-window list). Windows only; empty elsewhere.")
+                                          "open-window list). Windows only; empty elsewhere.",
+      icon="layers-outline")
 class ForegroundWindow:
     list_all: Widget = Widget(kind="bool", default=False, label="list all windows")
     outputs = [Port("title", "text"), Port("windows", "json", optional=True)]
@@ -746,7 +753,8 @@ def _schedule_tick(now, last_minute, cron: str):
               "'*/15 * * * *' every 15 minutes, '0 9 * * 1' on Mondays at 09:00. When "
               "both day fields are set, either one matches, as in standard cron. It "
               "checks each minute and emits a trigger and the firing time once per "
-              "matching minute.")
+              "matching minute.",
+      icon="alarm-outline")
 class Schedule:
     cron: Widget = Widget(kind="text", default="0 * * * *",
                           label="cron (min hour day month weekday)")
@@ -809,7 +817,8 @@ class ChatInput:
 @node(id="core.trigger.audio_in", name="Audio Input", kind=Kind.TRIGGER, category="Triggers",
       summary="Stream a microphone clip into the live graph (push-to-talk). Emits "
               "the audio data + a trigger, the way Chat Input emits text. Feed the "
-              "audio into an STT node to transcribe it.")
+              "audio into an STT node to transcribe it.",
+      icon="mic-circle-outline")
 class AudioInput:
     placeholder: str = "Hold to talk..."
     outputs = [Port("trigger", "event"), Port("audio", "audio"), Port("lang", "lang", optional=True)]
@@ -821,7 +830,8 @@ class AudioInput:
 
 @node(id="core.trigger.webhook", name="Webhook", kind=Kind.TRIGGER, category="Triggers",
       summary="Listen for inbound HTTP calls. Fires when POST/GET hits "
-              "{origin}/hook/{workflow}/{path}; emits the body, json, headers, query.")
+              "{origin}/hook/{workflow}/{path}; emits the body, json, headers, query.",
+      icon="link-outline")
 class WebhookTrigger:
     path: Widget = Widget(kind="text", default="my-hook", label="path")
     method: Widget = select(["ANY", "GET", "POST", "PUT", "PATCH", "DELETE"], default="POST")
@@ -887,7 +897,8 @@ class Template:
 
 @node(id="core.data.format_list", name="Format List", kind=Kind.TRANSFORM, category="Data",
       pulled=True, summary="Turn a json list into text: render each item with a "
-                           "{field} template and join with a separator (one per line by default).")
+                           "{field} template and join with a separator (one per line by default).",
+      icon="receipt-outline")
 class FormatList:
     # per-item template: {field} pulls a key from each row; {.} is the whole item.
     item: Widget = code("{sender}: {message}")
@@ -955,7 +966,8 @@ def _dynamic_sorted(ins: dict, base: str) -> list:
 @node(id="core.data.list", name="List", kind=Kind.TRANSFORM, category="Data",
       pulled=True, summary="Assemble wired values into one list (the reverse of "
                            "For-each). A socket grows per wire, and a null value "
-                           "is left out.")
+                           "is left out.",
+      icon="list-outline")
 class List:
     # type-agnostic: text, an image data-URL, a file path, json, all ride `any`.
     inputs = [Port("item", "any", growable=True)]
@@ -1181,7 +1193,8 @@ class LLM:
       summary="A tool the LLM can call. It declares a name, a description and its "
               "parameters. When the model calls it, `call` carries the arguments into "
               "the body you wired, and the answer that comes back on `result` goes "
-              "back to the model.")
+              "back to the model.",
+      icon="construct-outline")
 class Tool:
     name: Widget = Widget(kind="text", default="my_tool", label="name")
     description: Widget = code("Describe what this tool does for the model.")
@@ -1213,7 +1226,8 @@ class Tool:
               "it splits `call` into one typed output per argument and fires `trigger` "
               "to run the rest of the body. Its field names are also the tool's "
               "parameters (in auto mode the Tool builds its schema from them). Wire "
-              "the body's answer back into the Tool's `result`.")
+              "the body's answer back into the Tool's `result`.",
+      icon="log-in-outline")
 class ToolArgs:
     fields: Widget = Widget(kind="text", default="", label="Arguments",
                             placeholder="location, unit")
@@ -1390,7 +1404,8 @@ async def _rerank_model(manifest, query: str, docs: list, endpoint: str) -> list
 @node(id="core.ai.embed", name="Embed", kind=Kind.TRANSFORM, category="AI",
       summary="Encode text into an embedding vector. Picks an embed model (Ollama "
               "bge-m3 by default) the way the LLM picks its model. Fires on its "
-              "trigger and emits the vector + a trigger to sequence the next node.")
+              "trigger and emits the vector + a trigger to sequence the next node.",
+      icon="finger-print-outline")
 class Embed:
     # With nothing picked the node runs this declared default, so the picker shows
     # the model that actually runs (the TTS/STT precedent).
@@ -1410,7 +1425,8 @@ class Embed:
       summary="A cross-encoder precision pass: score each candidate against the query "
               "and keep the best. Picks a rerank model, served over HTTP at the address "
               "in its `endpoint` setting. When no rerank service answers, the node fails "
-              "with an error instead of passing the candidates on unranked.")
+              "with an error instead of passing the candidates on unranked.",
+      icon="podium-outline")
 class Rerank:
     # a model node like the LLM: the body draws the picker and the picked
     # manifest's params, and nothing else. So the service's address is the
@@ -1454,7 +1470,8 @@ class Rerank:
 
 @node(id="core.data.chunk", name="Chunk", kind=Kind.TRANSFORM, category="Data",
       pulled=True, summary="Split text into overlapping chunks for embedding/"
-                           "indexing. Output is a list; feed it through For-each.")
+                           "indexing. Output is a list; feed it through For-each.",
+      icon="cut-outline")
 class Chunk:
     size: Widget = Widget(kind="number", default=800, min=50, max=8000, step=50, label="size")
     overlap: Widget = Widget(kind="number", default=120, min=0, max=2000, step=10, label="overlap")
@@ -1480,7 +1497,8 @@ _SENTENCE_RE = re.compile(r".+?(?:[.!?…]+(?:[\"')\]]+)?|\n+|$)", re.DOTALL)
 @node(id="core.data.sentences", name="Sentences", kind=Kind.TRANSFORM, category="Data",
       pulled=True, summary="Split text into a list of sentences (ends on . ! ? ... or a "
                            "newline). Feed through For-each to stream the LLM reply one "
-                           "sentence at a time into TTS / Avatar (low-latency streaming).")
+                           "sentence at a time into TTS / Avatar (low-latency streaming).",
+      icon="chatbox-outline")
 class Sentences:
     inputs = [Port("text", "text")]
     outputs = [Port("out", "list")]
@@ -1493,7 +1511,8 @@ class Sentences:
 
 @node(id="core.store.vectors", name="Vector Store", kind=Kind.STORE, category="Store",
       pulled=True, summary="An embedded vector store (sqlite + cosine). Emits a "
-                           "handle the Vectors node indexes into and searches.")
+                           "handle the Vectors node indexes into and searches.",
+      icon="planet-outline")
 class VectorStoreNode:
     outputs = [Port("vectors", "vectors")]
 
@@ -1507,7 +1526,8 @@ class VectorStoreNode:
               "reshapes the knobs and outputs. Search takes one or more query "
               "embeddings, keeps each item's best score across them and returns the "
               "top k. It compares every stored vector by cosine similarity, which "
-              "suits thousands of items.")
+              "suits thousands of items.",
+      icon="compass-outline")
 class VectorsNode:
     operation: Widget = select(["search", "index", "delete", "clear"], default="search")
     namespace: Widget = tmpl("default", kind="text", port_type="text",
@@ -1641,7 +1661,8 @@ def ensure_declared_schemas(graph: dict) -> dict:
 
 @node(id=DATABASE_ID, name="Database", kind=Kind.STORE, category="Store",
       pulled=True, summary="An embedded SQLite database. Emits a db connection "
-                           "other nodes use.")
+                           "other nodes use.",
+      icon="server-outline")
 class Database:
     outputs = [Port("db", "db")]
     # the tables this graph needs, as [{name, columns: [{name, type, pk}]}] (the
@@ -1837,7 +1858,8 @@ def _bind_sql_tags(sql: str, tags: dict) -> tuple[str, dict]:
               "knobs and outputs. Knobs are templates: {tag} pulls from a "
               "wired source and {{secret.X}} resolves a secret. In SQL a wired "
               "{tag} is bound as a parameter, so it is always a value, never SQL. "
-              "An insert or update stores a data: URL value as text.")
+              "An insert or update stores a data: URL value as text.",
+      icon="grid-outline")
 class DBNode:
     # op-shaped: each field declares which operations it belongs to (replaces the
     # frontend dbKnobNamesFor table). The editor reads op_field/op_values.
@@ -1971,7 +1993,8 @@ import json as _json
 
 @node(id="core.data.parse", name="Parse", kind=Kind.TRANSFORM, category="Data",
       pulled=True, summary="Parse JSON text into a structured value. A parse "
-                           "error comes back as data ({\"error\": ...}).")
+                           "error comes back as data ({\"error\": ...}).",
+      icon="code-download-outline")
 class Parse:
     inputs = [Port("text", "text")]
     outputs = [Port("json", "json")]
@@ -1986,7 +2009,8 @@ class Parse:
 
 
 @node(id="core.data.stringify", name="Stringify", kind=Kind.TRANSFORM, category="Data",
-      pulled=True, summary="Serialise a value to a pretty (2-space) JSON string.")
+      pulled=True, summary="Serialise a value to a pretty (2-space) JSON string.",
+      icon="code-working-outline")
 class Stringify:
     inputs = [Port("json", "json")]
     outputs = [Port("text", "text")]
@@ -2001,7 +2025,8 @@ class Stringify:
 
 @node(id="core.data.build", name="Build JSON", kind=Kind.TRANSFORM, category="Data",
       pulled=True, summary="Build a JSON object from wired inputs: each input's "
-                           "port name becomes a key holding that input's value.")
+                           "port name becomes a key holding that input's value.",
+      icon="extension-puzzle-outline")
 class BuildJson:
     # ghost_base="field": a minted socket is named after the wired source node
     # (a meaningful json key), not auto-numbered. Declared on the port so the
@@ -2048,7 +2073,8 @@ def _walk_path(value, path: str):
 
 @node(id="core.data.get", name="Get", kind=Kind.TRANSFORM, category="Data",
       pulled=True, summary="Read the value at a dotted or bracket path "
-                           "(user.name, items.0.id). A missing path gives null.")
+                           "(user.name, items.0.id). A missing path gives null.",
+      icon="eyedrop-outline")
 class Get:
     path: Widget = Widget(kind="text", default="", label="Path")
     inputs = [Port("json", "json")]
@@ -2074,7 +2100,8 @@ def _split_keys(raw: str) -> list[str]:
 
 @node(id="core.data.split", name="Split JSON", kind=Kind.TRANSFORM, category="Data",
       pulled=True, summary="Split a json object onto one output per configured key "
-                           "(the reverse of Build JSON): each key routes its value.")
+                           "(the reverse of Build JSON): each key routes its value.",
+      icon="trail-sign-outline")
 class SplitJson:
     keys: Widget = Widget(kind="text", default="", label="Keys")
     inputs = [Port("json", "json")]
@@ -2118,7 +2145,7 @@ def _files():
       pulled=True, volatile=True,
       summary="Read a file's text from the sandbox. Pulled, fresh; a missing "
               "file reads as empty.",
-      icon="document-text-outline")
+      icon="document-outline")
 class ReadFile:
     path: Widget = Widget(kind="text", default="", label="Path")
     inputs = [Port("path", "text", optional=True)]
@@ -2231,7 +2258,8 @@ def _kv():
 
 @node(id="core.store.kv", name="KV Store", kind=Kind.STORE, category="Store",
       pulled=True, summary="A persistent key-value store. Emits a kv handle "
-                           "other nodes read and write through.")
+                           "other nodes read and write through.",
+      icon="archive-outline")
 class KvStoreNode:
     # Pulled source: emits the store key. A stable `kv_key` (assigned by the
     # editor at creation, persisted with the graph) survives rename; until the
@@ -2246,7 +2274,8 @@ class KvStoreNode:
 @node(id="core.kv", name="KV", kind=Kind.TRANSFORM, category="Store",
       summary="Read/write a kv store. The 'operation' knob reshapes the inputs "
               "and outputs. Knobs are templates: {tag} pulls from a wired "
-              "source, {{secret.X}} resolves a secret.")
+              "source, {{secret.X}} resolves a secret.",
+      icon="key-outline")
 class KV:
     # op-shaped (replaces kvKnobNamesFor): key for get/set/delete/has, value for
     # set, prefix for keys. The editor reads op_field/op_values off each widget.
@@ -2359,7 +2388,8 @@ def _meter_f(cfg: dict, key: str, default: float) -> float:
               "`set` to overwrite with `to` (both triggers must be wired); always "
               "clamped to [min,max]. Emits `value` and a `crossed` event (with "
               "direction up/down) when a fire moves it across `threshold`. A mood / "
-              "energy / attention accumulator.")
+              "energy / attention accumulator.",
+      icon="speedometer-outline")
 class Meter:
     # every knob is promotable to a typed input. amount/to carry the two operations'
     # operands (pulled when the matching trigger fires), so any PULL-only source
@@ -2521,7 +2551,8 @@ def _maybe_json(value):
               "{when, payload} rows and fire each row when its `when` is due. `when` "
               "is an ISO datetime or epoch seconds. It fires `due` with the payload "
               "and emits `payload`, then marks the row done (or deletes it) so it "
-              "never fires twice. Several due rows fire one at a time, earliest first.")
+              "never fires twice. Several due rows fire one at a time, earliest first.",
+      icon="calendar-outline")
 class Agenda:
     poll: Widget = Widget(kind="number", default=60, min=1, max=86400, step=1,
                           label="poll (seconds)", port_type="number")
@@ -2693,7 +2724,8 @@ _RESPONSE_TYPE_DEFAULT_MIME = {
 @node(id="core.net.http", name="HTTP Request", kind=Kind.TRANSFORM, category="Network",
       summary="Call an external API. Fires on a trigger; resolves {{secret.NAME}} in "
               "url / headers / body and substitutes {tag} pipes from wired inputs. "
-              "Auto-detects the request body shape (json / form / multipart / raw).")
+              "Auto-detects the request body shape (json / form / multipart / raw).",
+      icon="globe-outline")
 class Http:
     method: Widget = select(["GET", "POST", "PUT", "PATCH", "DELETE"], default="GET")
     # url / headers / query / body are templates ({tag} + {{secret}}); declared so
@@ -2923,7 +2955,8 @@ _WIRELESS_CHANNELS = [str(i) for i in range(1, 101)]
 
 @node(id="core.flow.wireless_in", name="Wireless In", kind=Kind.TRANSFORM, category="Flow",
       summary="Broadcast any wires on a channel (1 to 100). A Wireless Out on the "
-              "same channel mirrors them, like a virtual wire across the canvas.")
+              "same channel mirrors them, like a virtual wire across the canvas.",
+      icon="radio-outline")
 class WirelessIn:
     channel: Widget = select(_WIRELESS_CHANNELS, default="1")
     # any wire of any kind; each socket is named after its source (like a tag).
@@ -2933,7 +2966,8 @@ class WirelessIn:
 
 @node(id="core.flow.wireless_out", name="Wireless Out", kind=Kind.TRANSFORM, category="Flow",
       summary="Receive the wires broadcast by the Wireless In on the same channel "
-              "(1 to 100). Its outputs mirror that In's sockets.")
+              "(1 to 100). Its outputs mirror that In's sockets.",
+      icon="wifi-outline")
 class WirelessOut:
     channel: Widget = select(_WIRELESS_CHANNELS, default="1")
     # outputs are dynamic: the editor mirrors the matching Wireless In's sockets.
@@ -2943,7 +2977,8 @@ class WirelessOut:
 @node(id="core.flow.router", name="Router", kind=Kind.TRANSFORM, category="Flow",
       summary="Reroute a wire anywhere on the canvas: one in, one out, no change. "
               "It is a pure bypass, so the wire keeps its source name and type even "
-              "through several routers in a row. Optional centred label.")
+              "through several routers in a row. Optional centred label.",
+      icon="return-down-forward-outline")
 class Router:
     # a free-text label shown centred in the pill (empty by default; duplicates are
     # fine - it never affects the wire). The runtime ALWAYS flattens the router away
@@ -2980,7 +3015,8 @@ def _coerce_list(value) -> list:
       summary="Dispense a list one item at a time. Fire `trigger` to start; wire the "
               "body's done back into `loop` to release the next (both triggers must "
               "be wired); `after_last` fires when the list is exhausted. "
-              "Type-agnostic (text, image, file, json).")
+              "Type-agnostic (text, image, file, json).",
+      icon="repeat-outline")
 class ForEach:
     # `trigger` starts the loop; `loop` is the back-edge ("body finished this item,
     # release the next"). Both must be wired: without the back-edge the loop would
@@ -3031,7 +3067,8 @@ _CHANGED_UNSET = object()  # sentinel so a Changed node's first value always cou
 @node(id="core.flow.changed", name="Changed", kind=Kind.TRANSFORM, category="Flow",
       summary="Pass a value on only when it differs from the last one (a dedup "
               "gate). Interval, HTTP Request, Changed and LLM in a row poll a source "
-              "and run the LLM only on a real change. The first value always passes.")
+              "and run the LLM only on a real change. The first value always passes.",
+      icon="funnel-outline")
 class Changed:
     inputs = [Port("trigger", "event", trigger=True),
               Port("value", "any")]
@@ -3059,7 +3096,8 @@ class Changed:
       opens_turn=True,
       summary="A control barrier: it fires one trigger once every wired input has "
               "fired, then resets. It waits for the slowest branch, and `in` needs at "
-              "least one wire. It touches no data; data rides its own wires.")
+              "least one wire. It touches no data; data rides its own wires.",
+      icon="git-merge-outline")
 class Sync:
     # growable trigger inputs; emits `out` once every wired socket has arrived.
     # A trigger, so at least one socket must be wired.
@@ -3087,7 +3125,8 @@ class Sync:
 
 @node(id="core.flow.wait", name="Wait", kind=Kind.TRANSFORM, category="Flow",
       summary="Relay a trigger after a delay. 1:1 (trigger in -> trigger out). Pick "
-              "the amount and the unit; paces a For-each loop or throttles a chain.")
+              "the amount and the unit; paces a For-each loop or throttles a chain.",
+      icon="hourglass-outline")
 class Wait:
     # use ready widgets only: a number box + a unit dropdown.
     amount: Widget = Widget(kind="number", default=1, label="amount")
@@ -3119,7 +3158,8 @@ class Wait:
               "a buffer, `out` releases one item, and the next goes only when `ack` "
               "fires, so two turns reach a shared LLM one after the other. Both "
               "triggers must be wired: the producers into `in`, and the node that ends "
-              "the turn into `ack`.")
+              "the turn into `ack`.",
+      icon="file-tray-stacked-outline")
 class Queue:
     # a watchdog so a job whose `ack` never fires (a tool body that raised, a broken
     # chain) cannot wedge the lane forever: if the current job has been outstanding
@@ -3192,7 +3232,8 @@ class ChatOutput:
               "to an avatar client, such as a VRM renderer, over the /stream SSE. For "
               "one chunk per sentence, fire it once per sentence (a For-each over "
               "Sentences). Wire the separate ports or one combined `utterance` JSON; "
-              "the separate ports win. Lip-sync stays on the client.")
+              "the separate ports win. Lip-sync stays on the client.",
+      icon="happy-outline")
 class Avatar:
     channel: Widget = Widget(kind="text", default="avatar", label="stream channel")
     inputs = [Port("trigger", "event", trigger=True),

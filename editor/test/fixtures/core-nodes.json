@@ -19,7 +19,7 @@
   "id": "core.value.integer",
   "kind": "value",
   "category": "Values",
-  "icon": "calculator-outline",
+  "icon": "keypad-outline",
   "subline": "int · {number}",
   "inputs": [],
   "widgets": [
@@ -35,7 +35,7 @@
   "id": "core.value.float",
   "kind": "value",
   "category": "Values",
-  "icon": "calculator-outline",
+  "icon": "options-outline",
   "subline": "float · {number}",
   "inputs": [],
   "widgets": [
@@ -67,7 +67,7 @@
   "id": "core.value.image",
   "kind": "value",
   "category": "Values",
-  "icon": "",
+  "icon": "image-outline",
   "subline": "",
   "inputs": [],
   "widgets": [
@@ -83,7 +83,7 @@
   "id": "core.value.audio",
   "kind": "value",
   "category": "Values",
-  "icon": "",
+  "icon": "musical-notes-outline",
   "subline": "",
   "inputs": [],
   "widgets": [
@@ -99,7 +99,7 @@
   "id": "core.parse.tags",
   "kind": "transform",
   "category": "Data",
-  "icon": "",
+  "icon": "pricetags-outline",
   "subline": "",
   "inputs": [
    {
@@ -150,7 +150,7 @@
   "id": "core.text.strip",
   "kind": "transform",
   "category": "Text",
-  "icon": "",
+  "icon": "backspace-outline",
   "subline": "",
   "inputs": [
    {
@@ -195,7 +195,7 @@
   "id": "core.sensor.screen",
   "kind": "sensor",
   "category": "Sensors",
-  "icon": "",
+  "icon": "desktop-outline",
   "subline": "",
   "inputs": [],
   "widgets": [
@@ -229,7 +229,7 @@
   "id": "core.sensor.window",
   "kind": "sensor",
   "category": "Sensors",
-  "icon": "",
+  "icon": "browsers-outline",
   "subline": "",
   "inputs": [
    {
@@ -268,7 +268,7 @@
   "id": "core.sensor.foreground",
   "kind": "sensor",
   "category": "Sensors",
-  "icon": "",
+  "icon": "layers-outline",
   "subline": "",
   "inputs": [],
   "widgets": [
@@ -322,7 +322,7 @@
   "id": "core.trigger.schedule",
   "kind": "trigger",
   "category": "Triggers",
-  "icon": "",
+  "icon": "alarm-outline",
   "subline": "",
   "inputs": [],
   "widgets": [
@@ -369,7 +369,7 @@
   "id": "core.trigger.audio_in",
   "kind": "trigger",
   "category": "Triggers",
-  "icon": "",
+  "icon": "mic-circle-outline",
   "subline": "",
   "inputs": [],
   "widgets": [
@@ -385,7 +385,7 @@
   "id": "core.trigger.webhook",
   "kind": "trigger",
   "category": "Triggers",
-  "icon": "",
+  "icon": "link-outline",
   "subline": "",
   "inputs": [],
   "widgets": [
@@ -438,7 +438,7 @@
   "id": "core.data.format_list",
   "kind": "transform",
   "category": "Data",
-  "icon": "",
+  "icon": "receipt-outline",
   "subline": "",
   "inputs": [
    {
@@ -465,7 +465,7 @@
   "id": "core.data.list",
   "kind": "transform",
   "category": "Data",
-  "icon": "",
+  "icon": "list-outline",
   "subline": "",
   "inputs": [
    {
@@ -554,7 +554,7 @@
   "id": "core.ai.tool",
   "kind": "transform",
   "category": "AI",
-  "icon": "",
+  "icon": "construct-outline",
   "subline": "",
   "inputs": [
    {
@@ -593,7 +593,7 @@
   "id": "core.ai.tool_args",
   "kind": "transform",
   "category": "AI",
-  "icon": "",
+  "icon": "log-in-outline",
   "subline": "",
   "inputs": [
    {
@@ -668,7 +668,7 @@
   "id": "core.ai.embed",
   "kind": "transform",
   "category": "AI",
-  "icon": "",
+  "icon": "finger-print-outline",
   "subline": "",
   "inputs": [
    {
@@ -693,7 +693,7 @@
   "id": "core.ai.rerank",
   "kind": "transform",
   "category": "AI",
-  "icon": "",
+  "icon": "podium-outline",
   "subline": "",
   "inputs": [
    {
@@ -722,7 +722,7 @@
   "id": "core.data.chunk",
   "kind": "transform",
   "category": "Data",
-  "icon": "",
+  "icon": "cut-outline",
   "subline": "",
   "inputs": [
    {
@@ -755,7 +755,7 @@
   "id": "core.data.sentences",
   "kind": "transform",
   "category": "Data",
-  "icon": "",
+  "icon": "chatbox-outline",
   "subline": "",
   "inputs": [
    {
@@ -769,7 +769,7 @@
   "id": "core.store.vectors",
   "kind": "store",
   "category": "Store",
-  "icon": "",
+  "icon": "planet-outline",
   "subline": "",
   "inputs": [],
   "widgets": []
@@ -778,7 +778,7 @@
   "id": "core.vectors",
   "kind": "transform",
   "category": "Store",
-  "icon": "",
+  "icon": "compass-outline",
   "subline": "",
   "inputs": [
    {
@@ -845,7 +845,7 @@
   "id": "core.store.database",
   "kind": "store",
   "category": "Store",
-  "icon": "",
+  "icon": "server-outline",
   "subline": "",
   "inputs": [],
   "widgets": [
@@ -861,7 +861,7 @@
   "id": "core.db",
   "kind": "transform",
   "category": "Store",
-  "icon": "",
+  "icon": "grid-outline",
   "subline": "",
   "inputs": [
    {
@@ -914,7 +914,7 @@
   "id": "core.data.parse",
   "kind": "transform",
   "category": "Data",
-  "icon": "",
+  "icon": "code-download-outline",
   "subline": "",
   "inputs": [
    {
@@ -928,7 +928,7 @@
   "id": "core.data.stringify",
   "kind": "transform",
   "category": "Data",
-  "icon": "",
+  "icon": "code-working-outline",
   "subline": "",
   "inputs": [
    {
@@ -942,7 +942,7 @@
   "id": "core.data.build",
   "kind": "transform",
   "category": "Data",
-  "icon": "",
+  "icon": "extension-puzzle-outline",
   "subline": "",
   "inputs": [
    {
@@ -956,7 +956,7 @@
   "id": "core.data.get",
   "kind": "transform",
   "category": "Data",
-  "icon": "",
+  "icon": "eyedrop-outline",
   "subline": "",
   "inputs": [
    {
@@ -977,7 +977,7 @@
   "id": "core.data.split",
   "kind": "transform",
   "category": "Data",
-  "icon": "",
+  "icon": "trail-sign-outline",
   "subline": "",
   "inputs": [
    {
@@ -998,7 +998,7 @@
   "id": "core.file.read",
   "kind": "service",
   "category": "Files",
-  "icon": "document-text-outline",
+  "icon": "document-outline",
   "subline": "",
   "inputs": [
    {
@@ -1123,7 +1123,7 @@
   "id": "core.store.kv",
   "kind": "store",
   "category": "Store",
-  "icon": "",
+  "icon": "archive-outline",
   "subline": "",
   "inputs": [],
   "widgets": []
@@ -1132,7 +1132,7 @@
   "id": "core.kv",
   "kind": "transform",
   "category": "Store",
-  "icon": "",
+  "icon": "key-outline",
   "subline": "",
   "inputs": [
    {
@@ -1179,7 +1179,7 @@
   "id": "core.state.meter",
   "kind": "transform",
   "category": "State",
-  "icon": "",
+  "icon": "speedometer-outline",
   "subline": "",
   "inputs": [
    {
@@ -1252,7 +1252,7 @@
   "id": "core.trigger.agenda",
   "kind": "trigger",
   "category": "Triggers",
-  "icon": "",
+  "icon": "calendar-outline",
   "subline": "",
   "inputs": [
    {
@@ -1279,7 +1279,7 @@
   "id": "core.net.http",
   "kind": "transform",
   "category": "Network",
-  "icon": "",
+  "icon": "globe-outline",
   "subline": "",
   "inputs": [
    {
@@ -1373,7 +1373,7 @@
   "id": "core.flow.wireless_in",
   "kind": "transform",
   "category": "Flow",
-  "icon": "",
+  "icon": "radio-outline",
   "subline": "",
   "inputs": [
    {
@@ -1394,7 +1394,7 @@
   "id": "core.flow.wireless_out",
   "kind": "transform",
   "category": "Flow",
-  "icon": "",
+  "icon": "wifi-outline",
   "subline": "",
   "inputs": [],
   "widgets": [
@@ -1410,7 +1410,7 @@
   "id": "core.flow.router",
   "kind": "transform",
   "category": "Flow",
-  "icon": "",
+  "icon": "return-down-forward-outline",
   "subline": "",
   "inputs": [
    {
@@ -1431,7 +1431,7 @@
   "id": "core.flow.for_each",
   "kind": "transform",
   "category": "Flow",
-  "icon": "",
+  "icon": "repeat-outline",
   "subline": "",
   "inputs": [
    {
@@ -1453,7 +1453,7 @@
   "id": "core.flow.changed",
   "kind": "transform",
   "category": "Flow",
-  "icon": "",
+  "icon": "funnel-outline",
   "subline": "",
   "inputs": [
    {
@@ -1471,7 +1471,7 @@
   "id": "core.flow.sync",
   "kind": "transform",
   "category": "Flow",
-  "icon": "",
+  "icon": "git-merge-outline",
   "subline": "",
   "inputs": [
    {
@@ -1485,7 +1485,7 @@
   "id": "core.flow.wait",
   "kind": "transform",
   "category": "Flow",
-  "icon": "",
+  "icon": "hourglass-outline",
   "subline": "",
   "inputs": [
    {
@@ -1512,7 +1512,7 @@
   "id": "core.flow.queue",
   "kind": "transform",
   "category": "Flow",
-  "icon": "",
+  "icon": "file-tray-stacked-outline",
   "subline": "",
   "inputs": [
    {
@@ -1563,7 +1563,7 @@
   "id": "core.output.avatar",
   "kind": "output",
   "category": "Output",
-  "icon": "",
+  "icon": "happy-outline",
   "subline": "",
   "inputs": [
    {

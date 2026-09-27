@@ -56,6 +56,23 @@ def test_every_definition_carries_its_look():
         assert isinstance(d["icon"], str) and isinstance(d["subline"], str), d["id"]
 
 
+def test_every_core_node_declares_an_icon():
+    # a node that declares none draws its kind's glyph, which it would share
+    # with every other node of that kind
+    bare = [d["id"] for d in _core_looks() if not d["icon"]]
+    assert bare == [], f"core nodes without an icon: {bare}"
+
+
+def test_no_two_core_nodes_share_an_icon():
+    # the glyph tells a node apart in the library, the palette and the canvas;
+    # the editor test (node-look.test.mjs) checks the editor ships each one
+    owners: dict[str, list[str]] = {}
+    for d in _core_looks():
+        owners.setdefault(d["icon"], []).append(d["id"])
+    shared = {icon: ids for icon, ids in owners.items() if len(ids) > 1}
+    assert shared == {}, f"icons declared by more than one core node: {shared}"
+
+
 def test_a_node_without_a_declaration_serves_empty_strings():
     @node(id="test.look.plain", name="Plain", kind=Kind.TRANSFORM, category="Data")
     class Plain:

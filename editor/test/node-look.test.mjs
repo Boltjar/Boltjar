@@ -7,9 +7,11 @@
 // same way. Run from editor/: `node test/node-look.test.mjs`.
 //
 // fixtures/core-nodes.json is the served definition of every core node (the
-// Python suite keeps it equal to the registry). The *_BEFORE tables are what
-// the editor drew for each core node before the declarations existed, taken
-// from the per-id tables this change removed: the look must not move.
+// Python suite keeps it equal to the registry, and checks that every core node
+// declares an icon of its own). Each declared icon must be one the editor
+// ships, and it is the one drawn. The *_BEFORE tables are what the editor drew
+// for each core node's subline and body before the declarations existed, taken
+// from the per-id tables that change removed: that look must not move.
 // ============================================================================
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -57,72 +59,6 @@ const known = (name) => SHIPPED.has(name);
 
 const defs = JSON.parse(readFileSync(resolve(here, "fixtures/core-nodes.json"), "utf8"));
 const byId = new Map(defs.map((d) => [d.id, d]));
-
-const ICON_BEFORE = {
-  "core.value.text": "text-outline",
-  "core.value.integer": "calculator-outline",
-  "core.value.float": "calculator-outline",
-  "core.value.boolean": "toggle-outline",
-  "core.value.image": "code-slash-outline",
-  "core.value.audio": "code-slash-outline",
-  "core.parse.tags": "git-compare-outline",
-  "core.text.strip": "git-compare-outline",
-  "core.sensor.screen": "time-outline",
-  "core.sensor.window": "time-outline",
-  "core.sensor.foreground": "time-outline",
-  "core.sensor.clock": "time-outline",
-  "core.trigger.interval": "timer-outline",
-  "core.trigger.schedule": "flash",
-  "core.trigger.manual": "play-circle-outline",
-  "core.trigger.chat": "chatbubble-ellipses-outline",
-  "core.trigger.audio_in": "flash",
-  "core.trigger.webhook": "flash",
-  "core.data.template": "document-text-outline",
-  "core.data.format_list": "git-compare-outline",
-  "core.data.list": "git-compare-outline",
-  "core.data.compute": "calculator-outline",
-  "core.logic.condition": "git-branch-outline",
-  "core.ai.llm": "sparkles-outline",
-  "core.ai.tool": "git-compare-outline",
-  "core.ai.tool_args": "git-compare-outline",
-  "core.ai.stt": "mic-outline",
-  "core.ai.tts": "volume-high-outline",
-  "core.ai.embed": "git-compare-outline",
-  "core.ai.rerank": "git-compare-outline",
-  "core.data.chunk": "git-compare-outline",
-  "core.data.sentences": "git-compare-outline",
-  "core.store.vectors": "albums-outline",
-  "core.vectors": "git-compare-outline",
-  "core.store.database": "albums-outline",
-  "core.db": "git-compare-outline",
-  "core.data.parse": "git-compare-outline",
-  "core.data.stringify": "git-compare-outline",
-  "core.data.build": "git-compare-outline",
-  "core.data.get": "git-compare-outline",
-  "core.data.split": "git-compare-outline",
-  "core.file.read": "document-text-outline",
-  "core.file.write": "create-outline",
-  "core.file.append": "add-circle-outline",
-  "core.file.delete": "trash-outline",
-  "core.file.list": "folder-open-outline",
-  "core.store.kv": "albums-outline",
-  "core.kv": "git-compare-outline",
-  "core.state.meter": "git-compare-outline",
-  "core.trigger.agenda": "flash",
-  "core.net.http": "git-compare-outline",
-  "core.output.log": "terminal-outline",
-  "core.output.preview": "eye-outline",
-  "core.flow.wireless_in": "git-compare-outline",
-  "core.flow.wireless_out": "git-compare-outline",
-  "core.flow.router": "git-compare-outline",
-  "core.flow.for_each": "git-compare-outline",
-  "core.flow.changed": "git-compare-outline",
-  "core.flow.sync": "git-compare-outline",
-  "core.flow.wait": "git-compare-outline",
-  "core.flow.queue": "git-compare-outline",
-  "core.output.chat": "chatbubbles-outline",
-  "core.output.avatar": "exit-outline",
-};
 
 const SUBLINE_BEFORE = [
   ["core.value.text", {}, "text · empty"],
@@ -283,12 +219,12 @@ const BODY_BEFORE = [
   ["core.output.avatar", {}, []],
 ];
 
-// ---- every core node draws the glyph it drew before, and a real one
-check("the snapshot and the before table list the same core nodes",
-  [...byId.keys()].sort(), Object.keys(ICON_BEFORE).sort());
+// ---- every core node declares an icon the editor ships, and draws it
+check("the snapshot lists the core nodes the before tables do",
+  [...byId.keys()].sort(), [...new Set(SUBLINE_BEFORE.map(([id]) => id))].sort());
 for (const d of defs) {
-  check(`${d.id} draws ${ICON_BEFORE[d.id]}`, nodeIcon(d, known), ICON_BEFORE[d.id]);
-  check(`${d.id} draws an icon the editor ships`, known(nodeIcon(d, known)), true);
+  check(`${d.id} declares ${JSON.stringify(d.icon)}, an icon the editor ships`, known(d.icon), true);
+  check(`${d.id} draws the icon it declares`, nodeIcon(d, known), d.icon);
 }
 
 // ---- a pack node's icon: declared, unknown, or none
