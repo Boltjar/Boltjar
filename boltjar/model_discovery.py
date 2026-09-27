@@ -64,6 +64,12 @@ XAI_MODELS_URL = "https://api.x.ai/v1/language-models"
 ANTHROPIC_MODELS_URL = "https://api.anthropic.com/v1/models"
 ANTHROPIC_VERSION = "2023-06-01"
 
+# The LLM model value that picks a runnable model at run time (resolve_auto).
+AUTO = "auto"
+# What an "auto" LLM replies with while nothing runnable is connected.
+AUTO_MOCK_REPLY = ("No model is connected yet: open Connections to add a provider key "
+                   "or install an Ollama model, and this node will use it.")
+
 # the manifest kinds each provider's list covers: a manifest of another kind (xAI
 # TTS, for one) is never marked unavailable because a chat list lacks it.
 _LISTED_KINDS = {"ollama": frozenset({"llm", "embed"})}
@@ -653,9 +659,31 @@ def catalog() -> list[dict]:
     return out
 
 
+def _chat(manifest: ModelManifest) -> bool:
+    return manifest.kind == "llm" and "text" in manifest.outputs
+
+
+def resolve_auto() -> ModelManifest | None:
+    """What an "auto" LLM runs: the first installed Ollama chat model (Ollama
+    answered the last time it was asked), else the first chat model of a provider
+    with a key, else None (the node replies with AUTO_MOCK_REPLY)."""
+    rows = entries()
+    ollama = _state.get("ollama")
+    if ollama is not None and ollama.ok:
+        for entry in rows:
+            if entry.manifest.provider == "ollama" and entry.installed and _chat(entry.manifest):
+                return entry.manifest
+    for entry in rows:
+        m = entry.manifest
+        if m.provider != "ollama" and entry.available and _chat(m) and _has_key(m.provider):
+            return m
+    return None
+
+
 def payload() -> dict:
-    """GET /api/models: the merged list, each asked provider's last answer, and
-    whether a refresh is running. Times are ISO 8601 UTC."""
+    """GET /api/models: the merged list, what "auto" resolves to (None = the
+    mock), each asked provider's last answer, and whether a refresh is running.
+    Times are ISO 8601 UTC."""
     rows = catalog()
     usable = _usable_names()
     providers = {}
@@ -667,5 +695,6 @@ def payload() -> dict:
                            "updated": listing.updated, "error": listing.error,
                            "count": len(listing.models)}
     updated = max((p["updated"] for p in providers.values() if p["updated"]), default=None)
-    return {"models": rows, "updated": updated, "refreshing": refreshing(),
-            "providers": providers}
+    auto = resolve_auto()
+    return {"models": rows, "auto": auto.id if auto else None, "updated": updated,
+            "refreshing": refreshing(), "providers": providers}

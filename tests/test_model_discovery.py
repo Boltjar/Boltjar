@@ -5,7 +5,7 @@ with the response shapes the real endpoints return (checked live 2026-09-27):
 Ollama GET /api/tags + POST /api/show, xAI GET /v1/language-models, Anthropic
 GET /v1/models, and an OpenAI-compatible GET <base>/models. Covers the mapping
 onto the manifest shape, the merge with the TOML manifests, the cache and its
-offline fallback, and the OpenAI-compatible chat call.
+offline fallback, the OpenAI-compatible chat call and the "auto" model.
 """
 from __future__ import annotations
 
@@ -144,6 +144,8 @@ def vendors(*, ollama=True, xai=None, anthropic=None, openai=None, endpoints_=No
                 return httpx.Response(200, json=OLLAMA_TAGS)
             if path == "/api/show":
                 return httpx.Response(200, json=OLLAMA_SHOW[json.loads(request.content)["model"]])
+            if path == "/api/generate":
+                return httpx.Response(200, json={"response": "from ollama", "done": True})
         if url.startswith(md.XAI_MODELS_URL) and xai is not None:
             return xai(request) if callable(xai) else httpx.Response(200, json=xai)
         if url.startswith(md.ANTHROPIC_MODELS_URL) and anthropic is not None:
@@ -336,6 +338,7 @@ def test_no_provider_answering_never_breaks_the_list(fresh, vendor_http):
     assert by_id["ollama/gemma4:e4b"]["available"] is False
     assert by_id["ollama/gemma4:e4b"]["reason"] == "Ollama is not running"
     assert body["providers"]["ollama"]["ok"] is False and body["updated"] is None
+    assert body["auto"] is None
 
 
 def test_a_removed_key_takes_its_models_out(fresh, vendor_http, monkeypatch):
@@ -501,6 +504,49 @@ def test_the_llm_node_calls_openai_and_custom_endpoints(fresh, vendor_http, monk
     assert json.loads(call.content)["model"] == "gpt-5"
     assert _run_llm("lmstudio/qwen2.5-7b-instruct")["response"] == "Hello!"
     assert str(vendor_http.last.url) == "http://localhost:1234/v1/chat/completions"
+
+
+# ----------------------------------------------------------------- auto
+
+def test_auto_runs_the_first_installed_ollama_chat_model(fresh, vendor_http, monkeypatch):
+    monkeypatch.setenv("XAI_API_KEY", "test-xai-key")
+    vendor_http.reply = vendors(xai=XAI_MODELS)
+    refresh()
+    # curated first: the installed model a manifest describes.
+    assert md.resolve_auto().id == "ollama/gemma4:e4b"
+    assert md.payload()["auto"] == "ollama/gemma4:e4b"
+    out = _run_llm("auto")
+    assert out["response"] == "from ollama"
+    generate = [r for r in vendor_http.requests if r.url.path == "/api/generate"][-1]
+    assert json.loads(generate.content)["model"] == "gemma4:e4b"
+
+
+def test_auto_without_ollama_uses_a_provider_with_a_key(fresh, vendor_http, monkeypatch):
+    monkeypatch.setenv("XAI_API_KEY", "test-xai-key")
+    vendor_http.reply = vendors(ollama=False, xai=XAI_MODELS, chat=COMPLETION)
+    refresh()
+    assert md.resolve_auto().id == "xai/grok-4.20"
+    assert _run_llm("auto")["response"] == "Hello!"
+    call = [r for r in vendor_http.requests if r.url.path.endswith("/chat/completions")][-1]
+    assert str(call.url) == "https://api.x.ai/v1/chat/completions"
+    assert json.loads(call.content)["model"] == "grok-4.20-0309-non-reasoning"
+
+
+def test_auto_skips_an_ollama_that_stopped_answering(fresh, vendor_http, monkeypatch):
+    vendor_http.reply = vendors()
+    refresh()
+    vendor_http.reply = vendors(ollama=False)
+    refresh()
+    assert md.resolve_auto() is None, "the cached Ollama list is shown, not run"
+
+
+def test_auto_with_nothing_connected_says_how_to_connect(fresh, vendor_http):
+    vendor_http.reply = vendors(ollama=False)
+    refresh()
+    out = _run_llm("auto")
+    assert out["response"] == md.AUTO_MOCK_REPLY
+    assert "Connections" in md.AUTO_MOCK_REPLY and md.AUTO_MOCK_REPLY.count(".") == 1
+    assert "trigger" in out, "the mock reply still completes the node"
 
 
 # ------------------------------------------------------------ endpoints API

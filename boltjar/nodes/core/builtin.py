@@ -16,7 +16,7 @@ import re
 from simpleeval import SimpleEval, DEFAULT_FUNCTIONS
 
 from boltjar.sdk import node, Kind, NodeFailure, Port, Widget, code, model, select, slider, tmpl
-from boltjar import endpoints, models
+from boltjar import endpoints, model_discovery, models
 from boltjar.secrets import resolve_secrets
 
 _log = logging.getLogger(__name__)
@@ -1068,7 +1068,8 @@ def _model_params(obj, manifest, wired: dict) -> dict:
               "params to the capabilities of the selected model. A provider "
               "failure fires `error` (with the message) instead of a reply.")
 class LLM:
-    model: Widget = model("llm")
+    # empty runs the offline mock; "auto" picks a runnable model at run time.
+    model: Widget = model("llm", auto=True)
     inputs = [Port("trigger", "event", trigger=True),
               Port("prompt", "text"),
               Port("tools", "tool", growable=True, optional=True)]
@@ -1086,7 +1087,15 @@ class LLM:
     async def run(self, trigger=None, prompt=None, **kw):
         cfg = getattr(self, "_node_cfg", {})
         model_id = cfg.get("model") or getattr(self, "model", None) or "mock/echo"
-        manifest = models.get(model_id)
+        if model_id == model_discovery.AUTO:
+            # "auto" runs the first runnable model (see resolve_auto); with none
+            # connected it says how to connect one instead of failing.
+            manifest = model_discovery.resolve_auto()
+            if manifest is None:
+                return {"response": model_discovery.AUTO_MOCK_REPLY, "trigger": True}
+            model_id = manifest.id
+        else:
+            manifest = models.get(model_id)
         # only the params the selected model declares (no manifest = the offline
         # mock, which takes none).
         params = _model_params(self, manifest, kw) if manifest else {}

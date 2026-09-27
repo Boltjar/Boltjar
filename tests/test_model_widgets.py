@@ -21,6 +21,12 @@ def test_every_core_model_widget_declares_its_family():
         "core.ai.embed": "embed", "core.ai.rerank": "rerank"}
 
 
+def test_only_the_llm_picker_offers_auto():
+    widgets = _model_widgets()
+    assert widgets["core.ai.llm"]["options"] == ["auto"]
+    assert all(w["options"] == [] for nid, w in widgets.items() if nid != "core.ai.llm")
+
+
 def test_a_family_is_served_on_model_widgets_only():
     nodes = client.get("/api/object_info").json()["nodes"]
     assert all(w["model_kind"] is None for n in nodes for w in n["widgets"] if w["kind"] != "model")
