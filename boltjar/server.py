@@ -63,6 +63,8 @@ from boltjar.vector_store import VectorStore
 from boltjar.graph_format import GraphFormatError, format_of, migrate
 from boltjar import __version__, models
 from boltjar import autostart as _autostart
+from boltjar import dialogs as _dialogs
+from boltjar import linked as _linked
 from boltjar import endpoints as _endpoints
 from boltjar import model_discovery as _discovery
 from boltjar import ollama as _ollama
@@ -1132,8 +1134,12 @@ def list_packs() -> dict:
 
 
 def _graph_path(name: str) -> pathlib.Path | None:
-    """The file a slug loads from: the saved user copy when there is one, else the
-    shipped example of that name. None when neither exists."""
+    """The file a slug loads from: a linked file anywhere on this computer (one
+    the person opened or saved through the system dialog), else the saved user
+    copy, else the shipped example of that name. None when none exists."""
+    linked = _linked.path_of(name)
+    if linked is not None:
+        return linked
     filename = f"{_safe(name)}.json"
     for folder in (GRAPHS_DIR, EXAMPLES_DIR):
         path = folder / filename
@@ -1147,7 +1153,15 @@ def list_graphs() -> dict:
     """Every loadable slug: the saved user graphs plus the shipped examples (a
     user copy and an example with the same slug are one entry)."""
     slugs = {p.stem for folder in (GRAPHS_DIR, EXAMPLES_DIR) for p in folder.glob("*.json")}
-    return {"graphs": sorted(slugs)}
+    files = [{"slug": f["slug"], "path": _display_path(f["path"])} for f in _linked.entries()]
+    return {"graphs": sorted(slugs | {f["slug"] for f in files}), "files": files}
+
+
+def _display_path(path: str) -> str:
+    """A linked file's path as the editor shows it: the home folder as `~`, so
+    the account name is on no screen or screenshot."""
+    home = str(pathlib.Path.home())
+    return "~" + path[len(home):] if path.lower().startswith(home.lower()) else path
 
 
 def _load_graph_file(path: pathlib.Path):
@@ -1214,6 +1228,23 @@ async def put_graph(name: str, graph: dict):
         graph = migrate(graph)
     except GraphFormatError as exc:
         return JSONResponse({"error": str(exc)}, status_code=422)
+    # a linked file is saved back where it lives, atomically, and only there.
+    linked = _linked.path_of(name)
+    if linked is not None:
+        try:
+            format_of(json.loads(linked.read_text(encoding="utf-8")))
+        except GraphFormatError as exc:
+            return JSONResponse(
+                {"error": f"the file is kept, this Boltjar cannot read it: {exc}"}, status_code=409)
+        except (OSError, ValueError, AttributeError, TypeError):
+            pass  # unreadable as JSON: the person picked it, saving over it is the edit
+        try:
+            _linked.write_text_atomic(linked, json.dumps(graph, indent=2))
+        except OSError as exc:
+            return JSONResponse({"error": f"could not save to {_display_path(str(linked))}: {exc}"},
+                                status_code=500)
+        _snapshot_graph(name, graph)
+        return {"ok": True, "path": _display_path(str(linked))}
     # nor is a saved graph this Boltjar cannot read ever saved over: nothing here
     # could open it, so whatever is sent in its place is not an edit of it.
     unreadable = _unreadable_saved_graph(name)
@@ -1266,7 +1297,11 @@ async def delete_graph(name: str):
     user copies are deleted: removing a user copy of an example brings the
     example back, and a slug that exists only as an example is a 409. A
     deleted graph that is On keeps running, but no launch brings it back (the
-    editor's rename deletes the old slug this way)."""
+    editor's rename deletes the old slug this way). A linked file is only
+    forgotten: it stays on disk where it is."""
+    if _linked.forget(name):
+        _forget_resume(name)
+        return {"ok": True, "forgotten": True}
     path = GRAPHS_DIR / f"{_safe(name)}.json"
     try:
         path.unlink()
@@ -1278,6 +1313,91 @@ async def delete_graph(name: str):
             )
     _forget_resume(name)
     return {"ok": True}
+
+
+# ---------------------------------------------------------------- workflow files
+# Open... and Save as... in the editor's file menu. The path always comes from
+# this computer's own dialog, clicked through by the person at it, never from the
+# request; only a browser on this computer may ask. A file picked this way is
+# linked (boltjar.linked): listed under Workflows after a restart, saved back in
+# place, dropped from the list once it is gone.
+def _taken_slugs() -> set[str]:
+    return {p.stem for folder in (GRAPHS_DIR, EXAMPLES_DIR) for p in folder.glob("*.json")}
+
+
+def _inside(path: pathlib.Path, folder: pathlib.Path) -> bool:
+    try:
+        path.resolve().relative_to(folder.resolve())
+        return True
+    except (ValueError, OSError):
+        return False
+
+
+def _dialog_refusal(exc: Exception) -> JSONResponse:
+    if isinstance(exc, _dialogs.DialogUnavailable):
+        return JSONResponse({"unavailable": str(exc)}, status_code=409)
+    return JSONResponse({"error": str(exc)}, status_code=409)
+
+
+@app.post("/api/files/open")
+async def open_workflow_file(request: Request):
+    """Show the Open dialog and open the workflow file the person picks:
+    {slug, graph, path, linked}, or {cancelled: true}. A file inside user/graphs
+    or examples opens as that saved workflow and is not linked."""
+    if not _security.from_this_machine(request.scope, request.headers):
+        return JSONResponse({"error": "only a browser on this computer can open files"}, status_code=403)
+    try:
+        chosen = await asyncio.to_thread(_dialogs.ask_open)
+    except (_dialogs.DialogBusy, _dialogs.DialogUnavailable) as exc:
+        return _dialog_refusal(exc)
+    if chosen is None:
+        return {"cancelled": True}
+    path = pathlib.Path(_linked.normalise(chosen))
+    try:
+        graph = _linked.read_workflow(path)
+    except _linked.NotAWorkflow as exc:
+        return JSONResponse({"error": f"{path.name} is not a workflow: {exc}"}, status_code=422)
+    except (OSError, UnicodeDecodeError) as exc:
+        return JSONResponse({"error": f"could not read {path.name}: {exc}"}, status_code=422)
+    for folder in (GRAPHS_DIR, EXAMPLES_DIR):
+        if _inside(path, folder):
+            return {"slug": path.stem, "graph": graph, "path": _display_path(str(path)), "linked": False}
+    slug = _linked.plan(path, _taken_slugs())
+    _linked.link(path, slug)
+    return {"slug": slug, "graph": graph, "path": _display_path(str(path)), "linked": True}
+
+
+@app.post("/api/files/save-as")
+async def save_workflow_file_as(request: Request, body: dict = Body(...)):
+    """Show the Save as dialog and write `graph` to the file the person picks:
+    {slug, path, linked}, or {cancelled: true}. Body: {"graph": <workflow>,
+    "name": <suggested file name>}. The dialog itself asks before replacing a
+    file. A file saved inside user/graphs is that saved workflow, not a link."""
+    if not _security.from_this_machine(request.scope, request.headers):
+        return JSONResponse({"error": "only a browser on this computer can save files"}, status_code=403)
+    try:
+        graph = _linked.check_workflow(body.get("graph"))
+    except _linked.NotAWorkflow as exc:
+        return JSONResponse({"error": f"not a workflow: {exc}"}, status_code=422)
+    name = _linked.slug_for(str(body.get("name") or graph.get("name") or "workflow"))
+    try:
+        chosen = await asyncio.to_thread(_dialogs.ask_save, f"{name}.json")
+    except (_dialogs.DialogBusy, _dialogs.DialogUnavailable) as exc:
+        return _dialog_refusal(exc)
+    if chosen is None:
+        return {"cancelled": True}
+    path = pathlib.Path(_linked.normalise(chosen))
+    try:
+        _linked.write_text_atomic(path, json.dumps(graph, indent=2))
+    except OSError as exc:
+        return JSONResponse({"error": f"could not save to {_display_path(str(path))}: {exc}"}, status_code=500)
+    if _inside(path, GRAPHS_DIR):
+        slug, linked = path.stem, False
+    else:
+        slug, linked = _linked.plan(path, _taken_slugs()), True
+        _linked.link(path, slug)
+    _snapshot_graph(slug, graph)
+    return {"slug": slug, "path": _display_path(str(path)), "linked": linked}
 
 
 def _repo_path(path: str) -> str:
