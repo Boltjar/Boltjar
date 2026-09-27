@@ -118,6 +118,7 @@ A few things to know:
 - `pulled=True` makes a data node. It runs on demand, when a fired node needs its value. A node that does work takes an input with `trigger=True` instead: it fires when an event arrives and pulls its other inputs at that moment.
 - Knobs are annotated class attributes (`seconds: float = 2.0`) or `Widget` values from `boltjar.sdk` (`select`, `slider`, `code`). In the editor, a right-click turns a knob into an input, unless its `Widget` sets `promotable=False`.
 - Put behavior on the `Port` and `Widget` declarations (`growable`, `optional`, `op_field` and the rest). The editor reads those generically.
+- `icon=` and `subline=` on `@node` set how the node looks. `icon` is an Ionicons name the editor ships (the list is in `editor/src/lib/icons.tsx`). `subline` is the line under the title, a template over the node's knobs such as `every · {seconds}s`, with the filters listed in `SUBLINE_FILTERS` in `boltjar/sdk.py`. Leave them out and the node draws its kind's icon and its category.
 - Raise `NodeFailure` to fail and still emit outputs on a declared error branch.
 - Core ids start with `core.` (`core.text.strip`). Saved graphs store the id, so it stays fixed once shipped.
 - Add a test in `tests/`. `tests/test_split_node.py` is a short one to copy.

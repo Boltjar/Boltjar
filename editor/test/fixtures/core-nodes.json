@@ -1,0 +1,1617 @@
+[
+ {
+  "id": "core.value.text",
+  "kind": "value",
+  "category": "Values",
+  "icon": "text-outline",
+  "subline": "text · {text|clip:16|or:empty}",
+  "inputs": [],
+  "widgets": [
+   {
+    "name": "text",
+    "kind": "code",
+    "label": "Text",
+    "default": ""
+   }
+  ]
+ },
+ {
+  "id": "core.value.integer",
+  "kind": "value",
+  "category": "Values",
+  "icon": "calculator-outline",
+  "subline": "int · {number}",
+  "inputs": [],
+  "widgets": [
+   {
+    "name": "number",
+    "kind": "number",
+    "label": "Number",
+    "default": 0
+   }
+  ]
+ },
+ {
+  "id": "core.value.float",
+  "kind": "value",
+  "category": "Values",
+  "icon": "calculator-outline",
+  "subline": "float · {number}",
+  "inputs": [],
+  "widgets": [
+   {
+    "name": "number",
+    "kind": "number",
+    "label": "Number",
+    "default": 0.0
+   }
+  ]
+ },
+ {
+  "id": "core.value.boolean",
+  "kind": "value",
+  "category": "Values",
+  "icon": "toggle-outline",
+  "subline": "bool · {on|bool}",
+  "inputs": [],
+  "widgets": [
+   {
+    "name": "on",
+    "kind": "bool",
+    "label": "On",
+    "default": false
+   }
+  ]
+ },
+ {
+  "id": "core.value.image",
+  "kind": "value",
+  "category": "Values",
+  "icon": "",
+  "subline": "",
+  "inputs": [],
+  "widgets": [
+   {
+    "name": "src",
+    "kind": "text",
+    "label": "URL or path",
+    "default": ""
+   }
+  ]
+ },
+ {
+  "id": "core.value.audio",
+  "kind": "value",
+  "category": "Values",
+  "icon": "",
+  "subline": "",
+  "inputs": [],
+  "widgets": [
+   {
+    "name": "src",
+    "kind": "text",
+    "label": "URL or path",
+    "default": ""
+   }
+  ]
+ },
+ {
+  "id": "core.parse.tags",
+  "kind": "transform",
+  "category": "Data",
+  "icon": "",
+  "subline": "",
+  "inputs": [
+   {
+    "name": "text",
+    "growable": false
+   }
+  ],
+  "widgets": [
+   {
+    "name": "moods",
+    "kind": "code",
+    "label": "tag -> mood",
+    "default": "{\"laughing\":\"happy\",\"chuckling\":\"happy\",\"delighted\":\"happy\",\"grateful\":\"happy\",\"excited\":\"excited\",\"proud\":\"excited\",\"curious\":\"curious\",\"confused\":\"curious\",\"surprised\":\"surprised\",\"gasping\":\"surprised\",\"angry\":\"angry\",\"frustrated\":\"angry\",\"sad\":\"sad\",\"sighing\":\"sad\",\"sobbing\":\"sad\",\"disappointed\":\"sad\",\"worried\":\"sad\",\"embarrassed\":\"playful\",\"sarcastic\":\"playful\"}"
+   },
+   {
+    "name": "actions",
+    "kind": "code",
+    "label": "tag -> action",
+    "default": "{\"wave\":\"wave\",\"nod\":\"nod\",\"dance\":\"dance\",\"point\":\"point\",\"think\":\"think\"}"
+   },
+   {
+    "name": "priority",
+    "kind": "code",
+    "label": "tag -> priority",
+    "default": "{\"laughing\":9,\"sobbing\":9,\"crying loudly\":9,\"sighing\":8,\"chuckling\":7,\"angry\":7,\"sad\":7,\"excited\":7,\"surprised\":7,\"delighted\":7,\"disappointed\":7,\"frustrated\":7,\"embarrassed\":6,\"gasping\":6,\"grateful\":6,\"proud\":6,\"curious\":6,\"confused\":6,\"worried\":6,\"sarcastic\":6,\"whispering\":5,\"soft\":4,\"calm\":4}"
+   },
+   {
+    "name": "default",
+    "kind": "text",
+    "label": "default mood",
+    "default": "neutral"
+   },
+   {
+    "name": "max_emoji",
+    "kind": "number",
+    "label": "max emoji (0 = no cap)",
+    "default": 3
+   },
+   {
+    "name": "emoji",
+    "kind": "bool",
+    "label": "tags -> emoji in clean text",
+    "default": true
+   }
+  ]
+ },
+ {
+  "id": "core.text.strip",
+  "kind": "transform",
+  "category": "Text",
+  "icon": "",
+  "subline": "",
+  "inputs": [
+   {
+    "name": "in",
+    "growable": false
+   }
+  ],
+  "widgets": [
+   {
+    "name": "emoji",
+    "kind": "bool",
+    "label": "strip emoji",
+    "default": true
+   },
+   {
+    "name": "markdown",
+    "kind": "bool",
+    "label": "strip markdown",
+    "default": true
+   },
+   {
+    "name": "tags",
+    "kind": "bool",
+    "label": "strip [tags]",
+    "default": true
+   },
+   {
+    "name": "actions",
+    "kind": "bool",
+    "label": "strip *actions*",
+    "default": true
+   },
+   {
+    "name": "urls",
+    "kind": "bool",
+    "label": "strip urls",
+    "default": true
+   }
+  ]
+ },
+ {
+  "id": "core.sensor.screen",
+  "kind": "sensor",
+  "category": "Sensors",
+  "icon": "",
+  "subline": "",
+  "inputs": [],
+  "widgets": [
+   {
+    "name": "monitor",
+    "kind": "select",
+    "label": "Monitor",
+    "default": "Primary"
+   },
+   {
+    "name": "max_dim",
+    "kind": "number",
+    "label": "max dimension",
+    "default": 1280
+   },
+   {
+    "name": "format",
+    "kind": "select",
+    "label": "Format",
+    "default": "jpeg"
+   },
+   {
+    "name": "quality",
+    "kind": "number",
+    "label": "jpeg quality",
+    "default": 60
+   }
+  ]
+ },
+ {
+  "id": "core.sensor.window",
+  "kind": "sensor",
+  "category": "Sensors",
+  "icon": "",
+  "subline": "",
+  "inputs": [
+   {
+    "name": "title",
+    "growable": false
+   }
+  ],
+  "widgets": [
+   {
+    "name": "title",
+    "kind": "text",
+    "label": "Title",
+    "default": ""
+   },
+   {
+    "name": "max_dim",
+    "kind": "number",
+    "label": "max dimension",
+    "default": 1280
+   },
+   {
+    "name": "format",
+    "kind": "select",
+    "label": "Format",
+    "default": "jpeg"
+   },
+   {
+    "name": "quality",
+    "kind": "number",
+    "label": "jpeg quality",
+    "default": 60
+   }
+  ]
+ },
+ {
+  "id": "core.sensor.foreground",
+  "kind": "sensor",
+  "category": "Sensors",
+  "icon": "",
+  "subline": "",
+  "inputs": [],
+  "widgets": [
+   {
+    "name": "list_all",
+    "kind": "bool",
+    "label": "list all windows",
+    "default": false
+   }
+  ]
+ },
+ {
+  "id": "core.sensor.clock",
+  "kind": "sensor",
+  "category": "Services",
+  "icon": "time-outline",
+  "subline": "clock · volatile",
+  "inputs": [],
+  "widgets": [
+   {
+    "name": "format",
+    "kind": "select",
+    "label": "Format",
+    "default": "2026-06-08 14:30:00"
+   },
+   {
+    "name": "timezone",
+    "kind": "select",
+    "label": "Timezone",
+    "default": "Local"
+   }
+  ]
+ },
+ {
+  "id": "core.trigger.interval",
+  "kind": "trigger",
+  "category": "Triggers",
+  "icon": "timer-outline",
+  "subline": "every · {seconds}s",
+  "inputs": [],
+  "widgets": [
+   {
+    "name": "seconds",
+    "kind": "number",
+    "label": "Seconds",
+    "default": 2.0
+   }
+  ]
+ },
+ {
+  "id": "core.trigger.schedule",
+  "kind": "trigger",
+  "category": "Triggers",
+  "icon": "",
+  "subline": "",
+  "inputs": [],
+  "widgets": [
+   {
+    "name": "cron",
+    "kind": "text",
+    "label": "cron (min hour day month weekday)",
+    "default": "0 * * * *"
+   },
+   {
+    "name": "timezone",
+    "kind": "select",
+    "label": "Timezone",
+    "default": "Local"
+   }
+  ]
+ },
+ {
+  "id": "core.trigger.manual",
+  "kind": "trigger",
+  "category": "Triggers",
+  "icon": "play-circle-outline",
+  "subline": "manual · once",
+  "inputs": [],
+  "widgets": []
+ },
+ {
+  "id": "core.trigger.chat",
+  "kind": "trigger",
+  "category": "Triggers",
+  "icon": "chatbubble-ellipses-outline",
+  "subline": "chat · on send",
+  "inputs": [],
+  "widgets": [
+   {
+    "name": "placeholder",
+    "kind": "text",
+    "label": "Placeholder",
+    "default": "Type a message..."
+   }
+  ]
+ },
+ {
+  "id": "core.trigger.audio_in",
+  "kind": "trigger",
+  "category": "Triggers",
+  "icon": "",
+  "subline": "",
+  "inputs": [],
+  "widgets": [
+   {
+    "name": "placeholder",
+    "kind": "text",
+    "label": "Placeholder",
+    "default": "Hold to talk..."
+   }
+  ]
+ },
+ {
+  "id": "core.trigger.webhook",
+  "kind": "trigger",
+  "category": "Triggers",
+  "icon": "",
+  "subline": "",
+  "inputs": [],
+  "widgets": [
+   {
+    "name": "path",
+    "kind": "text",
+    "label": "path",
+    "default": "my-hook"
+   },
+   {
+    "name": "method",
+    "kind": "select",
+    "label": "Method",
+    "default": "POST"
+   },
+   {
+    "name": "secret",
+    "kind": "text",
+    "label": "X-Webhook-Secret (optional)",
+    "default": ""
+   }
+  ]
+ },
+ {
+  "id": "core.data.template",
+  "kind": "transform",
+  "category": "Data",
+  "icon": "document-text-outline",
+  "subline": "template · {template|tags}",
+  "inputs": [
+   {
+    "name": "trigger",
+    "growable": false
+   },
+   {
+    "name": "tag",
+    "growable": true
+   }
+  ],
+  "widgets": [
+   {
+    "name": "template",
+    "kind": "code",
+    "label": "Template",
+    "default": "{in}"
+   }
+  ]
+ },
+ {
+  "id": "core.data.format_list",
+  "kind": "transform",
+  "category": "Data",
+  "icon": "",
+  "subline": "",
+  "inputs": [
+   {
+    "name": "list",
+    "growable": false
+   }
+  ],
+  "widgets": [
+   {
+    "name": "item",
+    "kind": "code",
+    "label": "Item",
+    "default": "{sender}: {message}"
+   },
+   {
+    "name": "separator",
+    "kind": "select",
+    "label": "separator",
+    "default": "\\n"
+   }
+  ]
+ },
+ {
+  "id": "core.data.list",
+  "kind": "transform",
+  "category": "Data",
+  "icon": "",
+  "subline": "",
+  "inputs": [
+   {
+    "name": "item",
+    "growable": true
+   }
+  ],
+  "widgets": []
+ },
+ {
+  "id": "core.data.compute",
+  "kind": "transform",
+  "category": "Data",
+  "icon": "calculator-outline",
+  "subline": "compute · {expression|clip:14}",
+  "inputs": [
+   {
+    "name": "value",
+    "growable": true
+   }
+  ],
+  "widgets": [
+   {
+    "name": "expression",
+    "kind": "code",
+    "label": "Expression",
+    "default": "value"
+   }
+  ]
+ },
+ {
+  "id": "core.logic.condition",
+  "kind": "logic",
+  "category": "Logic",
+  "icon": "git-branch-outline",
+  "subline": "route · {expression|clip:14}",
+  "inputs": [
+   {
+    "name": "value",
+    "growable": false
+   },
+   {
+    "name": "condition",
+    "growable": false
+   }
+  ],
+  "widgets": [
+   {
+    "name": "expression",
+    "kind": "code",
+    "label": "Expression",
+    "default": "value"
+   }
+  ]
+ },
+ {
+  "id": "core.ai.llm",
+  "kind": "transform",
+  "category": "AI",
+  "icon": "sparkles-outline",
+  "subline": "{model|model}",
+  "inputs": [
+   {
+    "name": "trigger",
+    "growable": false
+   },
+   {
+    "name": "prompt",
+    "growable": false
+   },
+   {
+    "name": "tools",
+    "growable": true
+   }
+  ],
+  "widgets": [
+   {
+    "name": "model",
+    "kind": "model",
+    "label": "Model",
+    "default": ""
+   }
+  ]
+ },
+ {
+  "id": "core.ai.tool",
+  "kind": "transform",
+  "category": "AI",
+  "icon": "",
+  "subline": "",
+  "inputs": [
+   {
+    "name": "result",
+    "growable": false
+   }
+  ],
+  "widgets": [
+   {
+    "name": "name",
+    "kind": "text",
+    "label": "name",
+    "default": "my_tool"
+   },
+   {
+    "name": "description",
+    "kind": "code",
+    "label": "Description",
+    "default": "Describe what this tool does for the model."
+   },
+   {
+    "name": "schema_mode",
+    "kind": "select",
+    "label": "Schema Mode",
+    "default": "auto"
+   },
+   {
+    "name": "schema",
+    "kind": "code",
+    "label": "Schema",
+    "default": "{\"type\":\"object\",\"properties\":{},\"required\":[]}"
+   }
+  ]
+ },
+ {
+  "id": "core.ai.tool_args",
+  "kind": "transform",
+  "category": "AI",
+  "icon": "",
+  "subline": "",
+  "inputs": [
+   {
+    "name": "call",
+    "growable": false
+   }
+  ],
+  "widgets": [
+   {
+    "name": "fields",
+    "kind": "text",
+    "label": "Arguments",
+    "default": ""
+   }
+  ]
+ },
+ {
+  "id": "core.ai.stt",
+  "kind": "transform",
+  "category": "AI",
+  "icon": "mic-outline",
+  "subline": "{model|model}",
+  "inputs": [
+   {
+    "name": "trigger",
+    "growable": false
+   },
+   {
+    "name": "audio",
+    "growable": false
+   }
+  ],
+  "widgets": [
+   {
+    "name": "model",
+    "kind": "model",
+    "label": "Model",
+    "default": "fish/asr"
+   }
+  ]
+ },
+ {
+  "id": "core.ai.tts",
+  "kind": "transform",
+  "category": "AI",
+  "icon": "volume-high-outline",
+  "subline": "{model|model}",
+  "inputs": [
+   {
+    "name": "trigger",
+    "growable": false
+   },
+   {
+    "name": "text",
+    "growable": false
+   },
+   {
+    "name": "lang",
+    "growable": false
+   }
+  ],
+  "widgets": [
+   {
+    "name": "model",
+    "kind": "model",
+    "label": "Model",
+    "default": "xai/tts"
+   }
+  ]
+ },
+ {
+  "id": "core.ai.embed",
+  "kind": "transform",
+  "category": "AI",
+  "icon": "",
+  "subline": "",
+  "inputs": [
+   {
+    "name": "trigger",
+    "growable": false
+   },
+   {
+    "name": "text",
+    "growable": false
+   }
+  ],
+  "widgets": [
+   {
+    "name": "model",
+    "kind": "model",
+    "label": "Model",
+    "default": "ollama/bge-m3"
+   }
+  ]
+ },
+ {
+  "id": "core.ai.rerank",
+  "kind": "transform",
+  "category": "AI",
+  "icon": "",
+  "subline": "",
+  "inputs": [
+   {
+    "name": "trigger",
+    "growable": false
+   },
+   {
+    "name": "query",
+    "growable": false
+   },
+   {
+    "name": "candidates",
+    "growable": false
+   }
+  ],
+  "widgets": [
+   {
+    "name": "model",
+    "kind": "model",
+    "label": "Model",
+    "default": "rerank/bge-v2-m3"
+   },
+   {
+    "name": "url",
+    "kind": "text",
+    "label": "rerank url",
+    "default": "http://localhost:8181/rerank"
+   }
+  ]
+ },
+ {
+  "id": "core.data.chunk",
+  "kind": "transform",
+  "category": "Data",
+  "icon": "",
+  "subline": "",
+  "inputs": [
+   {
+    "name": "text",
+    "growable": false
+   }
+  ],
+  "widgets": [
+   {
+    "name": "size",
+    "kind": "number",
+    "label": "size",
+    "default": 800
+   },
+   {
+    "name": "overlap",
+    "kind": "number",
+    "label": "overlap",
+    "default": 120
+   },
+   {
+    "name": "by",
+    "kind": "select",
+    "label": "By",
+    "default": "chars"
+   }
+  ]
+ },
+ {
+  "id": "core.data.sentences",
+  "kind": "transform",
+  "category": "Data",
+  "icon": "",
+  "subline": "",
+  "inputs": [
+   {
+    "name": "text",
+    "growable": false
+   }
+  ],
+  "widgets": []
+ },
+ {
+  "id": "core.store.vectors",
+  "kind": "store",
+  "category": "Store",
+  "icon": "",
+  "subline": "",
+  "inputs": [],
+  "widgets": []
+ },
+ {
+  "id": "core.vectors",
+  "kind": "transform",
+  "category": "Store",
+  "icon": "",
+  "subline": "",
+  "inputs": [
+   {
+    "name": "trigger",
+    "growable": false
+   },
+   {
+    "name": "vectors",
+    "growable": false
+   },
+   {
+    "name": "embedding",
+    "growable": false
+   },
+   {
+    "name": "text",
+    "growable": false
+   },
+   {
+    "name": "tag",
+    "growable": true
+   }
+  ],
+  "widgets": [
+   {
+    "name": "operation",
+    "kind": "select",
+    "label": "Operation",
+    "default": "search"
+   },
+   {
+    "name": "namespace",
+    "kind": "text",
+    "label": "Namespace",
+    "default": "default"
+   },
+   {
+    "name": "top_k",
+    "kind": "number",
+    "label": "top k",
+    "default": 5
+   },
+   {
+    "name": "min_score",
+    "kind": "number",
+    "label": "min score",
+    "default": 0.45
+   },
+   {
+    "name": "metadata",
+    "kind": "code",
+    "label": "Metadata",
+    "default": ""
+   },
+   {
+    "name": "ref",
+    "kind": "text",
+    "label": "Ref",
+    "default": ""
+   }
+  ]
+ },
+ {
+  "id": "core.store.database",
+  "kind": "store",
+  "category": "Store",
+  "icon": "",
+  "subline": "",
+  "inputs": [],
+  "widgets": [
+   {
+    "name": "schema",
+    "kind": "schema",
+    "label": "Schema",
+    "default": []
+   }
+  ]
+ },
+ {
+  "id": "core.db",
+  "kind": "transform",
+  "category": "Store",
+  "icon": "",
+  "subline": "",
+  "inputs": [
+   {
+    "name": "trigger",
+    "growable": false
+   },
+   {
+    "name": "db",
+    "growable": false
+   },
+   {
+    "name": "tag",
+    "growable": true
+   }
+  ],
+  "widgets": [
+   {
+    "name": "operation",
+    "kind": "select",
+    "label": "Operation",
+    "default": "query"
+   },
+   {
+    "name": "sql",
+    "kind": "code",
+    "label": "Sql",
+    "default": ""
+   },
+   {
+    "name": "table",
+    "kind": "text",
+    "label": "Table",
+    "default": ""
+   },
+   {
+    "name": "fields",
+    "kind": "code",
+    "label": "Fields",
+    "default": ""
+   },
+   {
+    "name": "where",
+    "kind": "code",
+    "label": "Where",
+    "default": ""
+   }
+  ]
+ },
+ {
+  "id": "core.data.parse",
+  "kind": "transform",
+  "category": "Data",
+  "icon": "",
+  "subline": "",
+  "inputs": [
+   {
+    "name": "text",
+    "growable": false
+   }
+  ],
+  "widgets": []
+ },
+ {
+  "id": "core.data.stringify",
+  "kind": "transform",
+  "category": "Data",
+  "icon": "",
+  "subline": "",
+  "inputs": [
+   {
+    "name": "json",
+    "growable": false
+   }
+  ],
+  "widgets": []
+ },
+ {
+  "id": "core.data.build",
+  "kind": "transform",
+  "category": "Data",
+  "icon": "",
+  "subline": "",
+  "inputs": [
+   {
+    "name": "field",
+    "growable": true
+   }
+  ],
+  "widgets": []
+ },
+ {
+  "id": "core.data.get",
+  "kind": "transform",
+  "category": "Data",
+  "icon": "",
+  "subline": "",
+  "inputs": [
+   {
+    "name": "json",
+    "growable": false
+   }
+  ],
+  "widgets": [
+   {
+    "name": "path",
+    "kind": "text",
+    "label": "Path",
+    "default": ""
+   }
+  ]
+ },
+ {
+  "id": "core.data.split",
+  "kind": "transform",
+  "category": "Data",
+  "icon": "",
+  "subline": "",
+  "inputs": [
+   {
+    "name": "json",
+    "growable": false
+   }
+  ],
+  "widgets": [
+   {
+    "name": "keys",
+    "kind": "text",
+    "label": "Keys",
+    "default": ""
+   }
+  ]
+ },
+ {
+  "id": "core.file.read",
+  "kind": "service",
+  "category": "Files",
+  "icon": "document-text-outline",
+  "subline": "",
+  "inputs": [
+   {
+    "name": "path",
+    "growable": false
+   }
+  ],
+  "widgets": [
+   {
+    "name": "path",
+    "kind": "text",
+    "label": "Path",
+    "default": ""
+   }
+  ]
+ },
+ {
+  "id": "core.file.write",
+  "kind": "service",
+  "category": "Files",
+  "icon": "create-outline",
+  "subline": "",
+  "inputs": [
+   {
+    "name": "trigger",
+    "growable": false
+   },
+   {
+    "name": "path",
+    "growable": false
+   },
+   {
+    "name": "content",
+    "growable": false
+   }
+  ],
+  "widgets": [
+   {
+    "name": "path",
+    "kind": "text",
+    "label": "Path",
+    "default": ""
+   }
+  ]
+ },
+ {
+  "id": "core.file.append",
+  "kind": "service",
+  "category": "Files",
+  "icon": "add-circle-outline",
+  "subline": "",
+  "inputs": [
+   {
+    "name": "trigger",
+    "growable": false
+   },
+   {
+    "name": "path",
+    "growable": false
+   },
+   {
+    "name": "content",
+    "growable": false
+   }
+  ],
+  "widgets": [
+   {
+    "name": "path",
+    "kind": "text",
+    "label": "Path",
+    "default": ""
+   }
+  ]
+ },
+ {
+  "id": "core.file.delete",
+  "kind": "service",
+  "category": "Files",
+  "icon": "trash-outline",
+  "subline": "",
+  "inputs": [
+   {
+    "name": "trigger",
+    "growable": false
+   },
+   {
+    "name": "path",
+    "growable": false
+   }
+  ],
+  "widgets": [
+   {
+    "name": "path",
+    "kind": "text",
+    "label": "Path",
+    "default": ""
+   }
+  ]
+ },
+ {
+  "id": "core.file.list",
+  "kind": "service",
+  "category": "Files",
+  "icon": "folder-open-outline",
+  "subline": "",
+  "inputs": [
+   {
+    "name": "path",
+    "growable": false
+   }
+  ],
+  "widgets": [
+   {
+    "name": "path",
+    "kind": "text",
+    "label": "Path",
+    "default": ""
+   }
+  ]
+ },
+ {
+  "id": "core.store.kv",
+  "kind": "store",
+  "category": "Store",
+  "icon": "",
+  "subline": "",
+  "inputs": [],
+  "widgets": []
+ },
+ {
+  "id": "core.kv",
+  "kind": "transform",
+  "category": "Store",
+  "icon": "",
+  "subline": "",
+  "inputs": [
+   {
+    "name": "trigger",
+    "growable": false
+   },
+   {
+    "name": "kv",
+    "growable": false
+   },
+   {
+    "name": "tag",
+    "growable": true
+   }
+  ],
+  "widgets": [
+   {
+    "name": "operation",
+    "kind": "select",
+    "label": "Operation",
+    "default": "get"
+   },
+   {
+    "name": "key",
+    "kind": "text",
+    "label": "Key",
+    "default": ""
+   },
+   {
+    "name": "value",
+    "kind": "code",
+    "label": "Value",
+    "default": ""
+   },
+   {
+    "name": "prefix",
+    "kind": "text",
+    "label": "Prefix",
+    "default": ""
+   }
+  ]
+ },
+ {
+  "id": "core.state.meter",
+  "kind": "transform",
+  "category": "State",
+  "icon": "",
+  "subline": "",
+  "inputs": [
+   {
+    "name": "nudge",
+    "growable": false
+   },
+   {
+    "name": "set",
+    "growable": false
+   }
+  ],
+  "widgets": [
+   {
+    "name": "amount",
+    "kind": "number",
+    "label": "nudge amount",
+    "default": 1.0
+   },
+   {
+    "name": "to",
+    "kind": "number",
+    "label": "set to",
+    "default": 0.0
+   },
+   {
+    "name": "rest",
+    "kind": "number",
+    "label": "rest",
+    "default": 0
+   },
+   {
+    "name": "rate",
+    "kind": "number",
+    "label": "drift rate / sec",
+    "default": 0
+   },
+   {
+    "name": "min",
+    "kind": "number",
+    "label": "min",
+    "default": 0
+   },
+   {
+    "name": "max",
+    "kind": "number",
+    "label": "max",
+    "default": 100
+   },
+   {
+    "name": "threshold",
+    "kind": "number",
+    "label": "threshold",
+    "default": 50
+   },
+   {
+    "name": "start",
+    "kind": "number",
+    "label": "start",
+    "default": 0
+   },
+   {
+    "name": "persist",
+    "kind": "bool",
+    "label": "persist across restart",
+    "default": false
+   }
+  ]
+ },
+ {
+  "id": "core.trigger.agenda",
+  "kind": "trigger",
+  "category": "Triggers",
+  "icon": "",
+  "subline": "",
+  "inputs": [
+   {
+    "name": "db",
+    "growable": false
+   }
+  ],
+  "widgets": [
+   {
+    "name": "poll",
+    "kind": "number",
+    "label": "poll (seconds)",
+    "default": 60
+   },
+   {
+    "name": "table",
+    "kind": "text",
+    "label": "Table",
+    "default": "agenda"
+   }
+  ]
+ },
+ {
+  "id": "core.net.http",
+  "kind": "transform",
+  "category": "Network",
+  "icon": "",
+  "subline": "",
+  "inputs": [
+   {
+    "name": "trigger",
+    "growable": false
+   },
+   {
+    "name": "tag",
+    "growable": true
+   }
+  ],
+  "widgets": [
+   {
+    "name": "method",
+    "kind": "select",
+    "label": "Method",
+    "default": "GET"
+   },
+   {
+    "name": "url",
+    "kind": "text",
+    "label": "Url",
+    "default": "https://"
+   },
+   {
+    "name": "headers",
+    "kind": "code",
+    "label": "Headers",
+    "default": ""
+   },
+   {
+    "name": "query",
+    "kind": "code",
+    "label": "Query",
+    "default": ""
+   },
+   {
+    "name": "body",
+    "kind": "code",
+    "label": "Body",
+    "default": ""
+   },
+   {
+    "name": "response_type",
+    "kind": "select",
+    "label": "response",
+    "default": "auto"
+   }
+  ]
+ },
+ {
+  "id": "core.output.log",
+  "kind": "output",
+  "category": "Inspect",
+  "icon": "terminal-outline",
+  "subline": "log · {label|clip:14}",
+  "inputs": [
+   {
+    "name": "in",
+    "growable": false
+   }
+  ],
+  "widgets": [
+   {
+    "name": "label",
+    "kind": "text",
+    "label": "Label",
+    "default": "log"
+   }
+  ]
+ },
+ {
+  "id": "core.output.preview",
+  "kind": "output",
+  "category": "Inspect",
+  "icon": "eye-outline",
+  "subline": "preview · live tap",
+  "inputs": [
+   {
+    "name": "in",
+    "growable": false
+   },
+   {
+    "name": "trigger",
+    "growable": false
+   }
+  ],
+  "widgets": []
+ },
+ {
+  "id": "core.flow.wireless_in",
+  "kind": "transform",
+  "category": "Flow",
+  "icon": "",
+  "subline": "",
+  "inputs": [
+   {
+    "name": "in",
+    "growable": true
+   }
+  ],
+  "widgets": [
+   {
+    "name": "channel",
+    "kind": "select",
+    "label": "Channel",
+    "default": "1"
+   }
+  ]
+ },
+ {
+  "id": "core.flow.wireless_out",
+  "kind": "transform",
+  "category": "Flow",
+  "icon": "",
+  "subline": "",
+  "inputs": [],
+  "widgets": [
+   {
+    "name": "channel",
+    "kind": "select",
+    "label": "Channel",
+    "default": "1"
+   }
+  ]
+ },
+ {
+  "id": "core.flow.router",
+  "kind": "transform",
+  "category": "Flow",
+  "icon": "",
+  "subline": "",
+  "inputs": [
+   {
+    "name": "in",
+    "growable": false
+   }
+  ],
+  "widgets": [
+   {
+    "name": "label",
+    "kind": "text",
+    "label": "label",
+    "default": ""
+   }
+  ]
+ },
+ {
+  "id": "core.flow.for_each",
+  "kind": "transform",
+  "category": "Flow",
+  "icon": "",
+  "subline": "",
+  "inputs": [
+   {
+    "name": "trigger",
+    "growable": false
+   },
+   {
+    "name": "loop",
+    "growable": false
+   },
+   {
+    "name": "list",
+    "growable": false
+   }
+  ],
+  "widgets": []
+ },
+ {
+  "id": "core.flow.changed",
+  "kind": "transform",
+  "category": "Flow",
+  "icon": "",
+  "subline": "",
+  "inputs": [
+   {
+    "name": "trigger",
+    "growable": false
+   },
+   {
+    "name": "value",
+    "growable": false
+   }
+  ],
+  "widgets": []
+ },
+ {
+  "id": "core.flow.sync",
+  "kind": "transform",
+  "category": "Flow",
+  "icon": "",
+  "subline": "",
+  "inputs": [
+   {
+    "name": "in",
+    "growable": true
+   }
+  ],
+  "widgets": []
+ },
+ {
+  "id": "core.flow.wait",
+  "kind": "transform",
+  "category": "Flow",
+  "icon": "",
+  "subline": "",
+  "inputs": [
+   {
+    "name": "trigger",
+    "growable": false
+   }
+  ],
+  "widgets": [
+   {
+    "name": "amount",
+    "kind": "number",
+    "label": "amount",
+    "default": 1
+   },
+   {
+    "name": "unit",
+    "kind": "select",
+    "label": "Unit",
+    "default": "Seconds"
+   }
+  ]
+ },
+ {
+  "id": "core.flow.queue",
+  "kind": "transform",
+  "category": "Flow",
+  "icon": "",
+  "subline": "",
+  "inputs": [
+   {
+    "name": "in",
+    "growable": true
+   },
+   {
+    "name": "ack",
+    "growable": false
+   }
+  ],
+  "widgets": [
+   {
+    "name": "timeout",
+    "kind": "number",
+    "label": "ack timeout (s, 0 = wait forever)",
+    "default": 300
+   }
+  ]
+ },
+ {
+  "id": "core.output.chat",
+  "kind": "output",
+  "category": "Inspect",
+  "icon": "chatbubbles-outline",
+  "subline": "",
+  "inputs": [
+   {
+    "name": "user_trigger",
+    "growable": false
+   },
+   {
+    "name": "user",
+    "growable": false
+   },
+   {
+    "name": "reply_trigger",
+    "growable": false
+   },
+   {
+    "name": "reply",
+    "growable": false
+   }
+  ],
+  "widgets": []
+ },
+ {
+  "id": "core.output.avatar",
+  "kind": "output",
+  "category": "Output",
+  "icon": "",
+  "subline": "",
+  "inputs": [
+   {
+    "name": "trigger",
+    "growable": false
+   },
+   {
+    "name": "text",
+    "growable": false
+   },
+   {
+    "name": "audio",
+    "growable": false
+   },
+   {
+    "name": "mood",
+    "growable": false
+   },
+   {
+    "name": "action",
+    "growable": false
+   },
+   {
+    "name": "lang",
+    "growable": false
+   },
+   {
+    "name": "done",
+    "growable": false
+   },
+   {
+    "name": "utterance",
+    "growable": false
+   }
+  ],
+  "widgets": [
+   {
+    "name": "channel",
+    "kind": "text",
+    "label": "stream channel",
+    "default": "avatar"
+   }
+  ]
+ }
+]

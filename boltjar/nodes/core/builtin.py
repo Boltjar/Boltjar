@@ -39,7 +39,8 @@ def _safe_eval(expression: str, names: dict):
 
 # ============================================================ values (pulled)
 @node(id="core.value.text", name="Text", kind=Kind.VALUE, category="Values",
-      pulled=True, summary="A constant text block.")
+      pulled=True, summary="A constant text block.",
+      icon="text-outline", subline="text · {text|clip:16|or:empty}")
 class Text:
     text: Widget = code("", expand=True)
     outputs = [Port("out", "text")]
@@ -49,7 +50,8 @@ class Text:
 
 
 @node(id="core.value.integer", name="Integer", kind=Kind.VALUE, category="Values",
-      pulled=True, summary="A constant integer.")
+      pulled=True, summary="A constant integer.",
+      icon="calculator-outline", subline="int · {number}")
 class Integer:
     number: int = 0
     outputs = [Port("out", "int")]
@@ -59,7 +61,8 @@ class Integer:
 
 
 @node(id="core.value.float", name="Float", kind=Kind.VALUE, category="Values",
-      pulled=True, summary="A constant float.")
+      pulled=True, summary="A constant float.",
+      icon="calculator-outline", subline="float · {number}")
 class Float:
     number: float = 0.0
     outputs = [Port("out", "float")]
@@ -69,7 +72,8 @@ class Float:
 
 
 @node(id="core.value.boolean", name="Boolean", kind=Kind.VALUE, category="Values",
-      pulled=True, summary="A constant boolean.")
+      pulled=True, summary="A constant boolean.",
+      icon="toggle-outline", subline="bool · {on|bool}")
 class Boolean:
     on: bool = False
     outputs = [Port("out", "bool")]
@@ -612,7 +616,8 @@ _CLOCK_ZONES = [
 
 @node(id="core.sensor.clock", name="Time", kind=Kind.SENSOR, category="Services",
       pulled=True, volatile=True, summary="The current time, re-read on every pull. "
-                                          "Pick the output format and timezone.")
+                                          "Pick the output format and timezone.",
+      icon="time-outline", subline="clock · volatile")
 class Clock:
     # the dropdown lists example outputs; pick the shape you want.
     format: Widget = select(list(_CLOCK_FORMATS), default="2026-06-08 14:30:00")
@@ -637,7 +642,8 @@ class Clock:
 
 # ============================================================ triggers (sources)
 @node(id="core.trigger.interval", name="Interval", kind=Kind.TRIGGER, category="Triggers",
-      summary="Fire an event every N seconds.")
+      summary="Fire an event every N seconds.",
+      icon="timer-outline", subline="every · {seconds}s")
 class Interval:
     seconds: float = 2.0
     outputs = [Port("trigger", "event")]
@@ -759,7 +765,8 @@ class Schedule:
 
 @node(id="core.trigger.manual", name="Manual", kind=Kind.TRIGGER, category="Triggers",
       summary="Fires once when the graph turns On, and again whenever you press its "
-              "Fire button (a run-button you control).")
+              "Fire button (a run-button you control).",
+      icon="play-circle-outline", subline="manual · once")
 class Manual:
     outputs = [Port("trigger", "event")]
 
@@ -770,7 +777,8 @@ class Manual:
 
 
 @node(id="core.trigger.chat", name="Chat Input", kind=Kind.TRIGGER, category="Triggers",
-      summary="Type a message and send it into the live graph.")
+      summary="Type a message and send it into the live graph.",
+      icon="chatbubble-ellipses-outline", subline="chat · on send")
 class ChatInput:
     placeholder: str = "Type a message..."
     outputs = [Port("trigger", "event"), Port("text", "text")]
@@ -819,7 +827,8 @@ class WebhookTrigger:
 @node(id="core.data.template", name="Template", kind=Kind.TRANSFORM, category="Data",
       pulled=True, summary="Assemble text from {tag} pipes. Each {tag} is a wired input. "
                            "Pulled by default; wire the optional `trigger` to assemble "
-                           "on a fire, then pass the trigger on (out first, then trigger).")
+                           "on a fire, then pass the trigger on (out first, then trigger).",
+      icon="document-text-outline", subline="template · {template|tags}")
 class Template:
     template: Widget = code("{in}", expand=True)
     # `trigger` is a declared port, never a {tag}: unwired, the Template is pure
@@ -927,7 +936,8 @@ class List:
 
 
 @node(id="core.data.compute", name="Compute", kind=Kind.TRANSFORM, category="Data",
-      pulled=True, summary="Derive a value from a pure expression (the dual of Logic).")
+      pulled=True, summary="Derive a value from a pure expression (the dual of Logic).",
+      icon="calculator-outline", subline="compute · {expression|clip:14}")
 class Compute:
     expression: Widget = code("value", expand=True)
     inputs = [Port("value", "any", growable=True)]
@@ -942,7 +952,8 @@ class Compute:
 
 # ============================================================ logic (fired, route)
 @node(id="core.logic.condition", name="Logic", kind=Kind.LOGIC, category="Logic",
-      summary="Route a value true/false on an expression. Routes, never computes.")
+      summary="Route a value true/false on an expression. Routes, never computes.",
+      icon="git-branch-outline", subline="route · {expression|clip:14}")
 class Logic:
     expression: Widget = code("value")
     inputs = [Port("value", "any", trigger=True), Port("condition", "any", optional=True)]
@@ -1067,7 +1078,8 @@ def _model_params(obj, manifest, wired: dict) -> dict:
 @node(id="core.ai.llm", name="LLM", kind=Kind.TRANSFORM, category="AI",
       summary="A chat / multimodal model. Reshapes its inputs, outputs, and "
               "params to the capabilities of the selected model. A provider "
-              "failure fires `error` (with the message) instead of a reply.")
+              "failure fires `error` (with the message) instead of a reply.",
+      icon="sparkles-outline", subline="{model|model}")
 class LLM:
     # empty runs the offline mock; "auto" picks a runnable model at run time.
     model: Widget = model("llm", auto=True)
@@ -1200,7 +1212,8 @@ class ToolArgs:
 @node(id="core.ai.stt", name="STT", kind=Kind.TRANSFORM, category="AI",
       summary="Speech to text. Picks a model from any connected STT provider "
               "(Fish Audio, ElevenLabs, xAI) the same way the LLM picks its model. "
-              "`lang` carries the language the provider detected.")
+              "`lang` carries the language the provider detected.",
+      icon="mic-outline", subline="{model|model}")
 class STT:
     # The same rich model picker the LLM uses (kind=model); filtered to kind=stt
     # manifests by the editor. With nothing picked the node uses this default.
@@ -1228,7 +1241,8 @@ class STT:
               "(Fish Audio, ElevenLabs, xAI) the same way the LLM picks its model. "
               "A wired `lang` overrides the language knob for providers that take "
               "one (xAI); Fish and ElevenLabs detect the language themselves and "
-              "ignore it.")
+              "ignore it.",
+      icon="volume-high-outline", subline="{model|model}")
 class TTS:
     # The same rich model picker the LLM uses (kind=model); filtered to kind=tts.
     # Per-model params (voice, speed, ...) come from the selected manifest and
@@ -2017,7 +2031,8 @@ def _files():
 @node(id="core.file.read", name="Read File", kind=Kind.SERVICE, category="Files",
       pulled=True, volatile=True,
       summary="Read a file's text from the sandbox. Pulled, fresh; a missing "
-              "file reads as empty.")
+              "file reads as empty.",
+      icon="document-text-outline")
 class ReadFile:
     path: Widget = Widget(kind="text", default="", label="Path")
     inputs = [Port("path", "text", optional=True)]
@@ -2038,7 +2053,8 @@ class ReadFile:
 
 @node(id="core.file.write", name="Write File", kind=Kind.SERVICE, category="Files",
       summary="Write text to a file in the sandbox on a trigger, creating parent "
-              "dirs. Emits the resolved relative path.")
+              "dirs. Emits the resolved relative path.",
+      icon="create-outline")
 class WriteFile:
     path: Widget = Widget(kind="text", default="", label="Path")
     inputs = [Port("trigger", "event", trigger=True),
@@ -2058,7 +2074,8 @@ class WriteFile:
 
 @node(id="core.file.append", name="Append File", kind=Kind.SERVICE, category="Files",
       summary="Append text to a file in the sandbox on a trigger, creating it if "
-              "absent. Emits the resolved relative path.")
+              "absent. Emits the resolved relative path.",
+      icon="add-circle-outline")
 class AppendFile:
     path: Widget = Widget(kind="text", default="", label="Path")
     inputs = [Port("trigger", "event", trigger=True),
@@ -2076,7 +2093,8 @@ class AppendFile:
 
 @node(id="core.file.delete", name="Delete File", kind=Kind.SERVICE, category="Files",
       summary="Delete a file in the sandbox on a trigger (idempotent; a missing "
-              "file is a no-op). Emits the resolved relative path.")
+              "file is a no-op). Emits the resolved relative path.",
+      icon="trash-outline")
 class DeleteFile:
     path: Widget = Widget(kind="text", default="", label="Path")
     inputs = [Port("trigger", "event", trigger=True),
@@ -2094,7 +2112,8 @@ class DeleteFile:
 @node(id="core.file.list", name="List Dir", kind=Kind.SERVICE, category="Files",
       pulled=True, volatile=True,
       summary="List entry names under a directory in the sandbox. Pulled, fresh; "
-              "a missing dir lists as []. Default path is the sandbox root.")
+              "a missing dir lists as []. Default path is the sandbox root.",
+      icon="folder-open-outline")
 class ListDir:
     path: Widget = Widget(kind="text", default="", label="Path")
     inputs = [Port("path", "text", optional=True)]
@@ -2755,7 +2774,8 @@ class Http:
 
 # ============================================================ outputs (sinks)
 @node(id="core.output.log", name="Log", kind=Kind.OUTPUT, category="Inspect",
-      summary="Write the incoming value to the editor console and the server terminal.")
+      summary="Write the incoming value to the editor console and the server terminal.",
+      icon="terminal-outline", subline="log · {label|clip:14}")
 class Log:
     label: str = "log"
     inputs = [Port("in", "any", trigger=True)]
@@ -2770,7 +2790,8 @@ class Log:
 
 @node(id="core.output.preview", name="Preview", kind=Kind.OUTPUT, category="Inspect",
       summary="Tap a wire and show its value live (adapts to the type). Sits "
-              "mid-flow: re-emits `in` on `out` and passes a trigger through.")
+              "mid-flow: re-emits `in` on `out` and passes a trigger through.",
+      icon="eye-outline", subline="preview · live tap")
 class Preview:
     # A transparent tap, so it can sit in the MIDDLE of a flow (in -> preview ->
     # out). `in` is the value to show and fires the node so a tap updates live; it
@@ -3050,7 +3071,8 @@ class Queue:
 
 @node(id="core.output.chat", name="Chat", kind=Kind.OUTPUT, category="Inspect",
       summary="Show the running conversation: your message and the model's reply. "
-              "A live viewer, like Preview, that keeps history.")
+              "A live viewer, like Preview, that keeps history.",
+      icon="chatbubbles-outline")
 class ChatOutput:
     # a viewer with TWO sides, each its own DATA + TRIGGER: `user`/`user_trigger`
     # commit your turn, `reply`/`reply_trigger` commit the model's turn. Each run

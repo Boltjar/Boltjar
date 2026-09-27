@@ -1,0 +1,95 @@
+"""A node declares how it looks in the editor on its @node decorator: the glyph
+(`icon`) and the mono line under its title (`subline`, a template over its
+fields). The editor reads both from /api/object_info, with no table keyed by
+node id.
+
+The editor's own test (editor/test/node-look.test.mjs) renders every core node
+from a snapshot of these definitions, editor/test/fixtures/core-nodes.json, and
+compares the result with what the editor drew before the declarations existed.
+The snapshot test here keeps that file equal to the live registry; after a
+deliberate change, rewrite it with BOLTJAR_UPDATE_FIXTURES=1 and rerun."""
+from __future__ import annotations
+
+import json
+import os
+import pathlib
+
+import pytest
+
+import boltjar.nodes.core  # noqa: F401  (registers the core nodes)
+from boltjar.sdk import NODE_REGISTRY, SUBLINE_FILTERS, Kind, node
+
+FIXTURE = pathlib.Path(__file__).resolve().parent.parent / "editor" / "test" / "fixtures" / "core-nodes.json"
+
+
+def _look(d: dict) -> dict:
+    """The part of a served definition the editor's icon and subline read."""
+    return {
+        "id": d["id"], "kind": d["kind"], "category": d["category"],
+        "icon": d["icon"], "subline": d["subline"],
+        "inputs": [{"name": p["name"], "growable": p["growable"]} for p in d["inputs"]],
+        "widgets": [{"name": w["name"], "kind": w["kind"], "label": w["label"],
+                     "default": w["default"]} for w in d["widgets"]],
+    }
+
+
+def _core_looks() -> list[dict]:
+    return [_look(s.definition()) for nid, s in NODE_REGISTRY.items() if nid.startswith("core.")]
+
+
+def test_the_editor_snapshot_matches_the_core_nodes():
+    live = _core_looks()
+    if os.environ.get("BOLTJAR_UPDATE_FIXTURES"):
+        FIXTURE.parent.mkdir(parents=True, exist_ok=True)
+        FIXTURE.write_text(json.dumps(live, indent=1, ensure_ascii=False) + "\n",
+                           encoding="utf-8", newline="\n")
+    saved = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    by_id = lambda looks: sorted(looks, key=lambda d: d["id"])  # noqa: E731
+    assert by_id(saved) == by_id(live), ("editor/test/fixtures/core-nodes.json is out of "
+                                         "date: rerun with BOLTJAR_UPDATE_FIXTURES=1")
+
+
+def test_every_definition_carries_its_look():
+    for spec in NODE_REGISTRY.values():
+        d = spec.definition()
+        assert isinstance(d["icon"], str) and isinstance(d["subline"], str), d["id"]
+
+
+def test_a_node_without_a_declaration_serves_empty_strings():
+    @node(id="test.look.plain", name="Plain", kind=Kind.TRANSFORM, category="Data")
+    class Plain:
+        pass
+
+    try:
+        d = NODE_REGISTRY["test.look.plain"].definition()
+        assert (d["icon"], d["subline"]) == ("", "")
+    finally:
+        NODE_REGISTRY.pop("test.look.plain", None)
+
+
+def test_a_pack_node_declares_its_look_the_same_way():
+    @node(id="test.look.pack", name="Pack", kind=Kind.TRANSFORM, category="Data",
+          icon="globe-outline", subline="fetch · {url|clip:12|or:no url}")
+    class Pack:
+        url: str = ""
+
+    try:
+        d = NODE_REGISTRY["test.look.pack"].definition()
+        assert d["icon"] == "globe-outline"
+        assert d["subline"] == "fetch · {url|clip:12|or:no url}"
+    finally:
+        NODE_REGISTRY.pop("test.look.pack", None)
+
+
+@pytest.mark.parametrize("subline, error", [
+    ("every · {secs}s", "subline names 'secs', which is not a field of the node"),
+    ("every · {seconds|round}s", "subline filter 'round' is not one of"),
+])
+def test_a_subline_that_names_nothing_real_is_refused(subline, error):
+    with pytest.raises(ValueError, match=error):
+        @node(id="test.look.bad", name="Bad", kind=Kind.TRIGGER, category="Triggers",
+              subline=subline)
+        class Bad:
+            seconds: float = 1.0
+    assert "test.look.bad" not in NODE_REGISTRY
+

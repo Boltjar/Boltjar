@@ -154,6 +154,10 @@ def test_the_example_pack_loads_next_to_the_core(root):
     assert {"hello.shout", "hello.greet"} <= set(NODE_REGISTRY)
     assert NODE_REGISTRY["hello.shout"].pulled is True
     assert [w.kind for w in NODE_REGISTRY["hello.greet"].widgets] == ["text", "number"]
+    # a pack node declares its look on @node, the same way a core node does.
+    shout = NODE_REGISTRY["hello.shout"].definition()
+    assert (shout["icon"], shout["subline"]) == ("text-outline", "shout · {suffix|or:no suffix}")
+    assert NODE_REGISTRY["hello.greet"].definition()["icon"] == "hand-left-outline"
 
 
 def test_a_pack_imports_under_the_private_namespace(root):

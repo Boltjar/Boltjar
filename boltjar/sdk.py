@@ -23,6 +23,7 @@ the server can be reasoned about in isolation.
 from __future__ import annotations
 
 import enum
+import re
 import types as _pytypes
 import typing
 from dataclasses import dataclass, field
@@ -343,6 +344,10 @@ class NodeSpec:
     # can be bypassed without breaking the flow. Empty = a source/sink: disable
     # just removes it.
     bypass: dict = field(default_factory=dict)
+    # how the node looks in the editor, declared rather than looked up by id:
+    # the header / palette glyph and the mono line under the title (see node()).
+    icon: str = ""
+    subline: str = ""
 
     def definition(self) -> dict:
         """The serialized contract the editor consumes (the /object_info payload)."""
@@ -359,6 +364,8 @@ class NodeSpec:
             "widgets": [w.as_dict() for w in self.widgets if w.kind != "secret"],
             "colors": {p.name: types.color(p.type) for p in (self.inputs + self.outputs)},
             "bypass": dict(self.bypass),
+            "icon": self.icon,
+            "subline": self.subline,
         }
 
 
@@ -409,14 +416,49 @@ def _inferred_widget(attr: str, ann: Any, default: Any) -> Widget:
                   step=1 if kind_type is int else None)
 
 
+# a subline placeholder: {field} or {field|filter|filter:arg}
+SUBLINE_PLACEHOLDER = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)((?:\|[a-z]+(?::[^|}]*)?)*)\}")
+# the filters the editor applies to a subline value, in the order written:
+#   clip:N  one line, cut to N characters (22 when N is left out)
+#   or:TEXT TEXT when the value is empty
+#   bool    true / false
+#   model   a model id as "provider · model"
+#   tags    how many {tags} a template text holds, as "N tags"
+SUBLINE_FILTERS = frozenset({"clip", "or", "bool", "model", "tags"})
+
+
+def _check_subline(node_id: str, subline: str, widgets: list[Widget]) -> None:
+    """Refuse a subline that names a field the node does not have or a filter
+    the editor does not know, so a typo fails where the node is declared."""
+    names = {w.name for w in widgets}
+    for m in SUBLINE_PLACEHOLDER.finditer(subline):
+        if m.group(1) not in names:
+            raise ValueError(f"{node_id}: subline names {m.group(1)!r}, which is not a field of the node")
+        for f in m.group(2).split("|")[1:]:
+            if f.split(":", 1)[0] not in SUBLINE_FILTERS:
+                raise ValueError(f"{node_id}: subline filter {f!r} is not one of "
+                                 f"{', '.join(sorted(SUBLINE_FILTERS))}")
+
+
 def node(*, id: str, name: str, kind: Kind, category: str,
          version: str = "0.1.0", summary: str = "", pulled: bool = False,
-         volatile: bool = False, opens_turn: bool = False) -> Callable[[type], type]:
+         volatile: bool = False, opens_turn: bool = False,
+         icon: str = "", subline: str = "") -> Callable[[type], type]:
     """Register a node class. Reads ``inputs`` / ``outputs`` and config fields.
 
     Config fields are either annotated scalars (``seconds: float = 60.0``) whose
     widget is inferred from the annotation, or explicit ``Widget`` values
     (``backend = select([...])``).
+
+    ``icon`` is the Ionicons name the editor draws for the node in its header,
+    the palette and the menus (``"timer-outline"``). Left empty, or naming an
+    icon the editor does not ship, the node draws its kind's glyph.
+
+    ``subline`` is the short mono line under the node's title: text with
+    ``{field}`` placeholders naming the node's fields, each optionally passed
+    through filters, ``{text|clip:16|or:empty}``. A field that is not set reads
+    as its default. The filters are listed in ``SUBLINE_FILTERS``. Left empty,
+    the line is the node's category in lower case.
     """
     def deco(cls: type) -> type:
         inputs = list(getattr(cls, "inputs", []))
@@ -449,7 +491,9 @@ def node(*, id: str, name: str, kind: Kind, category: str,
                         version=version, summary=summary, cls=cls,
                         inputs=inputs, outputs=outputs, widgets=widgets,
                         pulled=pulled, volatile=volatile, opens_turn=opens_turn,
-                        bypass=dict(getattr(cls, "bypass", {}) or {}))
+                        bypass=dict(getattr(cls, "bypass", {}) or {}),
+                        icon=icon, subline=subline)
+        _check_subline(id, subline, widgets)
         cls._spec = spec  # type: ignore[attr-defined]
         NODE_REGISTRY[id] = spec
         return cls
