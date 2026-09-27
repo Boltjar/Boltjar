@@ -20,7 +20,7 @@ from typing import Callable
 import httpx
 import pytest
 
-from boltjar import autostart, endpoints, model_discovery, ollama, resume, security, settings
+from boltjar import autostart, endpoints, linked, model_discovery, ollama, resume, security, settings
 
 
 def _never(what: str):
@@ -42,6 +42,7 @@ def pytest_configure(config):
     # the settings, the graphs recorded as On, and Ollama's log: the suite's own
     settings.PATH = tmp / "settings.json"
     resume.PATH = tmp / "resume.json"
+    linked.PATH = tmp / "linked_workflows.json"
     ollama.LOG_PATH = tmp / "logs" / "ollama.log"
     # no test ever runs Ollama or ends a real process, and "Launch with system"
     # only ever writes into a stand-in account under the suite's tmp dir

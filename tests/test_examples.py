@@ -51,11 +51,11 @@ def test_example_loads_when_there_is_no_saved_copy(dirs):
 def test_list_is_the_union_of_saved_graphs_and_examples(dirs):
     user, _ = dirs
     # a fresh install has no user/graphs yet: listing works and creates nothing.
-    assert client.get("/api/graphs").json() == {"graphs": ["starter"]}
+    assert client.get("/api/graphs").json() == {"graphs": ["starter"], "files": []}
     assert not user.exists()
     client.put("/api/graphs/mine", json=_graph("mine"))
     client.put("/api/graphs/starter", json=_graph("starter", 3))
-    assert client.get("/api/graphs").json() == {"graphs": ["mine", "starter"]}
+    assert client.get("/api/graphs").json() == {"graphs": ["mine", "starter"], "files": []}
 
 
 def test_save_writes_a_user_copy_that_overrides_the_example(dirs):
