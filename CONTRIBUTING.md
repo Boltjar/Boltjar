@@ -118,6 +118,7 @@ class Upper:
 A few things to know:
 
 - `pulled=True` makes a data node. It runs on demand, when a fired node needs its value. A node that does work takes an input with `trigger=True` instead: it fires when an event arrives and pulls its other inputs at that moment.
+- A trigger fires the node and must be wired. A graph with an unwired trigger input does not turn On, and `Port(trigger=True, optional=True)` raises where it is declared. `optional=True` is for data inputs that may stay unwired.
 - Knobs are annotated class attributes (`seconds: float = 2.0`) or `Widget` values from `boltjar.sdk` (`select`, `slider`, `code`). In the editor, a right-click turns a knob into an input, unless its `Widget` sets `promotable=False`.
 - Put behavior on the `Port` and `Widget` declarations (`growable`, `optional`, `op_field` and the rest). The editor reads those generically.
 - `icon=` and `subline=` on `@node` set how the node looks. `icon` is an Ionicons name the editor ships (the list is in `editor/src/lib/icons.tsx`). `subline` is the line under the title, a template over the node's knobs such as `every · {seconds}s`, with the filters listed in `SUBLINE_FILTERS` in `boltjar/sdk.py`. Leave them out and the node draws its kind's icon and its category.
@@ -133,7 +134,7 @@ A node that calls a model declares its picker as a widget, `model("tts", "xai/tt
 
 A pack is a folder in `packs/` with a `pack.toml` manifest and an `__init__.py` that registers its nodes. Drop the folder in, restart, and its nodes show up in the library. Every node id starts with the pack's id and a dot (`yourpack.upper` in a pack whose id is `yourpack`), and a pack can't redefine a core node or an existing pipe type. A pack that fails to load is skipped and listed with its error; the rest keep working.
 
-Start from `examples/packs/hello/`: one pulled node, one fired node, and a `pack.toml` with every field (`id`, `name`, `version`, `author`, `license`, `description`, `homepage`, `min_boltjar`). The examples folder is MIT-0, so copy it freely.
+Start from `examples/packs/hello/`: one pulled node, one fired node (its `trigger` input fires it and must be wired, like every trigger), and a `pack.toml` with every field (`id`, `name`, `version`, `author`, `license`, `description`, `homepage`, `min_boltjar`). The examples folder is MIT-0, so copy it freely.
 
 Talk to Boltjar only through `boltjar.sdk` and the manifest files, and don't copy Boltjar code into the pack. Then the [Node Pack Exception](LICENSE-EXCEPTION.md) applies: the pack is yours to license however you want, open or closed. Packs can ship model manifests too, in a `models/` folder next to `pack.toml`.
 

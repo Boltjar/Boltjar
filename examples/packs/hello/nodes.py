@@ -23,7 +23,8 @@ class Shout:
       icon="hand-left-outline", subline="{greeting|clip:14} · x{times}")
 class Greet:
     """A fired node: runs when its trigger input fires, pulls `name`, and passes
-    the trigger on so the next node can fire."""
+    the trigger on so the next node can fire. A trigger must be wired, so it is
+    never declared optional; `name` is data and may stay unwired."""
     greeting = Widget(kind="text", default="Hello")
     times = Widget(kind="number", default=1, min=1, max=5, step=1)
     inputs = [Port("trigger", "event", trigger=True), Port("name", "text", optional=True)]

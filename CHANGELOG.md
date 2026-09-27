@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/).
 - Graphs run as live servers you turn On, Off and Restart, and they keep running when the browser tab closes.
 - A push/pull runtime: triggers push events, and the nodes they fire pull their data inputs on demand.
 - Validation before power-on checks every node and every wire, port types included.
+- Every trigger input must be wired: a node with a trigger runs only when it fires, validation names an unwired one, and the SDK refuses a trigger declared optional.
 - Triggers: Interval, Schedule (cron with a timezone), Manual, Chat Input, Audio Input, Webhook and Agenda.
 - The Webhook trigger can require a shared secret in the `X-Webhook-Secret` header.
 - An LLM node that reshapes its ports and knobs to the selected model, with tool calling through Tool and Tool Args.
