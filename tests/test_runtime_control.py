@@ -12,11 +12,11 @@ from __future__ import annotations
 import json
 import time
 
-from fastapi.testclient import TestClient
+from local_client import local_client
 
 import boltjar.nodes.core  # noqa: F401  registers the core nodes
 import boltjar.server as srv
-from boltjar.server import app, HUBS
+from boltjar.server import HUBS
 
 # Manual -> Log: Manual fires once on power-on (emits `trigger`), so `latest`
 # populates immediately; a validation-clean, network-free graph.
@@ -39,7 +39,7 @@ CHAT_GRAPH = {
 
 
 def test_power_on_inline_then_state_fire_off():
-    with TestClient(app) as client:
+    with local_client() as client:
         try:
             r = client.post("/api/runtime/rc-a/power",
                             json={"action": "on", "graph": MANUAL_GRAPH})
@@ -62,7 +62,7 @@ def test_power_on_inline_then_state_fire_off():
 
 
 def test_chat_injects_and_propagates_downstream():
-    with TestClient(app) as client:
+    with local_client() as client:
         try:
             client.post("/api/runtime/rc-chat/power",
                         json={"action": "on", "graph": CHAT_GRAPH})
@@ -87,7 +87,7 @@ def test_chat_injects_and_propagates_downstream():
 def test_ws_stream_replays_status_on_connect():
     """The /ws stream that the MCP `observe` tool consumes: on connect it replays
     the current power status (and cached values). Locks the server-side contract."""
-    with TestClient(app) as client:
+    with local_client() as client:
         try:
             client.post("/api/runtime/rc-ws/power",
                         json={"action": "on", "graph": MANUAL_GRAPH})
@@ -100,21 +100,21 @@ def test_ws_stream_replays_status_on_connect():
 
 
 def test_state_unknown_slug_is_off():
-    with TestClient(app) as client:
+    with local_client() as client:
         r = client.get("/api/runtime/never-seen-slug/state")
         assert r.status_code == 200
         assert r.json() == {"power": "off", "latest": []}
 
 
 def test_fire_and_chat_404_when_not_running():
-    with TestClient(app) as client:
+    with local_client() as client:
         assert client.post("/api/runtime/ghost/fire", json={"node": "m"}).status_code == 404
         assert client.post("/api/runtime/ghost/chat",
                            json={"node": "c", "text": "x"}).status_code == 404
 
 
 def test_power_unknown_action_is_400():
-    with TestClient(app) as client:
+    with local_client() as client:
         try:
             assert client.post("/api/runtime/rc-x/power",
                                json={"action": "spin"}).status_code == 400
@@ -126,7 +126,7 @@ def test_power_on_invalid_graph_returns_problems_and_stays_off():
     # a lone Log: required input `in` unwired AND no trigger node -> rejected.
     bad = {"nodes": [{"id": "lg", "type": "core.output.log", "config": {}, "pos": [0, 0]}],
            "edges": []}
-    with TestClient(app) as client:
+    with local_client() as client:
         try:
             j = client.post("/api/runtime/rc-bad/power",
                             json={"action": "on", "graph": bad}).json()
@@ -138,7 +138,7 @@ def test_power_on_invalid_graph_returns_problems_and_stays_off():
 
 def test_power_on_without_graph_missing_file_is_404(monkeypatch, tmp_path):
     monkeypatch.setattr(srv, "GRAPHS_DIR", tmp_path)
-    with TestClient(app) as client:
+    with local_client() as client:
         try:
             r = client.post("/api/runtime/no-such-graph/power", json={"action": "on"})
             assert r.status_code == 404
@@ -151,7 +151,7 @@ def test_power_on_loads_saved_graph_from_disk(monkeypatch, tmp_path):
     monkeypatch.setattr(srv, "GRAPHS_DIR", tmp_path)
     monkeypatch.setattr(srv, "AUTOSAVE_DIR", tmp_path / "auto")
     (tmp_path / "disk-slug.json").write_text(json.dumps(MANUAL_GRAPH), encoding="utf-8")
-    with TestClient(app) as client:
+    with local_client() as client:
         try:
             r = client.post("/api/runtime/disk-slug/power", json={"action": "on"})
             assert r.status_code == 200 and r.json()["power"] == "on"

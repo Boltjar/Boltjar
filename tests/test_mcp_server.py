@@ -34,8 +34,15 @@ MANUAL_GRAPH = {
 }
 
 
+_real_client = mcp_server._client
+
+
 def _asgi_client() -> httpx.AsyncClient:
-    return httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://mcp-test")
+    # the backend address and token header the real client sends, so the app's
+    # Host and token checks run exactly as they do against a live backend.
+    return httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+                             base_url=mcp_server._base_url(),
+                             headers=mcp_server._auth_headers())
 
 
 @pytest.fixture(autouse=True)
@@ -183,3 +190,37 @@ def test_observe_reports_backend_down(monkeypatch):
     with pytest.raises(RuntimeError) as exc:
         run(mcp_server.observe("x", 1))
     assert "uvicorn" in str(exc.value)
+
+
+# ---- the install token -------------------------------------------------------
+
+def test_client_carries_the_install_token():
+    from boltjar import security
+    client = _real_client()
+    try:
+        assert client.headers["authorization"] == f"Bearer {security.get_token()}"
+    finally:
+        run(client.aclose())
+
+
+def test_no_token_file_sends_no_header(monkeypatch, tmp_path):
+    from boltjar import security
+    monkeypatch.setattr(security, "TOKEN_PATH", tmp_path / "token")
+    assert mcp_server._auth_headers() == {}
+
+
+def test_rejected_token_names_the_token_file(monkeypatch):
+    # the backend is up but refuses the token: say so, rather than "start uvicorn".
+    monkeypatch.setattr(mcp_server, "_auth_headers", lambda: {"Authorization": "Bearer wrong"})
+    with pytest.raises(RuntimeError) as exc:
+        run(mcp_server.list_graphs())
+    assert "user/data/token" in str(exc.value)
+
+
+def test_websocket_401_names_the_token_file():
+    from websockets.datastructures import Headers
+    from websockets.exceptions import InvalidStatus
+    from websockets.http11 import Response
+    refused = InvalidStatus(Response(401, "Unauthorized", Headers()))
+    assert "user/data/token" in str(mcp_server._ws_error(refused))
+    assert "uvicorn" in str(mcp_server._ws_error(OSError("connection refused")))

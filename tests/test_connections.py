@@ -15,10 +15,9 @@ import pytest
 
 import boltjar.secrets as secrets
 from boltjar import models as _models
-from fastapi.testclient import TestClient
-from boltjar.server import app
+from local_client import local_client
 
-http = TestClient(app)
+http = local_client()
 
 
 # ---------------------------------------------------------------------------

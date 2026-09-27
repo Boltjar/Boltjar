@@ -11,10 +11,25 @@ itself was mocked away).
 from __future__ import annotations
 
 import json
+import pathlib
+import shutil
+import tempfile
 from typing import Callable
 
 import httpx
 import pytest
+
+from boltjar import security
+
+
+def pytest_configure(config):
+    # The server keeps its token in user/data/token; the suite gets its own, so
+    # a test run never creates or reads the real one.
+    security.TOKEN_PATH = pathlib.Path(tempfile.mkdtemp(prefix="boltjar-test-")) / "token"
+
+
+def pytest_unconfigure(config):
+    shutil.rmtree(security.TOKEN_PATH.parent, ignore_errors=True)
 
 
 class VendorHTTP:

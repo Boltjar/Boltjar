@@ -17,13 +17,13 @@ Reading from the WS forces the loop to tick.
 """
 from __future__ import annotations
 
-from starlette.testclient import TestClient
+from local_client import local_client
 
 import boltjar.nodes.core  # noqa: F401  (registers the core nodes)
-from boltjar.server import app, HUBS
+from boltjar.server import HUBS
 
 
-client = TestClient(app)
+client = local_client()
 
 
 def _graph(path: str = "foo", method: str = "POST", secret: str = "",

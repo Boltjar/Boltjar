@@ -3,14 +3,13 @@ import asyncio
 import json
 import pathlib
 
-from fastapi.testclient import TestClient
+from local_client import local_client
 
 from boltjar import models
 from boltjar.runtime import Runtime
-from boltjar.server import app
 import boltjar.nodes.core  # noqa: F401  (registers nodes + loads the model manifests)
 
-client = TestClient(app)
+client = local_client()
 
 
 # The curated 2026-06 manifest set (boltjar/nodes/core/models/). Kept here so a manifest

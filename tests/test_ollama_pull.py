@@ -6,11 +6,10 @@ from __future__ import annotations
 
 import json
 import pytest
-from fastapi.testclient import TestClient
+from local_client import local_client
 
-from boltjar.server import app
 
-http = TestClient(app)
+http = local_client()
 
 
 # ---------------------------------------------------------------------------

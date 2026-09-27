@@ -1,15 +1,15 @@
 """The new HTTP routes: POST /audio and GET /stream (404 + the resource caps)."""
 from __future__ import annotations
 
-from fastapi.testclient import TestClient
+from local_client import local_client
 
 import boltjar.nodes.core  # noqa: F401  registers the nodes
 from boltjar.server import (
-    app, get_hub, HUBS, STREAM_MAX_CHANNELS, STREAM_MAX_SUBS_PER_CHANNEL,
+    get_hub, HUBS, STREAM_MAX_CHANNELS, STREAM_MAX_SUBS_PER_CHANNEL,
     AUDIO_POST_MAX_BYTES,
 )
 
-client = TestClient(app)
+client = local_client()
 
 
 def test_audio_post_404_then_happy_path():

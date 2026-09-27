@@ -9,4 +9,4 @@ Pillow>=10.0  # resize/encode captured frames (vision sensors)
 mss>=9.0  # fast cross-platform screen capture (Screen Capture sensor)
 pywin32>=306; platform_system == "Windows"  # window capture + foreground (win32, guarded)
 mcp>=1.2,<2  # MCP SDK v1 (FastMCP, stdio; 2.x renamed it) for boltjar.mcp_server (AI access to the runtime)
-websockets>=12  # ws client for the mcp_server observe tool (also pulled by uvicorn[standard])
+websockets>=14  # ws client for the mcp_server observe tool (14+: additional_headers); also pulled by uvicorn[standard]

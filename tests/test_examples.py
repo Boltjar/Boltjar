@@ -14,13 +14,13 @@ import pathlib
 
 import httpx
 import pytest
-from fastapi.testclient import TestClient
+from local_client import local_client
 
 import boltjar.server as server
 from boltjar.runtime import Runtime
 from boltjar.sqlite_store import SqliteStore
 
-client = TestClient(server.app)
+client = local_client()
 
 SHIPPED = pathlib.Path(__file__).resolve().parent.parent / "examples"
 
@@ -85,7 +85,7 @@ def test_deleting_an_example_only_slug_is_refused(dirs):
 
 
 def test_power_on_by_slug_loads_the_example(dirs):
-    with TestClient(server.app) as c:
+    with local_client() as c:
         try:
             r = c.post("/api/runtime/starter/power", json={"action": "on"})
             assert r.status_code == 200 and r.json()["power"] == "on"

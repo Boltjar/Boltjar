@@ -1,12 +1,12 @@
 """Tests for the FastAPI bridge: node definitions, websocket run, graph save/load."""
 import asyncio
 
-from fastapi.testclient import TestClient
+from local_client import local_client
 
 import boltjar.server as server
-from boltjar.server import app, Hub, HUBS, validate_graph
+from boltjar.server import Hub, HUBS, validate_graph
 
-client = TestClient(app)
+client = local_client()
 
 
 def test_object_info_lists_core_nodes() -> None:

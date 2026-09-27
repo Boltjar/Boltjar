@@ -159,10 +159,9 @@ def test_list_secrets_absent_env_key_not_included(monkeypatch):
 # TestClient: GET / POST / DELETE over the FastAPI routes
 # ---------------------------------------------------------------------------
 
-from fastapi.testclient import TestClient
-from boltjar.server import app
+from local_client import local_client
 
-http = TestClient(app)
+http = local_client()
 
 
 def test_http_get_secrets_returns_list():

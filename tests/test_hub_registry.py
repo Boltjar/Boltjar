@@ -7,11 +7,11 @@ from the registry when its last subscriber leaves AND nothing is running.
 """
 from __future__ import annotations
 
-from fastapi.testclient import TestClient
+from local_client import local_client
 
-from boltjar.server import app, HUBS, get_hub
+from boltjar.server import HUBS, get_hub
 
-client = TestClient(app)
+client = local_client()
 
 
 def _drain_until(ws, kind: str, max_frames: int = 12) -> dict:

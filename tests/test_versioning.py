@@ -5,12 +5,11 @@ This is the safety net for a clobbered graph.
 Isolation: the `iso` fixture repoints BOTH GRAPHS_DIR and AUTOSAVE_DIR at a tmp
 dir, so a Save here never touches the project's real user/graphs/ or user/autosave/."""
 import pytest
-from fastapi.testclient import TestClient
+from local_client import local_client
 
 import boltjar.server as server
-from boltjar.server import app
 
-client = TestClient(app)
+client = local_client()
 
 
 @pytest.fixture

@@ -9,11 +9,11 @@ change, and (c) replay it on connect. Draft-only edges are simply absent from it
 """
 from __future__ import annotations
 
-from fastapi.testclient import TestClient
+from local_client import local_client
 
-from boltjar.server import app, HUBS
+from boltjar.server import HUBS
 
-client = TestClient(app)
+client = local_client()
 
 
 # a minimal but real graph: Manual trigger -> Log. Its one edge is the live edge.

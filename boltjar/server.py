@@ -58,6 +58,7 @@ from boltjar.graph_format import GraphFormatError, format_of, migrate
 from boltjar import __version__, models
 from boltjar import packs as _packs
 import boltjar.secrets as _secrets
+import boltjar.security as _security
 
 # the core pack, every pack under packs/ and the user's model manifests. A broken
 # pack is skipped and reported by /api/packs; it never stops the server.
@@ -256,6 +257,10 @@ async def _lifespan(_app: FastAPI):
 
 
 app = FastAPI(title="Boltjar", version=__version__, lifespan=_lifespan)
+
+# Create the per-install token now, so a local client (the MCP server) can read
+# it from user/data/token before any browser has opened the editor.
+_security.get_token()
 
 
 # --------------------------------------------------------------- edge validation
@@ -525,6 +530,14 @@ def api_version() -> dict:
     of it), the Python version and the platform, as a bug report needs them."""
     return {"version": __version__, "python": platform.python_version(),
             "platform": platform.platform()}
+
+
+@app.get("/api/session")
+def session() -> dict:
+    """The editor calls this once at boot: LocalGuard answers it with the
+    session cookie that every later /api, /ws, /stream and /audio call carries
+    (GET / sets it too, but under the Vite dev server the page comes from Vite)."""
+    return {"ok": True}
 
 
 @app.get("/api/object_info")
@@ -1268,6 +1281,11 @@ async def _cache_headers(request, call_next):
     elif path == "/" or path.endswith(".html") or path.endswith(".json"):
         resp.headers["cache-control"] = "no-cache"
     return resp
+
+
+# Added last so it wraps everything above: no route, and no other middleware,
+# runs for a request that fails the Host, Origin or token check.
+app.add_middleware(_security.LocalGuard)
 
 
 if EDITOR_DIST.exists():

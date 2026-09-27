@@ -4,7 +4,8 @@ programmatic access to a running Boltjar backend.
 It is a thin MCP (FastMCP, stdio transport) client over the Boltjar REST + WS
 API. Point it at a backend with the BOLTJAR_URL env var (default
 http://127.0.0.1:8770); the backend must be running (uvicorn on 8770) for any
-tool to work. Nothing here starts a server.
+tool to work. Nothing here starts a server. Every call carries the install
+token (user/data/token, written by the backend) as a Bearer header.
 
 The tools let the AI: read the node catalog (the schema source of truth, so it
 never guesses ports/knobs), list models, do full graph CRUD + validation, power
@@ -25,6 +26,8 @@ import websockets
 
 from mcp.server.fastmcp import FastMCP
 
+from boltjar import security
+
 mcp = FastMCP("boltjar")
 
 # How the AI is told to fix the one failure mode it will hit most: the backend
@@ -34,6 +37,10 @@ _BACKEND_DOWN = (
     "terminal): .venv\\Scripts\\python.exe -m uvicorn boltjar.server:app --port "
     "8770 . Override the address with the BOLTJAR_URL env var if it runs "
     "elsewhere."
+)
+_BAD_TOKEN = (
+    "The Boltjar backend at {url} rejected the token in user/data/token. Run this "
+    "MCP server from the same install as the backend."
 )
 
 
@@ -50,10 +57,18 @@ def _ws_url(slug: str) -> str:
     return f"{ws}/ws?slug={slug}"
 
 
+def _auth_headers() -> dict:
+    """The install token as a Bearer header, read per call so a token the
+    backend creates after this process started is still picked up. Empty when
+    there is no token yet (the backend then answers 401)."""
+    token = security.read_token()
+    return {"Authorization": f"Bearer {token}"} if token else {}
+
+
 def _client() -> httpx.AsyncClient:
     """A fresh HTTP client bound to the backend. Factored out so a test can
     monkeypatch it to an httpx.ASGITransport against the FastAPI app in-process."""
-    return httpx.AsyncClient(base_url=_base_url(), timeout=30.0)
+    return httpx.AsyncClient(base_url=_base_url(), headers=_auth_headers(), timeout=30.0)
 
 
 async def _get(path: str) -> dict:
@@ -81,6 +96,8 @@ def _unwrap(r: httpx.Response) -> dict:
         body = r.json()
     except Exception:
         body = {"error": r.text[:500]}
+    if r.status_code == 401:
+        raise RuntimeError(_BAD_TOKEN.format(url=_base_url()))
     if r.status_code >= 400:
         msg = body.get("error") if isinstance(body, dict) else None
         raise RuntimeError(f"{r.status_code} {msg or r.text[:300]}")
@@ -237,6 +254,15 @@ async def _drain(recv, deadline: float) -> list[dict]:
     return events
 
 
+def _ws_error(exc: Exception) -> RuntimeError:
+    """A failed websocket as the message the AI can act on: a refused token (the
+    handshake answered 401), else the backend being down."""
+    response = getattr(exc, "response", None)
+    if getattr(response, "status_code", None) == 401:
+        return RuntimeError(_BAD_TOKEN.format(url=_base_url()))
+    return RuntimeError(_BACKEND_DOWN.format(url=_base_url()))
+
+
 def _clamp_seconds(seconds: float) -> float:
     return min(max(float(seconds), 0.0), 30.0)
 
@@ -253,10 +279,10 @@ async def observe(slug: str, seconds: float = 5.0) -> list[dict]:
     loop = asyncio.get_event_loop()
     deadline = loop.time() + seconds
     try:
-        async with websockets.connect(_ws_url(slug)) as ws:
+        async with websockets.connect(_ws_url(slug), additional_headers=_auth_headers()) as ws:
             return await _drain(ws.recv, deadline)
     except (OSError, websockets.InvalidHandshake, websockets.WebSocketException) as exc:
-        raise RuntimeError(_BACKEND_DOWN.format(url=_base_url())) from exc
+        raise _ws_error(exc) from exc
 
 
 @mcp.tool()
@@ -272,13 +298,13 @@ async def send_chat_and_observe(slug: str, node: str, text: str,
     loop = asyncio.get_event_loop()
     deadline = loop.time() + seconds
     try:
-        async with websockets.connect(_ws_url(slug)) as ws:
+        async with websockets.connect(_ws_url(slug), additional_headers=_auth_headers()) as ws:
             # Subscribed. Now inject the chat over REST, then drain the window.
             await _send("POST", f"/api/runtime/{slug}/chat",
                         {"node": node, "text": text})
             return await _drain(ws.recv, deadline)
     except (OSError, websockets.InvalidHandshake, websockets.WebSocketException) as exc:
-        raise RuntimeError(_BACKEND_DOWN.format(url=_base_url())) from exc
+        raise _ws_error(exc) from exc
 
 
 def main() -> None:
