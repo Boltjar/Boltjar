@@ -5,6 +5,8 @@
 //   • a node-search submenu (canvas "Add node", edge "Insert node") that filters
 //     the catalog and adds at the click point.
 // Positions itself within the viewport and closes on outside-click / Escape.
+// Opened from a button (the top bar's Help), `align: "end"` hangs the menu
+// from the anchor's right edge instead of starting at it.
 // ============================================================================
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { NodeDef } from "../types/protocol";
@@ -32,6 +34,10 @@ export type ContextMenuKind = "node" | "canvas" | "edge" | "group";
 interface ContextMenuProps {
   x: number;
   y: number;
+  /** "start" (default): the menu's left edge sits at x, like a right-click menu.
+   *  "end": its right edge sits at x, for a menu dropped from a button near the
+   *  right side of the screen. */
+  align?: "start" | "end";
   /** plain action items (node + edge menus, and the canvas non-search items). */
   items: MenuItem[];
   /** when set, render a node-search section titled by `searchTitle`. */
@@ -41,10 +47,12 @@ interface ContextMenuProps {
   onClose: () => void;
 }
 
-export function ContextMenu({ x, y, items, defs, searchTitle, onPickNode, onClose }: ContextMenuProps) {
+export function ContextMenu({ x, y, align = "start", items, defs, searchTitle, onPickNode, onClose }: ContextMenuProps) {
   const ref = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
-  const [pos, setPos] = useState({ x, y });
+  // an end-aligned menu is first laid out at the left edge: at `left: x` (near
+  // the right of the screen) it would shrink to the space left and measure narrow.
+  const [pos, setPos] = useState({ x: align === "end" ? 0 : x, y });
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
 
@@ -55,12 +63,12 @@ export function ContextMenu({ x, y, items, defs, searchTitle, onPickNode, onClos
     const el = ref.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
-    let nx = x;
+    let nx = align === "end" ? x - r.width : x;
     let ny = y;
-    if (x + r.width > window.innerWidth - 8) nx = window.innerWidth - r.width - 8;
+    if (nx + r.width > window.innerWidth - 8) nx = window.innerWidth - r.width - 8;
     if (y + r.height > window.innerHeight - 8) ny = window.innerHeight - r.height - 8;
     setPos({ x: Math.max(8, nx), y: Math.max(8, ny) });
-  }, [x, y]);
+  }, [x, y, align]);
 
   useEffect(() => {
     if (searchable) searchRef.current?.focus();

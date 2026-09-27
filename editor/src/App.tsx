@@ -14,12 +14,15 @@ import { useModels } from "./hooks/useModels";
 import { useRunSocket } from "./hooks/useRunSocket";
 import { useTabsStatus } from "./hooks/useTabsStatus";
 import { useGraph } from "./hooks/useGraph";
+import { useVersion } from "./hooks/useVersion";
 import { EditorProvider, type InboundWire } from "./lib/editorContext";
 import { outputType, DATABASE_ID, KV_STORE_ID, GRAPH_FORMAT } from "./lib/graphAdapter";
 import { WIRELESS_IN_ID, WIRELESS_OUT_ID, ROUTER_ID, isGhostHandle, type WirelessChannelMap, type WirelessSocket } from "./lib/dynamicPorts";
 import { deadWireNotice, healDeadWires } from "./lib/deadWires";
 import { fetchServerGraph, serverError, unreadableNotice } from "./lib/serverGraph";
 import { mod } from "./lib/platform";
+import { DOCS_URL, FEEDBACK_URL, SPONSOR_URL, bugReportUrl, copyText, diagnosticsText, openExternal, osName } from "./lib/help";
+import logoUrl from "./assets/boltjar-logo-dark.svg";
 import { PRESETS } from "./lib/presets";
 import { CommandBar, type PowerPhase, type PrimaryAction } from "./components/CommandBar";
 import { NodeLibrary } from "./components/NodeLibrary";
@@ -136,10 +139,14 @@ export default function App() {
   const tabsStatus = useTabsStatus(openSlugs);
 
   const graph = useGraph(defs, models);
+  const version = useVersion();
 
   const [graphLoading, setGraphLoading] = useState(true);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [connectionsOpen, setConnectionsOpen] = useState(false);
+  // the Help menu hangs from the top bar's Help button (its bottom-right corner).
+  const [helpAnchor, setHelpAnchor] = useState<{ x: number; y: number } | null>(null);
+  const [aboutOpen, setAboutOpen] = useState(false);
 
   // ── rail open/closed + library mode (persisted to localStorage) ──
   const [rails, setRailsRaw] = useState<RailsState>(readRails);
@@ -963,6 +970,41 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [putGraph, undo, redo, copySelection, cut, paste, duplicateNode, selectAll, deleteSelection, requestDelete, selectedIds, selectedId, selectedIds.length]);
 
+  // ── help: one list feeds both the top bar's Help menu and the palette ──
+  const copyDiagnostics = useCallback(async () => {
+    const text = diagnosticsText({ info: version, userAgent: navigator.userAgent, nodeCount: nodes.length });
+    const ok = await copyText(text);
+    socket.notice(
+      ok ? "diagnostics copied to the clipboard" : "could not copy diagnostics: the browser refused clipboard access",
+      ok ? "ok" : "warn",
+    );
+  }, [version, nodes.length, socket.notice]);
+
+  const helpActions: PaletteAction[] = useMemo(() => {
+    const nav = navigator as Navigator & { userAgentData?: { platform?: string } };
+    const os = osName(nav.userAgent, nav.userAgentData?.platform || nav.platform);
+    return [
+      { id: "help-docs", group: "Help", label: "Documentation", hint: "boltjar.link/docs", icon: "book-outline", run: () => openExternal(DOCS_URL) },
+      { id: "help-bug", group: "Help", label: "Report a bug", hint: "open an issue on GitHub", icon: "bug-outline", run: () => openExternal(bugReportUrl(version, os)) },
+      { id: "help-feedback", group: "Help", label: "Send feedback", hint: "share an idea on GitHub", icon: "chatbubble-ellipses-outline", run: () => openExternal(FEEDBACK_URL) },
+      { id: "help-diagnostics", group: "Help", label: "Copy diagnostics", hint: "version, platform, browser, node count", icon: "clipboard-outline", run: () => void copyDiagnostics() },
+      { id: "help-support", group: "Help", label: "Support Boltjar", hint: "GitHub Sponsors", icon: "heart-outline", run: () => openExternal(SPONSOR_URL) },
+      { id: "help-about", group: "Help", label: "About", hint: version ? `Boltjar ${version.version}` : "Boltjar", icon: "information-circle-outline", run: () => setAboutOpen(true) },
+    ];
+  }, [version, copyDiagnostics]);
+
+  // the menu groups the links, the diagnostics, then the project itself.
+  const helpItems: MenuItem[] = useMemo(
+    () => helpActions.map((a) => ({
+      id: a.id,
+      label: a.label,
+      icon: a.icon,
+      separatorBefore: a.id === "help-diagnostics" || a.id === "help-support",
+      run: a.run,
+    })),
+    [helpActions],
+  );
+
   // ── palette actions (adapted to the power model) ──
   const paletteActions: PaletteAction[] = useMemo(
     () => [
@@ -976,8 +1018,9 @@ export default function App() {
       { id: "undo", label: "Undo", hint: "step back", icon: "arrow-undo-outline", kbd: mod("Z"), run: undo },
       { id: "redo", label: "Redo", hint: "step forward", icon: "arrow-redo-outline", kbd: mod("Y"), run: redo },
       { id: "clear", label: "Clear console", hint: "empty the log feed", icon: "trash-outline", run: socket.clearLog },
+      ...helpActions,
     ],
-    [socket.power, socket.clearLog, powerOn, powerOff, restart, putGraph, undo, redo, activeSlug],
+    [socket.power, socket.clearLog, powerOn, powerOff, restart, putGraph, undo, redo, activeSlug, helpActions],
   );
 
   const selectedNode = nodes.find((n) => n.id === selectedId) ?? null;
@@ -1115,6 +1158,9 @@ export default function App() {
           onShowProblems={() => setProblemsOpen(true)}
           onOpenConnections={() => setConnectionsOpen(true)}
           onBrandClick={handleBrandClick}
+          helpOpen={helpAnchor !== null}
+          onOpenHelp={(r) => setHelpAnchor({ x: r.right, y: r.bottom + 6 })}
+          onCloseHelp={() => setHelpAnchor(null)}
         />
 
         <div className={`library-rail${rails.library === "closed" ? " rail-closed" : ""}`}>
@@ -1256,6 +1302,25 @@ export default function App() {
           }
           onClose={() => setMenu(null)}
         />
+      )}
+
+      {helpAnchor && (
+        <ContextMenu
+          x={helpAnchor.x}
+          y={helpAnchor.y}
+          align="end"
+          items={helpItems}
+          onClose={() => setHelpAnchor(null)}
+        />
+      )}
+
+      {aboutOpen && (
+        <NodeModal title="About Boltjar" icon="information-circle-outline" onClose={() => setAboutOpen(false)}>
+          <div className="about-modal">
+            <img className="about-logo" src={logoUrl} alt="Boltjar" draggable={false} />
+            <p className="about-version">{version ? `Version ${version.version}` : "Version unknown"}</p>
+          </div>
+        </NodeModal>
       )}
 
       {paletteOpen && (

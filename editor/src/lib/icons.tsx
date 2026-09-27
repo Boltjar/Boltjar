@@ -97,6 +97,10 @@ import {
   IoImageOutline,
   IoVideocamOutline,
   IoChatbubblesOutline,
+  IoHelpCircleOutline,
+  IoBookOutline,
+  IoBugOutline,
+  IoHeartOutline,
 } from "react-icons/io5";
 import type { ComponentType } from "react";
 
@@ -205,6 +209,11 @@ const REGISTRY: Record<string, IconCmp> = {
   "image-outline": IoImageOutline,
   "videocam-outline": IoVideocamOutline,
   "chatbubbles-outline": IoChatbubblesOutline,
+  // help menu
+  "help-circle-outline": IoHelpCircleOutline,
+  "book-outline": IoBookOutline,
+  "bug-outline": IoBugOutline,
+  "heart-outline": IoHeartOutline,
 };
 
 // A purpose-built close (×) icon with NO internal padding, drawn on a perfect

@@ -1,6 +1,6 @@
 // ============================================================================
 // CommandPalette: the ⌘K overlay. Grouped results (Add node,
-// Actions, Go to node) over a scrim, keyboard-navigable (↑/↓/Enter/Esc), with
+// Actions, Help, Go to node) over a scrim, keyboard-navigable (↑/↓/Enter/Esc), with
 // the active row carrying a full accent ring (never a single-side stripe) and a
 // forward marker.
 // ============================================================================
@@ -18,6 +18,9 @@ export interface PaletteAction {
   hint: string;
   icon: string;
   kbd?: string;
+  /** the heading it lists under: "Actions" (default) or "Help". A query that
+   *  names the group ("help") finds all of its actions. */
+  group?: "Actions" | "Help";
   run: () => void;
 }
 
@@ -86,10 +89,10 @@ export function CommandPalette(props: CommandPaletteProps) {
       }));
 
     const actionRows: Row[] = actions
-      .filter((a) => match(`${a.label} ${a.hint}`))
+      .filter((a) => match(`${a.label} ${a.hint} ${a.group ?? ""}`))
       .map((a) => ({
         key: `act:${a.id}`,
-        group: "Actions",
+        group: a.group ?? "Actions",
         icon: a.icon,
         label: a.label,
         hint: a.hint,
@@ -129,7 +132,7 @@ export function CommandPalette(props: CommandPaletteProps) {
 
   // group the flat rows for rendering while keeping a global active index
   const groups = useMemo(() => {
-    const order = ["Add node", "Actions", "Go to node"];
+    const order = ["Add node", "Actions", "Help", "Go to node"];
     const byGroup = new Map<string, { row: Row; index: number }[]>();
     rows.forEach((row, index) => {
       if (!byGroup.has(row.group)) byGroup.set(row.group, []);

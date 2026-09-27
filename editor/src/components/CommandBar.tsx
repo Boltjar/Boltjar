@@ -7,7 +7,8 @@
 //   Off + clean   → "On"              (validate then start; gated on validity)
 //   On  + draft   → "Save & Restart"  (PUT then ws restart)
 //   On  + clean   → running           (the primary collapses; Off/Restart remain)
-// Plus undo/redo, a live telemetry cluster, and the palette trigger.
+// Plus undo/redo, a live telemetry cluster, the palette trigger, settings and
+// the Help menu button.
 // ============================================================================
 import { useState } from "react";
 import { Icon } from "../lib/icons";
@@ -59,6 +60,11 @@ interface CommandBarProps {
   onShowProblems: () => void;
   onOpenConnections: () => void;
   onBrandClick: () => void;
+  /** the Help menu is showing (the button stays lit while it is). */
+  helpOpen: boolean;
+  /** open the Help menu under the button whose box is `anchor`. */
+  onOpenHelp: (anchor: DOMRect) => void;
+  onCloseHelp: () => void;
 }
 
 const PHASE_LABEL: Record<PowerPhase, string> = {
@@ -109,6 +115,9 @@ export function CommandBar(props: CommandBarProps) {
     onShowProblems,
     onOpenConnections,
     onBrandClick,
+    helpOpen,
+    onOpenHelp,
+    onCloseHelp,
   } = props;
 
   const pm = primary !== "none" ? PRIMARY_META[primary] : null;
@@ -219,6 +228,19 @@ export function CommandBar(props: CommandBarProps) {
         </button>
         <button className="icon-btn" title="Connections &amp; settings" onClick={onOpenConnections}>
           <Icon name="settings-outline" />
+        </button>
+        <button
+          className="icon-btn"
+          title="Help"
+          aria-label="Help"
+          aria-haspopup="menu"
+          aria-expanded={helpOpen}
+          // the menu closes on any press outside it; a press on this button
+          // must not count, or the click that follows would reopen it.
+          onMouseDown={(e) => { if (helpOpen) e.stopPropagation(); }}
+          onClick={(e) => (helpOpen ? onCloseHelp() : onOpenHelp(e.currentTarget.getBoundingClientRect()))}
+        >
+          <Icon name="help-circle-outline" />
         </button>
         {/* user avatar removed until there is a real user/account system to back it. */}
       </div>

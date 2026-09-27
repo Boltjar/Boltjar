@@ -131,7 +131,8 @@ button{font-family:inherit;}
   transition:color var(--dur-1) var(--ease-out), background var(--dur-1) var(--ease-out), border-color var(--dur-1), transform var(--dur-1);
 }
 .icon-btn svg{width:17px; height:17px;}
-.icon-btn:hover{color:var(--ink-bright); background:var(--panel-3); border-color:var(--line);}
+.icon-btn:hover,
+.icon-btn[aria-expanded="true"]{color:var(--ink-bright); background:var(--panel-3); border-color:var(--line);}
 .icon-btn:active{transform:scale(0.94);}
 .icon-btn.armed{color:var(--bg-1); background:var(--accent); border-color:var(--accent);}
 .icon-btn.armed:hover{background:var(--accent); filter:brightness(1.1);}
@@ -2446,6 +2447,11 @@ button{font-family:inherit;}
 .confirm-actions .confirm-del{ background:color-mix(in srgb, var(--bad) 22%, var(--bg-2));
   border-color:rgba(var(--bad-rgb),0.5); color:var(--ink-bright); }
 .confirm-actions .confirm-del:hover{ filter:brightness(1.12); }
+
+/* About body inside the shared NodeModal: the logo over the running version. */
+.about-modal{ display:flex; flex-direction:column; align-items:center; gap:var(--space-3); padding:var(--space-5) 0 var(--space-4); }
+.about-logo{ display:block; height:40px; width:auto; }
+.about-version{ margin:0; font-family:var(--font-mono); font-size:var(--fs-xs); color:var(--ink-dim); letter-spacing:var(--tr-mono); }
 
 /* "Clear data": a proper danger button in a footer below the tables, with a
    warning on the left that the action cannot be undone. */
