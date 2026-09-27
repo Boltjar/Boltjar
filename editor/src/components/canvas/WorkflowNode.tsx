@@ -28,8 +28,7 @@ import {
   knobRowWidgets,
   llmPromoted,
   modelWidgetOf,
-  reservedInputNames,
-  templateTags,
+  tagSuggestions as tagSuggestionsFor,
   DB_ID,
   KV_ID,
   LLM_ID,
@@ -455,7 +454,7 @@ function WorkflowNodeImpl({ id, data, selected }: NodeProps) {
               variant="inline"
               fill={resizable}
               value={String(nd.config[TEMPLATE_TEXT] ?? "")}
-              suggestions={templateSuggestions(id, inboundSources, nd.config, def)}
+              suggestions={tagSuggestionsFor(def, inboundSources.get(id) ?? [], String(nd.config.template ?? ""))}
               onChange={(v) => updateConfig(id, TEMPLATE_TEXT, v)}
               placeholder="{tag} prose…"
             />
@@ -768,7 +767,7 @@ function InlineKnobs({
   // wired into the node's growable `tag` socket (the dst_port name IS the tag).
   // Declared, not keyed by id: offer them when the node has any template widget.
   const tagSuggestions = def.widgets.some((w) => w.template)
-    ? httpTagSuggestions(nodeId, inboundSources)
+    ? tagSuggestionsFor(def, inboundSources.get(nodeId) ?? [])
     : undefined;
 
   return (
@@ -935,45 +934,6 @@ function InlineWidget({
       onReset={() => onChange(widget.default)}
     />
   );
-}
-
-/** The {tag} autocomplete candidates for an HTTP node: the source nodes wired
- *  into its `tag` growable port (the dst_port name IS the tag). Mirrors
- *  templateSuggestions; only the port-filter differs (HTTP tags land on `tag`,
- *  Template tags fill whatever dst_port matches the {tag} in the string). */
-function httpTagSuggestions(
-  nodeId: string,
-  inboundSources: Map<string, InboundWire[]>,
-): string[] {
-  const out = new Set<string>();
-  for (const w of inboundSources.get(nodeId) ?? []) {
-    // the dst_port name IS the tag (set on ghost drop, named after the source).
-    // Skip the trigger and any ghost placeholder; everything else is a real tag.
-    if (!w.dstPort || w.dstPort === "trigger" || w.dstPort.endsWith("·+")) continue;
-    out.add(w.dstPort);
-  }
-  return [...out];
-}
-
-/** The {tag} autocomplete candidates for a Template: the source nodes wired in,
- *  plus any tags already present in the string (so existing tags re-suggest). A
- *  wire on a declared port (the `trigger`) carries no tag, so it offers none. */
-function templateSuggestions(
-  nodeId: string,
-  inboundSources: Map<string, InboundWire[]>,
-  config: Record<string, unknown>,
-  def: import("../../types/protocol").NodeDef,
-): string[] {
-  const reserved = reservedInputNames(def);
-  const out = new Set<string>();
-  for (const w of inboundSources.get(nodeId) ?? []) {
-    if (reserved.has(w.dstPort)) continue;
-    // the dst_port IS the tag name; also offer the bare source node name.
-    if (w.dstPort && !w.dstPort.endsWith("·+")) out.add(w.dstPort);
-    out.add(w.src);
-  }
-  for (const tag of templateTags(def, String(config.template ?? ""))) out.add(tag);
-  return [...out];
 }
 
 /** Remeasure a node's handles on the next frame (after the new DOM paints). */

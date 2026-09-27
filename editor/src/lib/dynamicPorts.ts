@@ -224,6 +224,35 @@ export function templateTags(def: NodeDef, template: string): string[] {
   return parseTemplateTags(template).filter((tag) => !reserved.has(tag));
 }
 
+/** The {tag} autocomplete list of a node whose text carries {tag} pipes (the
+ *  Template, an HTTP body): one entry per wired source, the tag that source
+ *  fills, which is its wire's socket (named after the source's slug when it was
+ *  dropped, see sourceSocketSlug), then the tags already in `text`. Never the
+ *  source node's raw name, and never one tag twice in two capitalisations (the
+ *  first spelling, the wired one, wins). A wire on a declared port (a trigger)
+ *  or on a ghost placeholder fills no tag. */
+export function tagSuggestions(
+  def: NodeDef,
+  wires: readonly { src: string; dstPort: string }[],
+  text = "",
+): string[] {
+  const reserved = reservedInputNames(def);
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const offer = (tag: string) => {
+    const k = tag.toLowerCase();
+    if (seen.has(k)) return;
+    seen.add(k);
+    out.push(tag);
+  };
+  for (const w of wires) {
+    if (!w.dstPort || reserved.has(w.dstPort) || w.dstPort.endsWith("·+")) continue;
+    offer(w.dstPort);
+  }
+  for (const tag of templateTags(def, text)) offer(tag);
+  return out;
+}
+
 /** The socket name a wire dropped on a ghost-named growable base mints: the
  *  wired source's slug, numbered (slug2, slug3...) past any name already `used`
  *  on the node and past the node's declared ports. */
