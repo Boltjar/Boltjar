@@ -17,8 +17,9 @@ user/
 packs/*
 !packs/README.md
 
-# Python
+# Python (.python/ is the portable Python the start scripts fetch; .partial while unpacking)
 .python/
+.python.partial/
 .venv/
 venv/
 *.egg-info/
