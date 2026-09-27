@@ -55,7 +55,7 @@ from fastapi import Body
 
 from boltjar.sdk import registry_definitions, types, NODE_REGISTRY, Kind
 from boltjar.nodes.core.builtin import ensure_declared_schemas
-from boltjar.runtime import Runtime, node_config
+from boltjar.runtime import Runtime, flatten_graph, node_config
 from boltjar.sqlite_store import SqliteStore
 from boltjar.file_store import FileStore
 from boltjar.kv_store import KvStore
@@ -873,25 +873,47 @@ async def validate_graph_now(graph: dict) -> list[dict]:
     return validate_graph(graph)
 
 
-def _trigger_wired(spec, node: dict, port, wired: set[str]) -> bool:
-    """Whether a wire lands on the trigger input `port` of `node`: on the port
-    itself or, for a growable trigger (Sync's `in`, a Queue's `in`), on any of
-    its sockets, found the way the runtime fires them (NodeSpec.growable_base)."""
-    if port.name in wired:
-        return True
-    if not port.growable:
-        return False
+def _trigger_sockets(spec, node: dict, port, names) -> list[str]:
+    """The names among `names` that are sockets of the trigger input `port` of
+    `node`: the port itself or, for a growable trigger (Sync's `in`, a Queue's
+    `in`), any socket the runtime fires it through (NodeSpec.growable_base)."""
     promoted = (node.get("config") or {}).get("promoted") or ()
-    return any(spec.growable_base(socket, promoted) == port for socket in wired)
+    return sorted(s for s in names if s == port.name
+                  or (port.growable and spec.growable_base(s, promoted) is port))
+
+
+def _trigger_problem(spec, node: dict, port, live: set[str], dead: dict[str, str],
+                     disabled: set[str]) -> str | None:
+    """Why the trigger input `port` of `node` can never fire, or None when a wire
+    reaches it from a node that runs. `live` and `dead` are the ports of `node`
+    that the flattened graph wires (flatten_graph, the walk the runtime builds
+    from): a wire through a bypassed node with no passthrough for it, or through
+    a Wireless Out whose channel has no Wireless In, reaches nothing."""
+    if _trigger_sockets(spec, node, port, live):
+        return None
+    through = _trigger_sockets(spec, node, port, dead)
+    if not through:
+        return f"required trigger '{port.name}' is not connected"
+    via = dead[through[0]]
+    where = f"bypassed '{via}'" if via in disabled else f"'{via}'"
+    return f"required trigger '{port.name}' is wired through {where}, which passes nothing on"
 
 
 def validate_graph(graph: dict) -> list[dict]:
     """Pre-run validation: a graph cannot turn On if any node is broken."""
     problems: list[dict] = []
     edges_in = {(e["dst"], e["dst_port"]) for e in graph.get("edges", [])}
-    wired_into: dict[str, set[str]] = {}
-    for dst, port in edges_in:
-        wired_into.setdefault(dst, set()).add(port)
+    # triggers are checked against the wires the runtime builds: a wire through
+    # a flattened node (a bypassed one, a Wireless pair, a Router) counts only
+    # when it resolves to a real source.
+    flat = flatten_graph(graph)
+    disabled = {n["id"] for n in graph.get("nodes", []) if n.get("disabled")}
+    live_into: dict[str, set[str]] = {}
+    for _src, _sp, dst, port in flat.live:
+        live_into.setdefault(dst, set()).add(port)
+    dead_into: dict[str, dict[str, str]] = {}
+    for dst, port, via in flat.dead:
+        dead_into.setdefault(dst, {}).setdefault(port, via)
     has_trigger = False
     for n in graph.get("nodes", []):
         # a bypassed node never runs, so it cannot break the graph: skip every
@@ -907,11 +929,12 @@ def validate_graph(graph: dict) -> list[dict]:
             has_trigger = True
         for p in spec.inputs:
             if p.trigger:
-                # a node with a trigger runs only when one fires, so every one
-                # must be wired, a growable one on at least one of its sockets.
-                if not _trigger_wired(spec, n, p, wired_into.get(n["id"], set())):
-                    problems.append({"node": n["id"], "kind": "missing-input",
-                                     "message": f"required trigger '{p.name}' is not connected"})
+                # a trigger fires its node, so every one must be wired, a growable
+                # one on at least one of its sockets, by a wire that reaches it.
+                message = _trigger_problem(spec, n, p, live_into.get(n["id"], set()),
+                                           dead_into.get(n["id"], {}), disabled)
+                if message:
+                    problems.append({"node": n["id"], "kind": "missing-input", "message": message})
                 continue
             if p.optional or p.growable:
                 continue

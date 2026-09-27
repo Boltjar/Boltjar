@@ -101,3 +101,46 @@ def test_a_graph_with_no_trigger_node_is_still_refused():
     assert validate_graph(graph) == [
         {"node": "log", "kind": "missing-input", "message": "required trigger 'in' is not connected"},
         {"node": None, "kind": "no-trigger", "message": "no trigger node: nothing can fire"}]
+
+
+def _manual_to_log_through(mid: dict, into: str, out: str, **wire) -> dict:
+    """Manual -> `mid`.`into`, `mid`.`out` -> Log.in (the Log's only trigger)."""
+    return {"nodes": [{"id": "go", "type": "core.trigger.manual"}, mid,
+                      {"id": "lg", "type": "core.output.log", "config": {}}],
+            "edges": [{"src": "go", "src_port": "trigger", "dst": mid["id"], "dst_port": into},
+                      {"src": mid["id"], "src_port": out, "dst": "lg", "dst_port": "in"}]}
+
+
+def test_a_trigger_wired_through_a_bypassed_node_that_passes_nothing_is_not_connected():
+    # the bypassed Preview passes its `trigger` on only from its own trigger, which
+    # nothing feeds, so the runtime drops the wire and the Log never fires.
+    pv = {"id": "pv", "type": "core.output.preview", "config": {}, "disabled": True}
+    graph = _manual_to_log_through(pv, "in", "trigger")
+    assert validate_graph(graph) == [
+        {"node": "lg", "kind": "missing-input",
+         "message": "required trigger 'in' is wired through bypassed 'pv', which passes nothing on"}]
+    # a bypassed node with no passthrough at all (an LLM) reaches nothing either.
+    llm = {"id": "llm", "type": "core.ai.llm", "config": {}, "disabled": True}
+    assert [p["message"] for p in _trigger_problems(_manual_to_log_through(llm, "trigger", "trigger"))] == [
+        "required trigger 'in' is wired through bypassed 'llm', which passes nothing on"]
+
+
+def test_a_trigger_wired_through_a_bypassed_passthrough_reaches_its_source():
+    for pv_in, pv_out in (("in", "out"), ("trigger", "trigger")):
+        pv = {"id": "pv", "type": "core.output.preview", "config": {}, "disabled": True}
+        assert validate_graph(_manual_to_log_through(pv, pv_in, pv_out)) == [], pv_in
+    tpl = {"id": "tpl", "type": "core.data.template", "config": {}, "disabled": True}
+    assert validate_graph(_manual_to_log_through(tpl, "trigger", "trigger")) == []
+
+
+def test_a_trigger_wired_from_a_wireless_out_needs_a_wireless_in_on_its_channel():
+    graph = {"nodes": [{"id": "go", "type": "core.trigger.manual"},
+                       {"id": "wo", "type": "core.flow.wireless_out", "config": {"channel": "7"}},
+                       {"id": "lg", "type": "core.output.log", "config": {}}],
+             "edges": [{"src": "wo", "src_port": "go.trigger", "dst": "lg", "dst_port": "in"}]}
+    assert _trigger_problems(graph) == [
+        {"node": "lg", "kind": "missing-input",
+         "message": "required trigger 'in' is wired through 'wo', which passes nothing on"}]
+    graph["nodes"].append({"id": "wi", "type": "core.flow.wireless_in", "config": {"channel": "7"}})
+    graph["edges"].append({"src": "go", "src_port": "trigger", "dst": "wi", "dst_port": "go.trigger"})
+    assert _trigger_problems(graph) == []

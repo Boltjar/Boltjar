@@ -191,27 +191,12 @@ class Runtime:
 
     # --------------------------------------------------------------- build
     def build(self, graph: dict) -> None:
-        # Some nodes are FLATTENED, not instantiated: a disabled node (wired through
-        # if it has a `bypass` shape, else dropped), and the Wireless In/Out pair (a
-        # virtual wire: each channel resolves to a direct source -> consumer edge).
-        nodes = graph.get("nodes", [])
-        disabled = {n["id"] for n in nodes if n.get("disabled")}
-        types_by_id = {n["id"]: n["type"] for n in nodes}
-        configs_by_id = {n["id"]: (n.get("config") or {}) for n in nodes}
-        WIRELESS_IN, WIRELESS_OUT = "core.flow.wireless_in", "core.flow.wireless_out"
-        ROUTER = "core.flow.router"
-        # wireless + routers are ALWAYS flattened (pure bypass), like a disabled
-        # passthrough; resolve_source walks their `bypass` to the real upstream.
-        wireless = {nid for nid, t in types_by_id.items() if t in (WIRELESS_IN, WIRELESS_OUT, ROUTER)}
-        # first Wireless In per channel (a channel is one broadcast source).
-        wireless_in_by_channel: dict[str, str] = {}
-        for n in nodes:
-            if n["type"] == WIRELESS_IN:
-                ch = str((n.get("config") or {}).get("channel", "1"))
-                wireless_in_by_channel.setdefault(ch, n["id"])
-        flattened = disabled | wireless
-        for n in nodes:
-            if n["id"] in flattened:
+        # flattened nodes (a disabled node, the Wireless In/Out pair, a Router) are
+        # not instantiated: their wires are resolved to the real source, or
+        # dropped at a dead end (see flatten_graph).
+        flat = flatten_graph(graph)
+        for n in graph.get("nodes", []):
+            if n["id"] in flat.flattened:
                 continue
             spec = NODE_REGISTRY.get(n["type"])
             if spec is None:
@@ -234,50 +219,7 @@ class Runtime:
                 if p.default is not None:
                     inst.latch[p.name] = p.default
             self.nodes[n["id"]] = inst
-
-        # raw edges into a disabled passthrough's input, used to resolve a bypass.
-        raw_into: dict[tuple[str, str], tuple[str, str]] = {
-            (e["dst"], e["dst_port"]): (e["src"], e["src_port"]) for e in graph.get("edges", [])
-        }
-
-        def bypass_map(node_id: str) -> dict:
-            spec = NODE_REGISTRY.get(types_by_id.get(node_id, ""))
-            return spec.bypass if spec else {}
-
-        def resolve_source(node_id: str, out_port: str, seen: frozenset) -> Optional[tuple[str, str]]:
-            """Walk back through flattened nodes to the real source that should feed
-            `(node_id, out_port)`: a Wireless Out routes through its channel's
-            Wireless In socket of the same name; a disabled passthrough walks its
-            `bypass` shape. Returns None at a dead-end. Cycle-safe via `seen`."""
-            if node_id in seen:
-                return None
-            if types_by_id.get(node_id) == WIRELESS_OUT:
-                ch = str(configs_by_id.get(node_id, {}).get("channel", "1"))
-                in_id = wireless_in_by_channel.get(ch)
-                # the Out's output mirrors the In's socket of the same name.
-                up = raw_into.get((in_id, out_port)) if in_id else None
-                if up is None:
-                    return None
-                return resolve_source(up[0], up[1], seen | {node_id}) if up[0] in flattened else up
-            in_port = next((i for i, o in bypass_map(node_id).items() if o == out_port), None)
-            if in_port is None:
-                return None
-            up = raw_into.get((node_id, in_port))
-            if up is None:
-                return None
-            return resolve_source(up[0], up[1], seen | {node_id}) if up[0] in flattened else up
-
-        for e in graph.get("edges", []):
-            src, sp, dst, dp = e["src"], e["src_port"], e["dst"], e["dst_port"]
-            if dst in flattened:
-                # the input side of a flattened node (a disabled passthrough's input,
-                # or a Wireless In socket): consumed by resolution, so drop it here.
-                continue
-            if src in flattened:
-                resolved = resolve_source(src, sp, frozenset())
-                if resolved is None:
-                    continue  # dead-end (unmatched channel, disabled sink): edge dropped
-                src, sp = resolved
+        for src, sp, dst, dp in flat.live:
             self.edges_from.setdefault((src, sp), []).append((dst, dp))
             self.edges_into[(dst, dp)] = (src, sp)
 
@@ -546,6 +488,94 @@ class Runtime:
             # /state cache and every websocket see the token, never the key. The
             # values flowing between nodes are untouched.
             self._observer(_redact(event))
+
+
+WIRELESS_IN, WIRELESS_OUT, ROUTER = "core.flow.wireless_in", "core.flow.wireless_out", "core.flow.router"
+
+
+@dataclass
+class FlatGraph:
+    """The wires a graph runs on (see flatten_graph)."""
+    flattened: set[str]                      # node ids never instantiated
+    live: list[tuple[str, str, str, str]]    # (src, src_port, dst, dst_port), src resolved
+    dead: list[tuple[str, str, str]]         # (dst, dst_port, via): resolves to nothing
+
+
+def flatten_graph(graph: dict) -> FlatGraph:
+    """Resolve a graph's FLATTENED nodes, which never run: a disabled node (wired
+    through when it declares a `bypass` shape, else dropped), and the Wireless
+    In/Out pair and the Router (virtual wires, always resolved to a direct
+    source -> consumer edge). `live` is every wire into a node that runs, its
+    source walked back to the real one. `dead` is every wire into a node that
+    runs whose source resolves to nothing, with `via`, the flattened node it
+    leaves (a bypassed sink, a Wireless Out on a channel with no Wireless In):
+    the runtime drops it. One walk, shared by the runtime (Runtime.build) and
+    validation (server.validate_graph), so a trigger validation counts as wired
+    is one the runtime fires."""
+    nodes = graph.get("nodes", [])
+    edges = graph.get("edges", [])
+    disabled = {n["id"] for n in nodes if n.get("disabled")}
+    types_by_id = {n["id"]: n["type"] for n in nodes}
+    configs_by_id = {n["id"]: (n.get("config") or {}) for n in nodes}
+    # wireless + routers are ALWAYS flattened (pure bypass), like a disabled
+    # passthrough; resolve_source walks their `bypass` to the real upstream.
+    wireless = {nid for nid, t in types_by_id.items() if t in (WIRELESS_IN, WIRELESS_OUT, ROUTER)}
+    # first Wireless In per channel (a channel is one broadcast source).
+    wireless_in_by_channel: dict[str, str] = {}
+    for n in nodes:
+        if n["type"] == WIRELESS_IN:
+            ch = str((n.get("config") or {}).get("channel", "1"))
+            wireless_in_by_channel.setdefault(ch, n["id"])
+    flattened = disabled | wireless
+    # raw edges into a flattened node's input, used to resolve a bypass.
+    raw_into: dict[tuple[str, str], tuple[str, str]] = {
+        (e["dst"], e["dst_port"]): (e["src"], e["src_port"]) for e in edges
+    }
+
+    def bypass_map(node_id: str) -> dict:
+        spec = NODE_REGISTRY.get(types_by_id.get(node_id, ""))
+        return spec.bypass if spec else {}
+
+    def resolve_source(node_id: str, out_port: str, seen: frozenset) -> Optional[tuple[str, str]]:
+        """Walk back through flattened nodes to the real source that should feed
+        `(node_id, out_port)`: a Wireless Out routes through its channel's
+        Wireless In socket of the same name; a disabled passthrough walks its
+        `bypass` shape. Returns None at a dead-end. Cycle-safe via `seen`."""
+        if node_id in seen:
+            return None
+        if types_by_id.get(node_id) == WIRELESS_OUT:
+            ch = str(configs_by_id.get(node_id, {}).get("channel", "1"))
+            in_id = wireless_in_by_channel.get(ch)
+            # the Out's output mirrors the In's socket of the same name.
+            up = raw_into.get((in_id, out_port)) if in_id else None
+            if up is None:
+                return None
+            return resolve_source(up[0], up[1], seen | {node_id}) if up[0] in flattened else up
+        in_port = next((i for i, o in bypass_map(node_id).items() if o == out_port), None)
+        if in_port is None:
+            return None
+        up = raw_into.get((node_id, in_port))
+        if up is None:
+            return None
+        return resolve_source(up[0], up[1], seen | {node_id}) if up[0] in flattened else up
+
+    live: list[tuple[str, str, str, str]] = []
+    dead: list[tuple[str, str, str]] = []
+    for e in edges:
+        src, sp, dst, dp = e["src"], e["src_port"], e["dst"], e["dst_port"]
+        if dst in flattened:
+            # the input side of a flattened node (a disabled passthrough's input,
+            # or a Wireless In socket): consumed by resolution, so drop it here.
+            continue
+        if src in flattened:
+            resolved = resolve_source(src, sp, frozenset())
+            if resolved is None:
+                # dead-end (unmatched channel, disabled sink): the edge is dropped.
+                dead.append((dst, dp, src))
+                continue
+            src, sp = resolved
+        live.append((src, sp, dst, dp))
+    return FlatGraph(flattened=flattened, live=live, dead=dead)
 
 
 def node_config(spec: NodeSpec, config: Optional[dict]) -> dict:
