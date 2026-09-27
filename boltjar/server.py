@@ -16,10 +16,10 @@ WS protocol (the editor is the client):
 Power persistence: the live runtime lives in a module-level Hub singleton, not in
 any one websocket. A browser refresh / tab close only drops a SUBSCRIBER; the graph
 keeps running. On reconnect the editor receives the current status plus a replay of
-every cached live value so its wires light up again. Only the uvicorn process
-exiting stops the graph.
+every cached live value so its wires light up again. Only the server process
+exiting stops the graph, and on the way out it stops every graph cleanly.
 
-Run:  uvicorn boltjar.server:app --port 8770
+Run:  python -m boltjar serve   (see boltjar/__main__.py)
 """
 from __future__ import annotations
 
@@ -28,6 +28,7 @@ import contextlib
 import datetime
 import hmac
 import json
+import logging
 import pathlib
 import platform
 import re
@@ -64,6 +65,8 @@ import boltjar.security as _security
 # the core pack, every pack under packs/ and the user's model manifests. A broken
 # pack is skipped and reported by /api/packs; it never stops the server.
 _packs.load_all()
+
+_log = logging.getLogger(__name__)
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 # Everything created at runtime lives under user/ (gitignored): saved graphs,
@@ -151,6 +154,23 @@ class Hub:
             except Exception:
                 # a full or closed subscriber queue must never stall the runtime.
                 pass
+
+    def close_connections(self) -> None:
+        """End every live connection on this Hub: each editor websocket and each
+        media stream gets a `None` sentinel, and its pump closes it. A stream
+        never ends by itself, and the server waits for open connections before
+        it can exit, so shutdown calls this after stopping the graph."""
+        queues = list(self.subscribers)
+        for channel in list(self.stream_subscribers.values()):
+            queues.extend(channel)
+        for q in queues:
+            try:
+                if q.full():
+                    q.get_nowait()  # a stalled client: drop its oldest event for the sentinel
+                q.put_nowait(None)
+            except Exception:
+                # one dead subscriber must not keep the others open.
+                _log.debug("could not close a subscriber of %s", self.slug, exc_info=True)
 
     async def _stop(self) -> None:
         if self.runtime:
@@ -250,12 +270,32 @@ def get_hub(slug: str) -> Hub:
     return hub
 
 
+async def shutdown_all() -> int:
+    """Stop every running graph (services and stores close cleanly) and end
+    every live connection, the editors' /ws and the /stream media clients, so
+    the server exits on one Ctrl+C. Safe to call twice. Returns how many graphs
+    were running."""
+    stopped = 0
+    for hub in list(HUBS.values()):
+        if hub.runtime is not None:
+            try:
+                await hub.power_off()
+                stopped += 1
+            except Exception:
+                _log.exception("could not stop graph %s cleanly", hub.slug)
+        hub.close_connections()
+    return stopped
+
+
 @contextlib.asynccontextmanager
 async def _lifespan(_app: FastAPI):
     # the user's secrets load when the server starts, not when the registry is
     # imported: nodes read provider keys from os.environ once a graph runs.
     _secrets.ensure_loaded()
     yield
+    # `python -m boltjar serve` calls shutdown_all() earlier, before the server
+    # waits on open connections; this covers a server started any other way.
+    await shutdown_all()
 
 
 app = FastAPI(title="Boltjar", version=__version__, lifespan=_lifespan)
@@ -1222,7 +1262,11 @@ async def runtime_ws(websocket: WebSocket, slug: str = "_default") -> None:
 
     async def pump() -> None:
         while True:
-            await websocket.send_json(await outgoing.get())
+            event = await outgoing.get()
+            if event is None:  # the server is shutting down (Hub.close_connections)
+                await websocket.close(code=1001)
+                return
+            await websocket.send_json(event)
 
     pump_task = asyncio.create_task(pump())
 
@@ -1289,6 +1333,8 @@ async def avatar_stream(slug: str, channel: str):
         try:
             while True:
                 chunk = await q.get()
+                if chunk is None:  # the server is shutting down (Hub.close_connections)
+                    return
                 yield f"data: {json.dumps(chunk)}\n\n"
         finally:
             subs = hub.stream_subscribers.get(channel)
