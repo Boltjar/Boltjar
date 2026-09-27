@@ -30,7 +30,7 @@ function check(label, got, want) {
 
 // ---- links
 check("docs", DOCS_URL, "https://boltjar.link/docs");
-check("feedback goes to the ideas category", FEEDBACK_URL, "https://github.com/DKLRD/Boltjar/discussions/new?category=ideas");
+check("feedback goes to the ideas category", FEEDBACK_URL, "https://github.com/Boltjar/Boltjar/discussions/new?category=ideas");
 check("sponsors", SPONSOR_URL, "https://github.com/sponsors/DKLRD");
 
 // ---- /api/version payload
@@ -72,16 +72,16 @@ check("unknown", osName("SomeBot/1.0", ""), "");
 // ---- bug report link
 check("prefilled from the server and the browser",
   bugReportUrl(info, "Windows"),
-  "https://github.com/DKLRD/Boltjar/issues/new?template=bug_report.yml&app_version=0.1.0&os=Windows&python=3.12.4");
+  "https://github.com/Boltjar/Boltjar/issues/new?template=bug_report.yml&app_version=0.1.0&os=Windows&python=3.12.4");
 check("values are URL-encoded",
   bugReportUrl({ version: "0.1.0+dev 2", python: "3.12.4 (main, &x=1)", platform: "Linux" }, "macOS"),
-  "https://github.com/DKLRD/Boltjar/issues/new?template=bug_report.yml&app_version=0.1.0%2Bdev%202&os=macOS&python=3.12.4%20(main%2C%20%26x%3D1)");
+  "https://github.com/Boltjar/Boltjar/issues/new?template=bug_report.yml&app_version=0.1.0%2Bdev%202&os=macOS&python=3.12.4%20(main%2C%20%26x%3D1)");
 check("no version endpoint: only what the browser knows",
   bugReportUrl(null, "Linux"),
-  "https://github.com/DKLRD/Boltjar/issues/new?template=bug_report.yml&os=Linux");
+  "https://github.com/Boltjar/Boltjar/issues/new?template=bug_report.yml&os=Linux");
 check("nothing known: the bare form",
   bugReportUrl(null, ""),
-  "https://github.com/DKLRD/Boltjar/issues/new?template=bug_report.yml");
+  "https://github.com/Boltjar/Boltjar/issues/new?template=bug_report.yml");
 const params = [...new URL(bugReportUrl(info, "Windows")).searchParams.keys()];
 check("exactly the prefill fields, no labels, no logs", params, ["template", "app_version", "os", "python"]);
 
