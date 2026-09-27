@@ -54,6 +54,24 @@ def test_resolve_multiple_tokens():
     assert result == "alpha-beta-{{secret.MISSING}}"
 
 
+def test_resolve_reads_a_curated_provider_key_from_env(monkeypatch):
+    monkeypatch.setenv("XAI_API_KEY", "xai-from-env")
+    assert secrets.resolve_secrets("Bearer {{secret.XAI_API_KEY}}") == "Bearer xai-from-env"
+
+
+@pytest.mark.parametrize("name", ["AWS_SECRET_ACCESS_KEY", "GITHUB_TOKEN", "PATH"])
+def test_resolve_never_reads_other_env_vars(monkeypatch, name):
+    # a shared graph must not be able to send the process environment anywhere.
+    monkeypatch.setenv(name, "must-not-leak")
+    assert secrets.get_secret(name) is None
+    assert secrets.resolve_secrets("{{secret.%s}}" % name) == "{{secret.%s}}" % name
+
+
+def test_stored_secret_resolves_by_any_valid_name():
+    secrets.set_secret("MY_SERVICE_TOKEN", "stored")
+    assert secrets.resolve_secrets("{{secret.MY_SERVICE_TOKEN}}") == "stored"
+
+
 # ---------------------------------------------------------------------------
 # set / get / delete round-trip + persistence across a reload
 # ---------------------------------------------------------------------------

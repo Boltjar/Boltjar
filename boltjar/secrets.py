@@ -10,7 +10,9 @@ registry offline, e.g. to generate docs, never touches the user's keys.
 
 Nodes can later reference {{secret.NAME}} tokens; the resolver replaces
 them with the resolved value, or leaves the literal token intact when the
-secret is unknown (fail visibly, never silently empty).
+secret is unknown (fail visibly, never silently empty). A token reaches only
+the stored secrets and the curated provider keys, never the rest of the
+process environment (a shared graph must not read AWS_* or GITHUB_TOKEN).
 """
 from __future__ import annotations
 
@@ -46,6 +48,11 @@ PROVIDERS: dict[str, Optional[str]] = {
     "fish":        "FISH_API_KEY",
     "elevenlabs":  "ELEVENLABS_API_KEY",
 }
+
+# ---------------------------------------------------------------------------
+# The only env vars a {{secret.NAME}} token may read: the curated keys above.
+# ---------------------------------------------------------------------------
+_ENV_SECRETS: frozenset[str] = frozenset(_ENV_KEYS) | frozenset(v for v in PROVIDERS.values() if v)
 
 # ---------------------------------------------------------------------------
 # Ollama connectivity cache: avoid a network round-trip on every call.
@@ -131,11 +138,14 @@ def list_secrets() -> list[dict]:
 
 
 def get_secret(name: str) -> str | None:
-    """Resolve a secret: user dict first, then os.environ."""
+    """Resolve a secret: user dict first, then os.environ for a curated
+    provider key. Any other env var is not a secret and resolves to None."""
     ensure_loaded()
     if name in _store:
         return _store[name]
-    return os.environ.get(name)
+    if name in _ENV_SECRETS:
+        return os.environ.get(name)
+    return None
 
 
 def set_secret(name: str, value: str) -> None:

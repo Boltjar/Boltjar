@@ -19,6 +19,7 @@ import asyncio
 
 import pytest
 
+from boltjar import secrets
 from boltjar.runtime import Runtime
 from boltjar.kv_store import KvStore
 from boltjar.sqlite_store import SqliteStore
@@ -116,7 +117,8 @@ def test_db_multiline_secret_value_stays_one_field(db, monkeypatch):
     """{{secret.X}} resolves inside its own value too: a multi-line secret with
     '=' in it is one field, never split into lines or columns."""
     pem = "-----BEGIN KEY-----\nabc=def\n-----END KEY-----"
-    monkeypatch.setenv("DBKV_PARSE_TEST_PEM", pem)
+    # a stored secret (an arbitrary env var is not one).
+    monkeypatch.setitem(secrets._store, "DBKV_PARSE_TEST_PEM", pem)
     db.execute("mydb", "CREATE TABLE creds(id INTEGER PRIMARY KEY, name TEXT, pem TEXT)")
     _run({
         "nodes": [
