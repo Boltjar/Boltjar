@@ -1,5 +1,6 @@
 import ReactDOM from "react-dom/client";
 import App from "./App";
+import { startSession } from "./lib/session";
 import "./styles/editor.css";
 
 // NOTE: React.StrictMode is intentionally omitted. React Flow v12 measures each
@@ -8,4 +9,4 @@ import "./styles/editor.css";
 // leaves `nodesInitialized: false`, so edges never get endpoints and fitView
 // never fires. StrictMode is a dev-only aid (stripped from production builds),
 // so dropping it changes nothing shipped while fixing the dev render.
-ReactDOM.createRoot(document.getElementById("root")!).render(<App />);
+startSession(() => ReactDOM.createRoot(document.getElementById("root")!).render(<App />));
