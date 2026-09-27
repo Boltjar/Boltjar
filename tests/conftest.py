@@ -19,13 +19,19 @@ from typing import Callable
 import httpx
 import pytest
 
-from boltjar import security
+from boltjar import endpoints, model_discovery, security
 
 
 def pytest_configure(config):
     # The server keeps its token in user/data/token; the suite gets its own, so
-    # a test run never creates or reads the real one.
-    security.TOKEN_PATH = pathlib.Path(tempfile.mkdtemp(prefix="boltjar-test-")) / "token"
+    # a test run never creates or reads the real one. The model list cache and
+    # the custom endpoints get the same treatment, and no background refresh
+    # ever reaches a real provider (a test that wants one sets AUTO_REFRESH).
+    tmp = pathlib.Path(tempfile.mkdtemp(prefix="boltjar-test-"))
+    security.TOKEN_PATH = tmp / "token"
+    model_discovery.CACHE_PATH = tmp / "models-cache.json"
+    model_discovery.AUTO_REFRESH = False
+    endpoints.PATH = tmp / "endpoints.json"
 
 
 def pytest_unconfigure(config):

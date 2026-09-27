@@ -58,6 +58,8 @@ from boltjar.kv_store import KvStore
 from boltjar.vector_store import VectorStore
 from boltjar.graph_format import GraphFormatError, format_of, migrate
 from boltjar import __version__, models
+from boltjar import endpoints as _endpoints
+from boltjar import model_discovery as _discovery
 from boltjar import packs as _packs
 from boltjar.console import GraphLines
 import boltjar.secrets as _secrets
@@ -328,10 +330,14 @@ async def _lifespan(_app: FastAPI):
     # the user's secrets load when the server starts, not when the registry is
     # imported: nodes read provider keys from os.environ once a graph runs.
     _secrets.ensure_loaded()
+    # the model list: the cached copy now, a fresh one in the background (boot
+    # never waits on a provider).
+    _discovery.startup()
     yield
     # `python -m boltjar serve` calls shutdown_all() earlier, before the server
     # waits on open connections; this covers a server started any other way.
     await shutdown_all()
+    await _discovery.shutdown()
 
 
 app = FastAPI(title="Boltjar", version=__version__, lifespan=_lifespan)
@@ -647,9 +653,22 @@ def object_info() -> dict:
 
 
 @app.get("/api/models")
-def list_models() -> dict:
-    """The model registry: every declared model and its capabilities/params."""
-    return {"models": models.catalog()}
+async def list_models() -> dict:
+    """The live model list: every manifest and every model a usable provider
+    lists, each with `source` (manifest, discovered, both) and `available` (plus
+    `reason` when not); `updated` is the newest successful refresh (ISO 8601
+    UTC); `providers` is each asked provider's last answer. A list older than a
+    few hours is refreshed in the background, so this never waits on a provider."""
+    _discovery.refresh_if_stale()
+    return _discovery.payload()
+
+
+@app.post("/api/models/refresh")
+async def refresh_models() -> dict:
+    """Ask every usable provider now and return the fresh list. A provider that
+    cannot be reached keeps its last list and reports its error."""
+    await _discovery.refresh()
+    return _discovery.payload()
 
 
 @app.get("/api/packs")
@@ -987,6 +1006,7 @@ async def api_set_provider_key(provider: str, body: dict = Body(...)) -> dict:
         _secrets.set_secret(env_var, value)
     except ValueError as exc:
         return JSONResponse({"error": str(exc)}, status_code=400)
+    _discovery.schedule_refresh()  # the new key's models join the list
     return {"ok": True}
 
 
@@ -1004,6 +1024,43 @@ async def api_delete_provider_key(provider: str) -> dict:
                 {"error": "managed in server .env"}, status_code=409
             )
         return JSONResponse({"error": "not found"}, status_code=404)
+    _discovery.schedule_refresh()  # its models leave the list
+    return {"ok": True}
+
+
+# ---- OpenAI-compatible endpoints ---------------------------------------------
+# Named custom endpoints (OpenRouter, Groq, LM Studio, llama.cpp, vLLM): a name
+# (the provider id of its models), a base URL and optionally the secret that
+# holds its key. Key values are never returned.
+
+@app.get("/api/connections/endpoints")
+def api_list_endpoints() -> dict:
+    return {"endpoints": [e.as_dict() for e in _endpoints.list_endpoints()]}
+
+
+@app.put("/api/connections/endpoints/{name}")
+async def api_put_endpoint(name: str, body: dict = Body(...)) -> dict:
+    """Body: {"base_url": ..., "key_secret": "NAME"} to use an existing secret,
+    or {"base_url": ..., "key": "..."} to store the key as <NAME>_API_KEY."""
+    key = str(body.get("key") or "")
+    key_secret = str(body.get("key_secret") or "")
+    try:
+        if key:
+            key_secret = key_secret or _endpoints.secret_name_for(name)
+            _secrets.set_secret(key_secret, key)
+        endpoint = _endpoints.save(name, str(body.get("base_url") or ""), key_secret)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    _discovery.schedule_refresh()
+    return {"endpoint": endpoint.as_dict()}
+
+
+@app.delete("/api/connections/endpoints/{name}")
+async def api_delete_endpoint(name: str) -> dict:
+    """Remove an endpoint. Its key secret stays in the secrets store."""
+    if not _endpoints.delete(name):
+        return JSONResponse({"error": "not found"}, status_code=404)
+    _discovery.schedule_refresh()
     return {"ok": True}
 
 
@@ -1161,6 +1218,8 @@ async def ollama_pull(payload: dict = Body(...)):
         except Exception as exc:
             import json as _json
             yield _json.dumps({"status": "error", "error": str(exc)}) + "\n"
+        finally:
+            _discovery.schedule_refresh()  # a pulled model joins the list
 
     return StreamingResponse(content=_stream(), media_type="application/x-ndjson")
 
@@ -1178,6 +1237,7 @@ async def ollama_delete(name: str) -> dict:
             if resp.status_code not in (200, 204):
                 text = resp.text[:200]
                 return JSONResponse({"error": text or f"{resp.status_code}"}, status_code=502)
+            _discovery.schedule_refresh()  # a deleted model leaves the list
             return {"ok": True}
     except Exception as exc:
         return JSONResponse({"error": str(exc)}, status_code=502)

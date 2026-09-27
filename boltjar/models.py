@@ -11,6 +11,11 @@ image input and an audio model grows an audio input, all from one node.
 Models are data, not code: drop a new .toml in the models dir and it appears.
 The core pack's manifests load first, then each pack's (packs/<id>/models/),
 then the user's own (user/models/); see boltjar.packs.
+
+The providers themselves say which models exist (boltjar.model_discovery): a
+discovered model without a manifest lands in DISCOVERED with defaults from its
+reported capabilities, and a manifest is the optional enrichment (label, params,
+quirks) of the model it names. `get` resolves either.
 """
 from __future__ import annotations
 
@@ -65,6 +70,12 @@ class ModelManifest:
     thinking_style: str = ""      # how the lever reshapes: effort | level | budget | token | bool
     json: bool = False            # the model can be constrained to JSON output
     params: list[Param] = field(default_factory=list)
+    # where the model comes from: "manifest" (a TOML file) or "discovered" (a
+    # provider listed it and no manifest names it).
+    source: str = "manifest"
+    # other names the provider accepts for this model (xAI aliases, an Ollama
+    # name without its :latest tag); a manifest naming one of them enriches it.
+    aliases: list[str] = field(default_factory=list)
 
     def param_defaults(self) -> dict:
         return {p.name: p.default for p in self.params}
@@ -91,10 +102,48 @@ class ModelManifest:
             "json": self.json,
             "params": [p.as_dict() for p in self.params],
             "available": available,
+            "source": self.source,
+            "aliases": self.aliases,
         }
+
+    def to_cache(self) -> dict:
+        """Everything needed to rebuild this manifest (the discovery cache)."""
+        return {
+            "id": self.id, "provider": self.provider, "model": self.model,
+            "label": self.label, "summary": self.summary, "context": self.context,
+            "kind": self.kind, "inputs": self.inputs, "outputs": self.outputs,
+            "tools": self.tools, "thinking": self.thinking,
+            "thinking_style": self.thinking_style, "json": self.json,
+            "params": [p.as_dict() for p in self.params],
+            "source": self.source, "aliases": self.aliases,
+        }
+
+    @classmethod
+    def from_cache(cls, data: dict) -> "ModelManifest":
+        params = [Param(name=p["name"], type=p.get("type", "float"), default=p.get("default"),
+                        min=p.get("min"), max=p.get("max"), step=p.get("step"),
+                        options=list(p.get("options") or []), label=p.get("label", ""))
+                  for p in data.get("params") or []]
+        return cls(id=data["id"], provider=data["provider"], model=data.get("model", ""),
+                   label=data.get("label") or data["id"], summary=data.get("summary", ""),
+                   context=int(data.get("context") or 0), kind=data.get("kind", "llm"),
+                   inputs=list(data.get("inputs") or ["text"]),
+                   outputs=list(data.get("outputs") or ["text"]),
+                   tools=bool(data.get("tools")), thinking=bool(data.get("thinking")),
+                   thinking_style=str(data.get("thinking_style") or ""),
+                   json=bool(data.get("json")), params=params,
+                   source=data.get("source", "discovered"),
+                   aliases=list(data.get("aliases") or []))
 
 
 MODELS: dict[str, ModelManifest] = {}
+# models a provider lists that no manifest names, by id; filled by
+# boltjar.model_discovery from its cache and every refresh.
+DISCOVERED: dict[str, ModelManifest] = {}
+# another id of a listed model -> the id it runs as (a listed id a manifest
+# enriches -> the manifest's id; an alias the provider reports -> the model), so
+# a graph saved with any of them runs the same model.
+ALIASES: dict[str, str] = {}
 
 # Canonical names for the two capability-driven knobs the LLM node surfaces. The
 # node and `_call_model` read these param values and reshape them to each
@@ -184,10 +233,19 @@ def load_models(directory: pathlib.Path | str, *, replace: bool = True) -> int:
 
 
 def get(model_id: str) -> ModelManifest | None:
-    return MODELS.get(model_id)
+    """The manifest for `model_id`: a declared one, else a discovered one (the
+    discovery cache is read the first time an id misses)."""
+    found = MODELS.get(model_id)
+    if found is not None or not isinstance(model_id, str):
+        return found
+    from boltjar import model_discovery  # lazy: discovery imports this module
+    model_discovery.ensure_loaded()
+    canonical = ALIASES.get(model_id, model_id)
+    return MODELS.get(canonical) or DISCOVERED.get(canonical)
 
 
 def catalog(probe: bool = True) -> list[dict]:
     """All manifests as plain dicts, sorted for a stable picker order. probe=False
-    skips the availability check (no key lookup, no Ollama ping)."""
+    skips the availability check (no key lookup, no Ollama ping). The picker reads
+    the merged live list instead (boltjar.model_discovery.catalog)."""
     return [m.as_dict(probe) for m in sorted(MODELS.values(), key=lambda m: (m.provider, m.id))]
