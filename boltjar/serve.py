@@ -398,6 +398,7 @@ def _serve(out: console.Console, host: str, port: int, open_browser: bool,
 
     def ready() -> None:
         out.ready(url, note)
+        out.section("Graphs", f"times in {console.local_zone()}")
         if opens:
             threading.Thread(target=webbrowser.open, args=(url,), daemon=True).start()
 
@@ -424,7 +425,7 @@ def _serve(out: console.Console, host: str, port: int, open_browser: bool,
         return exc.code if isinstance(exc.code, int) else 1
     finally:
         sock.close()
-    # each graph's own power-off line says it stopped
+    # each graph's own Off line (the graph lines) says it stopped
     out.goodbye()
     return 0
 

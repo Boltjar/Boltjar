@@ -43,7 +43,7 @@ def _chat_into_log(label: str) -> dict:
 def _terminal(caplog) -> tuple[GraphLines, Callable[[], list[str]]]:
     caplog.set_level(logging.DEBUG, logger="test.log_echo")
     lines = GraphLines(logging.getLogger("test.log_echo"))
-    return lines, lambda: [r.getMessage() for r in caplog.records]
+    return lines, lambda: [r.detail for r in caplog.records if r.event == "Log"]
 
 
 def test_the_log_node_echoes_a_summary_to_the_terminal(caplog):

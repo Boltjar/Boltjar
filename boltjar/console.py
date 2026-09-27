@@ -88,6 +88,8 @@ SPINNER: dict[bool, str] = {True: "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏", False: "|/-\
 TAGLINE = "Catch the spark. Keep it running."
 LABEL_WIDTH = 11   # a checklist label, "Python" and the rest
 RULE_WIDTH = 48    # a section rule, `── Title ───...`
+NAME_WIDTH = 12    # a graph name in a graph line
+EVENT_WIDTH = 5    # what happened to it: On, Off, Log or a node's name
 ART_GAP = 4        # between the flask and the column beside it
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]|\x1b\]8;;[^\x1b]*\x1b\\")
@@ -609,9 +611,10 @@ _MESSAGE_INDENT = " " * 12
 class LogFormatter(logging.Formatter):
     """`▌ HH:MM:SS  ✓ message`: a bar on the open block, a dim local time, a
     glyph coloured by tone (the editor's ok/info/warn/bad), then the message. A
-    record can set its tone with `extra={"tone": "ok"}` and name its graph in
-    bold with `extra={"tag": ...}`. An exception prints as one line plus a dim
-    location and hint; the full traceback only when verbose."""
+    record can set its tone with `extra={"tone": "ok"}`. A graph line (GraphLines)
+    also carries `tag` (the graph), `event`, `detail` and `hints`, and lines up
+    in columns. An exception prints as one line plus a dim location and hint;
+    the full traceback only when verbose."""
 
     def __init__(self, verbose: bool = False, stream: TextIO | None = None) -> None:
         super().__init__()
@@ -630,16 +633,29 @@ class LogFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         s = self.style
         stamp = s(time.strftime("%H:%M:%S", time.localtime(record.created)), dim=True)
-        head = f"{stamp}  {s.glyph(self.tone(record))} "
-        message = self.text(record)
-        tag = getattr(record, "tag", None)
-        if tag:
-            message = f"{s(str(tag), bold=True)}  {message}"
-        lines = [head + message]
+        head = f"{stamp}  {s.glyph(getattr(record, 'glyph', None) or self.tone(record))} "
+        if getattr(record, "event", None) is not None:
+            lines = self._graph_line(record, head)
+        else:
+            lines = [head + self.text(record)]
         if record.exc_info and record.exc_info[1] is not None:
             lines = self._exception(lines, record.exc_info)
         with _SCREEN:
             return "\n".join(next_bar(s) + line for line in lines)
+
+    def _graph_line(self, record: logging.LogRecord, head: str) -> list[str]:
+        """`chat        On   17 nodes`: the graph bold, the event, the detail (dim
+        unless it is the problem itself), and each hint dim under the event."""
+        s = self.style
+        name = str(getattr(record, "tag", "") or "")
+        event = str(record.event)
+        detail = str(getattr(record, "detail", "") or "")
+        name_col = s(name, bold=True) + " " * max(1, NAME_WIDTH - len(name))
+        event_col = event + " " * max(1, EVENT_WIDTH - len(event)) if detail else event
+        quiet = self.tone(record) not in ("warn", "bad")
+        line = head + name_col + event_col + (s(detail, dim=True) if quiet else detail)
+        indent = _MESSAGE_INDENT + " " * NAME_WIDTH
+        return [line.rstrip()] + [indent + s(hint, dim=True) for hint in getattr(record, "hints", ())]
 
     def _exception(self, lines: list[str], exc_info) -> list[str]:
         if self.verbose:
@@ -736,15 +752,18 @@ def log_config(verbose: bool = False) -> dict:
 
 # ---------------------------------------------------------------- graph lines
 _GRAPH_KINDS = frozenset({"live_graph", "status", "invalid", "error", "node_error", "log"})
+# a refused power-on lists this many of its problems under the line
+_PROBLEMS_SHOWN = 3
 
 
 class GraphLines:
-    """The live graph lines. Fed every event the runtime broadcasts (and each
-    rejected power-on), it logs what a person watching the terminal needs: a
-    graph turning on or off, a graph rejected by validation, a graph that failed
-    to build, a node error, and what a Log node echoes. Wire values are never
-    printed. Each (graph, node, kind) may burst a few lines and is then held to
-    one a second; the next line that prints says how many were skipped."""
+    """The live graph lines under `── Graphs ──`. Fed every event the runtime
+    broadcasts (and each refused power-on), it logs what a person watching the
+    terminal needs: a graph turning on or off, a graph refused by validation, a
+    graph that failed to build, a node error, and what a Log node echoes. Wire
+    values are never printed. Each (graph, node, kind) may burst a few lines and
+    is then held to one a second; the next line that prints says how many were
+    skipped."""
 
     BURST = 5
     PER_SECOND = 1.0
@@ -767,27 +786,29 @@ class GraphLines:
             nodes = event.get("nodes") or []
             if nodes:
                 self._release(slug)
-                self._line(slug, "ok", f"power on ({len(nodes)} node{'' if len(nodes) == 1 else 's'})")
+                self._line(slug, "ok", "On", _count(len(nodes), "node"), glyph="on")
         elif kind == "status":
             if event.get("power") == "off":
                 self._release(slug)
-                self._line(slug, "info", "power off")
+                self._line(slug, "info", "Off", glyph="off")
         elif kind == "invalid":
-            problems = event.get("problems") or []
-            text = f"cannot start: {len(problems)} problem{'' if len(problems) == 1 else 's'}"
-            first = problems[0].get("message") if problems and isinstance(problems[0], dict) else None
-            self._line(slug, "warn", f"{text} ({summarize(first, 120)})" if first else text)
+            problems = [p for p in event.get("problems") or [] if isinstance(p, dict)]
+            hints = [summarize(_problem_text(p), 120) for p in problems[:_PROBLEMS_SHOWN]]
+            if len(problems) > _PROBLEMS_SHOWN:
+                hints.append(f"and {len(problems) - _PROBLEMS_SHOWN} more, listed in the editor")
+            self._line(slug, "warn", "On", f"refused: {_count(len(problems), 'problem')}", hints=hints)
         elif kind == "error":
-            self._line(slug, "bad", f"failed to start: {summarize(event.get('error'), 200)}")
+            self._line(slug, "bad", "On", f"failed: {summarize(event.get('error'), 200)}")
         elif kind == "node_error":
-            node = event.get("node")
-            self._limited((slug, node, kind), "bad", f"{node}: {summarize(event.get('error'), 200)}")
+            node = str(event.get("node"))
+            self._limited((slug, node, kind), "bad", node, summarize(event.get("error"), 200))
         elif kind == "log" and event.get("echo") is True:
             # summarized from the message as broadcast, never from the raw value:
             # what the server keeps out of a live event stays out of the terminal.
-            self._limited((slug, event.get("node"), kind), "info", summarize(event.get("message"), 200))
+            self._limited((slug, event.get("node"), kind), "info", "Log",
+                          summarize(event.get("message"), 200))
 
-    def _limited(self, key: tuple, tone: str, text: str) -> None:
+    def _limited(self, key: tuple, tone: str, event: str, detail: str) -> None:
         now = self.clock()
         tokens, last, skipped = self._buckets.get(key, (float(self.BURST), now, 0))
         tokens = min(float(self.BURST), tokens + (now - last) * self.PER_SECOND)
@@ -796,8 +817,8 @@ class GraphLines:
             return
         self._buckets[key] = (tokens - 1, now, 0)
         if skipped:
-            text += f" ({skipped} similar line{'' if skipped == 1 else 's'} skipped)"
-        self._line(key[0], tone, text)
+            detail += f" ({skipped} similar line{'' if skipped == 1 else 's'} skipped)"
+        self._line(key[0], tone, event, detail)
 
     def _release(self, slug: str) -> None:
         """A graph turned off: report what its limits held back, then forget them."""
@@ -805,7 +826,24 @@ class GraphLines:
             skipped = self._buckets.pop(key)[2]
             if skipped:
                 what = "errors" if key[2] == "node_error" else "log lines"
-                self._line(slug, "info", f"{key[1]}: {skipped} more {what} skipped")
+                self._line(slug, "info", str(key[1]), f"{skipped} more {what} skipped")
 
-    def _line(self, slug: str, tone: str, text: str) -> None:
-        self.log.log(_TONE_LEVELS[tone], text, extra={"tone": tone, "tag": slug})
+    def _line(self, slug: str, tone: str, event: str, detail: str = "", *, glyph: str | None = None,
+              hints: Sequence[str] = ()) -> None:
+        # the message reads on its own for any other handler; the console lays
+        # the same facts out in columns from the extras.
+        message = "\n".join([f"{event}  {detail}".rstrip(), *hints])
+        self.log.log(_TONE_LEVELS[tone], message, extra={
+            "tone": tone, "tag": slug, "event": event, "detail": detail, "hints": list(hints),
+            "glyph": glyph or tone,
+        })
+
+
+def _count(n: int, noun: str) -> str:
+    return f"{n} {noun}{'' if n == 1 else 's'}"
+
+
+def _problem_text(problem: dict) -> str:
+    node = problem.get("node")
+    message = str(problem.get("message") or problem.get("kind") or "problem")
+    return f"{node}: {message}" if node else message

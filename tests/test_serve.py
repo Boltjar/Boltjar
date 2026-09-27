@@ -496,12 +496,13 @@ def test_the_checklist_is_python_editor_port_and_packs(boot, monkeypatch):
     assert [row.label for row in shown] == ["Python", "Editor", "Port", "Packs"]
 
 
-def test_the_ready_block(boot, monkeypatch, capsys):
+def test_the_ready_block_and_the_graphs_rule(boot, monkeypatch, capsys):
     assert ready_boot(boot, monkeypatch) == 0
     lines = capsys.readouterr().out.splitlines()
     ready = next(i for i, line in enumerate(lines) if "Ready" in line)
     assert lines[ready].endswith("Ready  →  http://127.0.0.1:9001")
     assert lines[ready + 1].endswith("Ctrl+C stops everything · --verbose shows requests")
+    assert lines[ready + 3].startswith(f"── Graphs  times in {console.local_zone()} ─")
 
 
 def test_the_ready_note_says_only_what_applies(boot, monkeypatch, capsys):

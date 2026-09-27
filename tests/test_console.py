@@ -374,10 +374,9 @@ def plain_formatter(verbose: bool = False) -> LogFormatter:
     return fmt
 
 
-def test_log_line_is_bar_time_glyph_tag_message():
-    line = plain_formatter().format(record("power on", tone="ok", tag="chat"))
-    bar, stamp, glyph, rest = LINE.match(line).groups()
-    assert (bar, glyph, rest) == ("▌", "✓", "chat  power on")
+def test_log_line_is_bar_time_glyph_message():
+    bar, stamp, glyph, rest = LINE.match(plain_formatter().format(record("ready", tone="ok"))).groups()
+    assert (bar, glyph, rest) == ("▌", "✓", "ready")
     assert stamp == time.strftime("%H:%M:%S", time.localtime(0))
 
 
@@ -458,14 +457,14 @@ def lines(caplog):
     clock = Clock()
     graph = GraphLines(logging.getLogger("test.graph"), clock=clock)
 
-    def seen() -> list[tuple[str, str, str]]:
-        return [(r.tag, r.tone, r.getMessage()) for r in caplog.records]
+    def seen() -> list[tuple]:
+        return [(r.tag, r.tone, r.event, r.detail) for r in caplog.records]
 
-    return graph, clock, seen
+    return graph, clock, seen, caplog
 
 
 def test_power_changes_and_failures_become_lines(lines):
-    graph, _clock, seen = lines
+    graph, _clock, seen, caplog = lines
     graph.feed({"kind": "status", "power": "on", "slug": "chat"})  # the count comes next
     graph.feed({"kind": "live_graph", "nodes": ["a", "b", "c"], "edges": [], "slug": "chat"})
     graph.feed({"kind": "invalid", "slug": "chat",
@@ -475,16 +474,32 @@ def test_power_changes_and_failures_become_lines(lines):
     graph.feed({"kind": "status", "power": "off", "slug": "chat"})
     graph.feed({"kind": "live_graph", "nodes": [], "edges": [], "slug": "chat"})
     assert seen() == [
-        ("chat", "ok", "power on (3 nodes)"),
-        ("chat", "warn", "cannot start: 1 problem (required input 'in' is not connected)"),
-        ("chat", "bad", "failed to start: ValueError('unknown node type: x')"),
-        ("chat", "bad", "LLM: RuntimeError('boom')"),
-        ("chat", "info", "power off"),
+        ("chat", "ok", "On", "3 nodes"),
+        ("chat", "warn", "On", "refused: 1 problem"),
+        ("chat", "bad", "On", "failed: ValueError('unknown node type: x')"),
+        ("chat", "bad", "LLM", "RuntimeError('boom')"),
+        ("chat", "info", "Off", ""),
     ]
+    assert [r.glyph for r in caplog.records] == ["on", "warn", "bad", "bad", "off"]
+
+
+def test_a_refused_power_on_lists_its_problems_as_hints(lines):
+    graph, _clock, _seen, caplog = lines
+    problems = [{"node": f"n{i}", "message": f"problem {i}"} for i in range(5)]
+    graph.feed({"kind": "invalid", "slug": "chat", "problems": problems})
+    (rec,) = caplog.records
+    assert rec.detail == "refused: 5 problems"
+    assert rec.hints == ["n0: problem 0", "n1: problem 1", "n2: problem 2", "and 2 more, listed in the editor"]
+
+
+def test_a_graph_line_reads_on_its_own_without_the_console(lines):
+    graph, _clock, _seen, caplog = lines
+    graph.feed({"kind": "invalid", "slug": "chat", "problems": [{"node": "x", "message": "m"}]})
+    assert caplog.records[0].getMessage() == "On  refused: 1 problem\nx: m"
 
 
 def test_wire_values_are_never_printed(lines):
-    graph, _clock, seen = lines
+    graph, _clock, seen, _caplog = lines
     for event in ({"kind": "value", "node": "a", "port": "out", "value": "secret text"},
                   {"kind": "node_status", "node": "a", "status": "running"},
                   {"kind": "tool_call", "node": "t", "args": {"q": "secret"}},
@@ -494,44 +509,69 @@ def test_wire_values_are_never_printed(lines):
 
 
 def test_a_log_node_echo_prints_its_message_summarized(lines):
-    graph, _clock, seen = lines
+    graph, _clock, seen, _caplog = lines
     graph.feed({"kind": "log", "node": "log1", "message": "log: " + "y" * 500, "slug": "chat",
                 "echo": True})
-    (tag, tone, text), = seen()
-    assert (tag, tone) == ("chat", "info")
-    assert text.startswith("log: yyy") and text.endswith("chars)") and len(text) <= 200
+    (tag, tone, event, detail), = seen()
+    assert (tag, tone, event) == ("chat", "info", "Log")
+    assert detail.startswith("log: yyy") and detail.endswith("chars)") and len(detail) <= 200
 
 
 def test_only_a_true_echo_prints(lines):
-    graph, _clock, seen = lines
+    graph, _clock, seen, _caplog = lines
     for echo in ("log: a copy of the value", 1, None):
         graph.feed({"kind": "log", "node": "log1", "message": "log: x", "slug": "chat", "echo": echo})
     assert seen() == []
 
 
 def test_repeats_are_rate_limited_and_counted(lines):
-    graph, clock, seen = lines
+    graph, clock, seen, _caplog = lines
     error = {"kind": "node_error", "node": "LLM", "error": "E", "slug": "chat"}
     for _ in range(20):  # a burst: the first five print
         graph.feed(dict(error))
     assert len(seen()) == GraphLines.BURST
     clock.now += 1.0  # a second later one more may print, with the count
     graph.feed(dict(error))
-    assert seen()[-1][2] == "LLM: E (15 similar lines skipped)"
+    assert seen()[-1][3] == "E (15 similar lines skipped)"
 
 
 def test_power_off_reports_what_was_held_back(lines):
-    graph, _clock, seen = lines
+    graph, _clock, seen, _caplog = lines
     for _ in range(8):
         graph.feed({"kind": "node_error", "node": "LLM", "error": "E", "slug": "chat"})
     graph.feed({"kind": "status", "power": "off", "slug": "chat"})
-    assert seen()[-2:] == [("chat", "info", "LLM: 3 more errors skipped"), ("chat", "info", "power off")]
+    assert seen()[-2:] == [("chat", "info", "LLM", "3 more errors skipped"), ("chat", "info", "Off", "")]
 
 
 def test_limits_are_per_node_and_per_graph(lines):
-    graph, _clock, seen = lines
+    graph, _clock, seen, _caplog = lines
     for node in ("a", "b"):
         for slug in ("one", "two"):
             for _ in range(GraphLines.BURST):
                 graph.feed({"kind": "node_error", "node": node, "error": "E", "slug": slug})
     assert len(seen()) == 4 * GraphLines.BURST
+
+
+def graph_record(tone: str, event: str, detail: str = "", glyph: str | None = None, hints=()):
+    return record(f"{event}  {detail}", console._TONE_LEVELS[tone], tone=tone, tag="chat",
+                  event=event, detail=detail, glyph=glyph or tone, hints=list(hints))
+
+
+def test_a_graph_line_lines_up_in_columns():
+    fmt = plain_formatter()
+    stamp = time.strftime("%H:%M:%S", time.localtime(0))
+    assert fmt.format(graph_record("ok", "On", "17 nodes", "on")) == f"▌ {stamp}  ● chat        On   17 nodes"
+    assert fmt.format(graph_record("info", "Off", glyph="off")) == f"▌ {stamp}  ○ chat        Off"
+    assert fmt.format(graph_record("bad", "LLM", "Ollama not reachable", hints=["start Ollama"])).splitlines() == [
+        f"▌ {stamp}  ✗ chat        LLM  Ollama not reachable",
+        "▌ " + " " * 24 + "start Ollama",
+    ]
+
+
+def test_a_graph_line_names_the_graph_bold_and_dims_a_quiet_detail():
+    fmt = plain_formatter()
+    fmt.style = Style(COLOUR["truecolor"])
+    on = fmt.format(graph_record("ok", "On", "17 nodes", "on"))
+    assert "\x1b[1mchat\x1b[0m" in on and "\x1b[2m17 nodes\x1b[0m" in on
+    error = fmt.format(graph_record("bad", "LLM", "Ollama not reachable"))
+    assert "Ollama not reachable" in error and "\x1b[2mOllama" not in error
