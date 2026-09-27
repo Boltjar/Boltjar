@@ -107,3 +107,19 @@ def test_stream_404_and_caps():
         assert client.get("/stream/stream-test/ch0").status_code == 429
     finally:
         HUBS.pop("stream-test", None)
+
+
+def test_store_info_paths_are_relative_to_the_repo(tmp_path, monkeypatch):
+    from boltjar.kv_store import KvStore
+    from boltjar.sqlite_store import SqliteStore
+    monkeypatch.setattr(server, "ROOT", tmp_path)
+    monkeypatch.setattr(server, "STORE", SqliteStore(tmp_path / "user" / "data" / "dbs"))
+    monkeypatch.setattr(server, "KV_STORE", KvStore(tmp_path / "user" / "data" / "kv"))
+    assert client.get("/api/store/db/notes/info").json()["path"] == "user/data/dbs/notes.db"
+    assert client.get("/api/store/kv/prefs/info").json()["path"] == "user/data/kv/prefs.json"
+
+
+def test_store_info_outside_the_repo_shows_only_the_file_name(tmp_path, monkeypatch):
+    from boltjar.sqlite_store import SqliteStore
+    monkeypatch.setattr(server, "STORE", SqliteStore(tmp_path))
+    assert client.get("/api/store/db/notes/info").json()["path"] == "notes.db"

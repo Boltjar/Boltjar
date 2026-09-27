@@ -703,19 +703,32 @@ async def delete_graph(name: str):
     return {"ok": True}
 
 
+def _repo_path(path: str) -> str:
+    """A store file's path as the editor shows it: relative to the repo root
+    (user/data/dbs/x.db), never absolute, which would put the account name on
+    every screen and screenshot. A file outside the repo shows its name."""
+    p = pathlib.Path(path)
+    try:
+        return p.relative_to(ROOT).as_posix()
+    except ValueError:
+        return p.name
+
+
 @app.get("/api/store/db/{key}/info")
 async def db_info(key: str) -> dict:
     """Snapshot of a SQLite store: disk path + tables (name, rowCount) sorted
     by row count desc. The Database node body polls this so the user sees
     whether the store is empty or what tables live in it."""
-    return STORE.info(key)
+    info = STORE.info(key)
+    return {**info, "path": _repo_path(info["path"])}
 
 
 @app.get("/api/store/kv/{key}/info")
 async def kv_info(key: str) -> dict:
     """Snapshot of a KV store: disk path + total key count + first few keys
     as a preview. The KV Store node body polls this for the same reason."""
-    return KV_STORE.info(key)
+    info = KV_STORE.info(key)
+    return {**info, "path": _repo_path(info["path"])}
 
 
 @app.post("/api/store/db/{key}/restore")
