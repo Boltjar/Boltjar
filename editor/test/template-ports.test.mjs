@@ -23,7 +23,7 @@ async function load(rel) {
   }).outputText;
   return import("data:text/javascript," + encodeURIComponent(js));
 }
-const { concreteInputs, concreteOutputs, templateTags, ghostSocketName } = await load("dynamicPorts.ts");
+const { concreteInputs, concreteOutputs, templateTags, ghostSocketName, sourceSocketSlug } = await load("dynamicPorts.ts");
 
 let failures = 0;
 function check(label, got, want) {
@@ -78,6 +78,16 @@ check("a source named after a declared port gets a fresh name", ghostSocketName(
 check("an ordinary source keeps its slug", ghostSocketName(TEMPLATE, "persona", new Set()), "persona");
 check("a slug already used on the node is numbered", ghostSocketName(TEMPLATE, "persona", new Set(["persona"])), "persona2");
 check("the growable base name itself stays usable", ghostSocketName(TEMPLATE, "tag", new Set()), "tag");
+
+// ---- 6. the tag a dropped wire mints carries the source's WHOLE name
+check("a multi-word node keeps every word", sourceSocketSlug(TEMPLATE, "User message", "out"), "user_message");
+check("punctuation and case fold into one slug", sourceSocketSlug(TEMPLATE, "Chat Append (User)", "out"), "chat_append_user");
+{
+  // "Username" and "User message" wired onto one Template never share a tag
+  const first = ghostSocketName(TEMPLATE, sourceSocketSlug(TEMPLATE, "Username", "out"), new Set());
+  const second = ghostSocketName(TEMPLATE, sourceSocketSlug(TEMPLATE, "User message", "out"), new Set([first]));
+  check("two user-ish sources get two tags", [first, second], ["username", "user_message"]);
+}
 
 if (failures) {
   console.error(`\n${failures} check(s) failed`);
