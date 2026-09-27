@@ -28,7 +28,7 @@ import { functionColorVar } from "../../lib/kinds";
 import { typeColorVar } from "../../lib/types";
 import { mod } from "../../lib/platform";
 import { panHintCenter } from "../../lib/panHint";
-import { FIT_VIEW, openingView } from "../../lib/viewport";
+import { FIT_VIEW, viewMemory } from "../../lib/viewport";
 import type { NodeDef } from "../../types/protocol";
 
 const nodeTypes: NodeTypes = { workflow: WorkflowNode };
@@ -75,7 +75,8 @@ interface CanvasProps {
   fitRef?: React.MutableRefObject<(() => void) | null>;
   rejectionReason: string | null;
   loading: boolean;
-  /** changes each time a graph is opened on the canvas, which frames it anew. */
+  /** changes each time a graph is opened on the canvas, which frames it anew
+   *  (and remembers where the graph it leaves was, by `graphName`). */
   viewKey: number;
   graphName: string;
   /** runtime stats, surfaced inline on the canvas overlay so the top bar
@@ -225,16 +226,21 @@ export function Canvas(props: CanvasProps) {
 
   // frame every graph the canvas opens (lib/viewport): one React Flow instance
   // serves every tab, so its zoom and pan would otherwise carry over from the
-  // previous graph. A graph with nodes is fitted (React Flow waits until it has
-  // measured them), an empty one opens at 100%. `viewKey` changes once per open.
-  const framedRef = useRef<number | null>(null);
+  // previous graph. The graph being left is remembered where it is; the one
+  // opened comes back where it was left, or on its first open in the session is
+  // fitted (React Flow waits until it has measured the nodes) or, empty, shown
+  // at 100%. `viewKey` changes once per open; `graphName` is the graph's slug.
+  const viewsRef = useRef(viewMemory());
+  const framedRef = useRef<{ key: number; slug: string } | null>(null);
   useEffect(() => {
-    if (!instance || loading || framedRef.current === viewKey) return;
-    framedRef.current = viewKey;
-    const view = openingView(nodes.length);
+    if (!instance || loading || framedRef.current?.key === viewKey) return;
+    const left = framedRef.current;
+    if (left) viewsRef.current.leave(left.slug, instance.getViewport());
+    framedRef.current = { key: viewKey, slug: graphName };
+    const view = viewsRef.current.open(graphName, nodes.length);
     if (view.kind === "fit") void instance.fitView(view.options);
     else void instance.setViewport(view.viewport);
-  }, [instance, loading, viewKey, nodes.length]);
+  }, [instance, loading, viewKey, graphName, nodes.length]);
 
   const onDrop = useCallback(
     (event: React.DragEvent) => {
@@ -363,9 +369,6 @@ export function Canvas(props: CanvasProps) {
 
   const nodeCount = nodes.length;
   void edges; // wire count is dropped from the overlay (low signal)
-  // graphName is now surfaced by the WorkflowTabs strip above the canvas; the
-  // overlay shows only the lightweight node/wire count.
-  void graphName;
 
   return (
     <main
