@@ -192,7 +192,7 @@ def test_a_busy_port_is_caught_before_anything_starts():
         row = serve.port_problem(exc.value, port)
         assert (row.label, row.tone) == ("Port", "bad")
         assert f"{port} is in use" in row.detail
-        assert f"--port {port + 1}" in row.fixes[0]
+        assert console.unbroken(f"--port {port + 1}") in row.fixes[0]
     finally:
         holder.close()
 
@@ -209,7 +209,7 @@ def test_a_reserved_port_says_so():
     denied = OSError(10013, "access denied")
     denied.winerror = 10013
     row = serve.port_problem(denied, 8000)
-    assert "reserved or blocked" in row.detail and "--port 8001" in row.fixes[0]
+    assert "reserved or blocked" in row.detail and console.unbroken("--port 8001") in row.fixes[0]
 
 
 # ---------------------------------------------------------------- the checklist

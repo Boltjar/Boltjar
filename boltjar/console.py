@@ -397,7 +397,8 @@ class Style:
 @dataclass(frozen=True)
 class Row:
     """One boot checklist line: `✓ Python     3.12.9  .venv`. `aside` prints dim
-    after the detail, `gap` apart; each of `fixes` prints dim underneath."""
+    after the detail, `gap` apart; each of `fixes` prints dim underneath. A
+    command in a fix is marked with `unbroken`, so the row never wraps inside it."""
     label: str
     detail: str
     tone: str = "ok"
@@ -406,9 +407,25 @@ class Row:
     fixes: tuple[str, ...] = ()
 
 
+# joins the words of an unbroken() run; it prints as a plain space
+_NO_BREAK = "\xa0"
+
+
+def unbroken(text: str) -> str:
+    """`text` (a command, a flag and its value) kept on one line when a
+    checklist row wraps, unless it is wider than the column itself."""
+    return text.replace(" ", _NO_BREAK)
+
+
 def _wrap(text: str, width: int) -> list[str]:
-    # a pack id, a flag or a path keeps its hyphens: it breaks only at spaces
-    return textwrap.wrap(text, width, break_on_hyphens=False)
+    # a pack id, a flag or a path keeps its hyphens: it breaks only at spaces.
+    # An unbroken() run moves to the next line whole; one wider than the column
+    # breaks at its own spaces after all.
+    lines = []
+    for line in textwrap.wrap(text, width, break_on_hyphens=False, break_long_words=False):
+        line = line.replace(_NO_BREAK, " ")
+        lines += textwrap.wrap(line, width, break_on_hyphens=False) if len(line) > width else [line]
+    return lines
 
 
 def next_bar(style: Style) -> str:

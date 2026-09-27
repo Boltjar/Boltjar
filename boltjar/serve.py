@@ -181,15 +181,15 @@ def bind(host: str, port: int) -> socket.socket:
 
 def port_problem(exc: OSError, port: int) -> console.Row:
     code = getattr(exc, "winerror", None) or exc.errno
-    other = port + 1 if port < 65535 else port - 1
+    flag = console.unbroken(f"--port {port + 1 if port < 65535 else port - 1}")
     if code in _IN_USE:
         return console.Row("Port", f"{port} is in use by another program (maybe another Boltjar)",
-                           "bad", fixes=(f"stop that program, or use another port: --port {other}",))
+                           "bad", fixes=(f"stop that program, or use another port: {flag}",))
     if code in _DENIED:
         return console.Row("Port", f"{port} is reserved or blocked by the system", "bad",
-                           fixes=(f"use another port: --port {other}",))
+                           fixes=(f"use another port: {flag}",))
     return console.Row("Port", f"cannot listen on {port}: {exc.strerror or exc}", "bad",
-                       fixes=(f"use another port: --port {other}",))
+                       fixes=(f"use another port: {flag}",))
 
 
 # ---------------------------------------------------------------- the checklist
@@ -212,8 +212,8 @@ def python_row(version: tuple = tuple(sys.version_info[:3]), prefix: str = sys.p
         venv = _venv_name(prefix)
     if (deps.status() if requirements is None else requirements) == "changed":
         tone = "warn"
-        fixes.append(f"requirements.txt changed since the last install: run {START} again, "
-                     "or python -m pip install -r requirements.txt")
+        pip = console.unbroken("python -m pip install -r requirements.txt")
+        fixes.append(f"requirements.txt changed since the last install: run {START} again, or {pip}")
     return console.Row("Python", detail, tone, aside=venv, gap="  ", fixes=tuple(fixes))
 
 
@@ -227,9 +227,10 @@ def _venv_name(prefix: str) -> str:
 def editor_row(index: pathlib.Path = EDITOR_INDEX) -> console.Row:
     if index.is_file():
         return console.Row("Editor", "bundle ready")
+    install = console.unbroken("npm ci --prefix editor")
+    build = console.unbroken("npm run build --prefix editor")
     return console.Row("Editor", "not built: the API runs, the editor page does not", "warn",
-                       fixes=("npm ci --prefix editor, then npm run build --prefix editor "
-                              "(needs Node.js 18+)",))
+                       fixes=(f"{install}, then {build} (needs Node.js 18+)",))
 
 
 def port_row(host: str, port: int, hosts: list[str]) -> console.Row:

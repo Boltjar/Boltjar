@@ -291,11 +291,31 @@ def test_a_window_narrower_still_gets_one_plain_line():
     assert "  ✓ Port       8770 free" in lines
 
 
+BUILD = "npm run build --prefix editor"
+EDITOR_FIX = Row("Editor", "not built", "warn", fixes=(
+    f"{console.unbroken('npm ci --prefix editor')}, then {console.unbroken(BUILD)} (needs Node.js 18+)",))
+
+
 @pytest.mark.parametrize("width", [40, 43, 44, 60, 80, 89, 90, 91, 120, 200])
 def test_no_banner_line_reaches_the_last_column(width):
     long = Row("Packs", "core; failed: " + ", ".join(f"pack-{i}" for i in range(12)), "warn",
                aside="(63 nodes)", fixes=("the reason is in the log line above, and at /api/packs",))
-    assert max(console.visible_len(line) for line in banner(width, [*ROWS, long])) < width
+    lines = banner(width, [*ROWS, EDITOR_FIX, long])
+    assert max(console.visible_len(line) for line in lines) < width
+
+
+@pytest.mark.parametrize("width", [60, 80, 96, 120, 200])
+def test_a_command_in_a_fix_stays_on_one_line(width):
+    # at 120 columns the build command used to wrap as `npm run build --prefix` / `editor`
+    lines = banner(width, [*ROWS, EDITOR_FIX])
+    assert any(BUILD in line for line in lines)
+    assert "\xa0" not in "".join(lines)  # it prints with plain spaces, so it pastes
+
+
+def test_a_command_wider_than_the_column_breaks_at_its_spaces():
+    lines = banner(40, [*ROWS, EDITOR_FIX])  # a 24 column checklist, the command is 29
+    assert max(console.visible_len(line) for line in lines) < 40
+    assert BUILD in " ".join(" ".join(lines).split()) and "\xa0" not in "".join(lines)
 
 
 def test_the_flask_needs_room_for_the_whole_column_beside_it():
