@@ -243,7 +243,6 @@ export function CommandBar(props: CommandBarProps) {
         >
           <Icon name="help-circle-outline" />
         </button>
-        {/* user avatar removed until there is a real user/account system to back it. */}
       </div>
     </header>
   );
