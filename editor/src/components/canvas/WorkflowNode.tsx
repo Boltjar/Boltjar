@@ -18,8 +18,8 @@ import { useEditor, type InboundWire } from "../../lib/editorContext";
 import { liveGatePasses } from "../../lib/liveClassify";
 import { functionColorVar, nodeIcon } from "../../lib/kinds";
 import { typeColorVar, typesCompatible } from "../../lib/types";
-import { Icon } from "../../lib/icons";
-import { bodySummary, headerSubline } from "../../lib/nodeMeta";
+import { Icon, hasIcon } from "../../lib/icons";
+import { bodySummary, defaultOf, headerSubline } from "../../lib/nodeMeta";
 import { useDraft } from "../../lib/useDraft";
 import {
   concreteInputs,
@@ -307,7 +307,7 @@ function WorkflowNodeImpl({ id, data, selected }: NodeProps) {
       {/* ── header ── */}
       <div className="node-head">
         <div className="nh-ico">
-          <Icon name={nodeIcon(def)} />
+          <Icon name={nodeIcon(def, hasIcon)} />
         </div>
         <div className="nh-text">
           {editing ? (

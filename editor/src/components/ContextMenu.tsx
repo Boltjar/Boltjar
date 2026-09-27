@@ -13,7 +13,7 @@
 // ============================================================================
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { NodeDef } from "../types/protocol";
-import { Icon } from "../lib/icons";
+import { Icon, hasIcon } from "../lib/icons";
 import { functionColorVar, nodeIcon } from "../lib/kinds";
 import { menuFocusTarget } from "../lib/menuKeys";
 import { capabilityHint } from "../lib/nodeMeta";
@@ -260,7 +260,7 @@ export function ContextMenu({ x, y, align = "start", items, label, defs, searchT
                     }}
                   >
                     <span className="ctx-node-ico" style={{ color: fc }}>
-                      <Icon name={nodeIcon(d)} />
+                      <Icon name={nodeIcon(d, hasIcon)} />
                     </span>
                     <span className="ctx-node-name">{d.name}</span>
                     <span className="ctx-node-cap">{capabilityHint(d)}</span>

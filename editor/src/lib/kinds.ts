@@ -1,7 +1,8 @@
 // ============================================================================
 // Node-kind language: each kind maps to a header colour token, an identity
-// Ionicon, and the UPPERCASE tag shown in the header + inspector. The 9
-// backend kinds collapse onto the 6 design colours.
+// Ionicon (drawn by a node that declares no icon of its own), and the
+// UPPERCASE tag shown in the header + inspector. The 9 backend kinds collapse
+// onto the 6 design colours.
 // ============================================================================
 import type { NodeKind, NodeDef } from "../types/protocol";
 
@@ -9,7 +10,7 @@ export interface KindStyle {
   /** CSS custom property for the kind colour. */
   colorVar: string;
   token: string;
-  /** Default identity glyph (Ionicon name). */
+  /** The identity glyph (Ionicon name) of a node that declares none. */
   icon: string;
   /** UPPERCASE machine tag for the header / inspector. */
   tag: string;
@@ -33,49 +34,13 @@ export function kindStyle(kind: NodeKind): KindStyle {
   return KIND[kind] ?? KIND.transform;
 }
 
-// Per-node-id identity glyphs. Falls back to the kind glyph.
-// Keyed to the core pack ids (boltjar/nodes/core/builtin.py).
-const NODE_ICON: Record<string, string> = {
-  // triggers
-  "core.trigger.interval": "timer-outline",
-  "core.trigger.manual": "play-circle-outline",
-  "core.trigger.chat": "chatbubble-ellipses-outline",
-  // sensors
-  "core.sensor.clock": "time-outline",
-  // values
-  "core.value.text": "text-outline",
-  "core.value.integer": "calculator-outline",
-  "core.value.float": "calculator-outline",
-  "core.value.boolean": "toggle-outline",
-  // data / transforms
-  "core.data.template": "document-text-outline",
-  "core.data.compute": "calculator-outline",
-  "core.logic.condition": "git-branch-outline",
-  // ai
-  "core.ai.llm": "sparkles-outline",
-  "core.ai.stt": "mic-outline",
-  "core.ai.tts": "volume-high-outline",
-  // store
-  "core.store.memory": "albums-outline",
-  "core.store.state": "save-outline",
-  // files
-  "core.file.read": "document-text-outline",
-  "core.file.write": "create-outline",
-  "core.file.append": "add-circle-outline",
-  "core.file.delete": "trash-outline",
-  "core.file.list": "folder-open-outline",
-  // services
-  "core.service.http": "globe-outline",
-  // outputs / inspect
-  "core.output.log": "terminal-outline",
-  "core.output.preview": "eye-outline",
-  "core.output.chat": "chatbubbles-outline",
-  "core.output.deliver": "paper-plane-outline",
-};
-
-/** The identity glyph for a node definition: a per-id override or its kind glyph. */
-export function nodeIcon(def: NodeDef): string {
-  return NODE_ICON[def.id] ?? kindStyle(def.kind).icon;
+/** The identity glyph for a node definition: the icon its @node declares, else
+ *  its kind glyph. `known` says whether the editor ships an icon by that name
+ *  (lib/icons `hasIcon`), so a pack naming one it does not ship draws the kind
+ *  glyph rather than the neutral dot an unknown name renders as. */
+export function nodeIcon(def: NodeDef, known: (name: string) => boolean): string {
+  const declared = def.icon ?? "";
+  return declared && known(declared) ? declared : kindStyle(def.kind).icon;
 }
 
 // Ordering of library groups, top to bottom, in the palette.

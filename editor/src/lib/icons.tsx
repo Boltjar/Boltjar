@@ -294,6 +294,12 @@ REGISTRY["scan-outline"]   = WfFit;
 
 export type IconName = string;
 
+/** Whether the editor ships an icon by this name (an unknown one renders as a
+ *  neutral dot), so a declared node icon can fall back to its kind glyph. */
+export function hasIcon(name: string): boolean {
+  return Object.prototype.hasOwnProperty.call(REGISTRY, name);
+}
+
 interface IconProps extends IconBaseProps {
   name: IconName;
 }

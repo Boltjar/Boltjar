@@ -93,3 +93,11 @@ def test_a_subline_that_names_nothing_real_is_refused(subline, error):
             seconds: float = 1.0
     assert "test.look.bad" not in NODE_REGISTRY
 
+
+def test_the_filters_are_the_ones_the_editor_applies():
+    # editor/src/lib/nodeMeta.ts applyFilter handles exactly these names.
+    source = (FIXTURE.parent.parent.parent / "src" / "lib" / "nodeMeta.ts").read_text(encoding="utf-8")
+    handled = {line.strip()[len('case "'):].split('"', 1)[0]
+               for line in source.split("function applyFilter", 1)[1].splitlines()
+               if line.strip().startswith('case "')}
+    assert handled == SUBLINE_FILTERS

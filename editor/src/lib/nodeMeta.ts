@@ -15,58 +15,69 @@ function preview(value: unknown, max = 22): string {
 }
 
 /**
- * The mono subline under a node's title: the most identifying config, e.g.
- * `interval · 60s`, `grok · grok-4`, `template · 2 tags`. Falls back to the
- * node's category in lowercase.
+ * The mono subline under a node's title: the `subline` its @node declares,
+ * rendered against its config (renderSubline), e.g. `every · 60s`,
+ * `xai · grok-4.20`, `template · 2 tags`. A model node that declares none
+ * shows its model; any other shows its category in lowercase.
  */
 export function headerSubline(def: NodeDef, config: Record<string, unknown>): string {
-  // a model node (declared by its model widget, any pack's too): the model it
-  // runs, the picked one, else the widget's declared default.
+  if (def.subline) return renderSubline(def, config);
+  // a model node that declares no subline (any pack's): the model it runs,
+  // the picked one, else its model widget's declared default.
   const modelWidget = modelWidgetOf(def);
-  if (modelWidget) {
-    return modelSubline(String(config[modelWidget.name] || modelWidget.default || ""));
-  }
-  switch (def.id) {
-    case "core.trigger.interval": {
-      const s = config.seconds ?? defaultOf(def, "seconds") ?? 2;
-      return `every · ${s}s`;
+  if (modelWidget) return modelSubline(String(config[modelWidget.name] || modelWidget.default || ""));
+  return def.category.toLowerCase();
+}
+
+/** A subline placeholder: `{field}` or `{field|filter|filter:arg}` (the same
+ *  grammar boltjar/sdk.py checks when a node is declared). */
+const PLACEHOLDER = /\{([A-Za-z_][A-Za-z0-9_]*)((?:\|[a-z]+(?::[^|}]*)?)*)\}/g;
+
+/**
+ * Fill a subline template. Each placeholder reads its field from the config,
+ * or the field's declared default when the config does not set it, then passes
+ * it through its filters in order (SUBLINE_FILTERS in boltjar/sdk.py):
+ * `clip:N` one line cut to N chars, `or:TEXT` TEXT when empty, `bool`
+ * true/false, `model` a model id as `provider · model`, `tags` the {tags} a
+ * template holds as `N tags`. Text outside the placeholders is kept as is.
+ */
+export function renderSubline(def: NodeDef, config: Record<string, unknown>): string {
+  return (def.subline ?? "").replace(PLACEHOLDER, (_match, name: string, filters: string) => {
+    const fallback = defaultOf(def, name);
+    let value: unknown = config[name] ?? fallback;
+    for (const f of filters.split("|").slice(1)) {
+      const colon = f.indexOf(":");
+      const filter = colon < 0 ? f : f.slice(0, colon);
+      const arg = colon < 0 ? undefined : f.slice(colon + 1);
+      value = applyFilter(def, filter, arg, value, fallback);
     }
-    case "core.trigger.manual":
-      return "manual · once";
-    case "core.trigger.chat":
-      return "chat · on send";
-    case "core.sensor.clock":
-      return "clock · volatile";
-    case "core.value.text":
-      return `text · ${preview(config.text ?? "", 16) || "empty"}`;
-    case "core.value.integer":
-      return `int · ${config.number ?? 0}`;
-    case "core.value.float":
-      return `float · ${config.number ?? 0}`;
-    case "core.value.boolean":
-      return `bool · ${config.on ? "true" : "false"}`;
-    case "core.data.template": {
-      const tpl = String(config.template ?? defaultOf(def, "template") ?? "");
-      const tags = templateTags(def, tpl).length;
-      return `template · ${tags} tag${tags === 1 ? "" : "s"}`;
+    return value === null || value === undefined ? "" : String(value);
+  });
+}
+
+function applyFilter(def: NodeDef, filter: string, arg: string | undefined, value: unknown, fallback: unknown): unknown {
+  switch (filter) {
+    case "clip":
+      return preview(value, Number(arg) || 22);
+    case "or":
+      return value === null || value === undefined || String(value) === "" ? arg ?? "" : value;
+    case "bool":
+      return value ? "true" : "false";
+    case "model":
+      // an empty pick reads as the model the node runs by default
+      return modelSubline(String(value || fallback || ""));
+    case "tags": {
+      const n = templateTags(def, String(value ?? "")).length;
+      return `${n} tag${n === 1 ? "" : "s"}`;
     }
-    case "core.data.compute":
-      return `compute · ${preview(config.expression ?? "value", 14)}`;
-    case "core.logic.condition":
-      return `route · ${preview(config.expression ?? "value", 14)}`;
-    case "core.store.memory":
-      return "memory · recall";
-    case "core.store.state":
-      return "state · held";
-    case "core.output.log":
-      return `log · ${preview(config.label ?? "log", 14)}`;
-    case "core.output.preview":
-      return "preview · live tap";
-    case "core.output.deliver":
-      return `deliver · ${preview(config.channel ?? "default", 12)}`;
     default:
-      return def.category.toLowerCase();
+      return value;
   }
+}
+
+/** The fields a node's subline names, in order: the config that identifies it. */
+export function sublineFields(def: NodeDef): string[] {
+  return [...(def.subline ?? "").matchAll(PLACEHOLDER)].map((m) => m[1]);
 }
 
 /** A model id as a subline: `xai/tts` -> `xai · tts`, a bare id -> `model · id`. */
@@ -116,18 +127,11 @@ export interface BodySummary {
  */
 export function bodySummary(def: NodeDef, config: Record<string, unknown>): BodySummary[] {
   const rows: BodySummary[] = [];
-  // Prefer the widgets that carry the node's identity.
-  const priority: Record<string, string[]> = {
-    "core.data.template": ["template"],
-    "core.data.compute": ["expression"],
-    "core.logic.condition": ["expression"],
-    "core.value.text": ["text"],
-    "core.store.state": ["initial"],
-  };
-  const names = priority[def.id] ?? [];
-  for (const name of names) {
+  // the node's identity text: the code fields its subline names (a Text's text,
+  // a Compute's expression), read from the declaration, never a per-id list.
+  for (const name of sublineFields(def)) {
     const w = def.widgets.find((x) => x.name === name);
-    if (!w) continue;
+    if (!w || w.kind !== "code" || rows.some((r) => r.key === (w.label || name))) continue;
     const raw = name in config ? config[name] : w.default;
     const val = preview(raw, 28);
     if (val !== "") rows.push({ key: w.label || name, value: val });

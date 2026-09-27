@@ -6,7 +6,7 @@
 import { useMemo, useState, type CSSProperties } from "react";
 import type { NodeDef } from "../types/protocol";
 import type { NodePreset } from "../lib/presets";
-import { Icon } from "../lib/icons";
+import { Icon, hasIcon } from "../lib/icons";
 import {
   GROUP_ORDER,
   groupColorVar,
@@ -193,7 +193,7 @@ export function NodeLibrary({ defs, presets, loading, error, onAdd, onAddPreset,
                           } as CSSProperties
                         }
                       >
-                        <Icon name={nodeIcon(def)} style={{ color: fc } as CSSProperties} />
+                        <Icon name={nodeIcon(def, hasIcon)} style={{ color: fc } as CSSProperties} />
                       </div>
                       <div className="li-text">
                         <div className="li-name">{highlight(def.name, query)}</div>

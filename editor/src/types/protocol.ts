@@ -5,7 +5,7 @@
 // the client; Vite proxies /api and /ws.
 // ============================================================================
 
-/** A node kind. Drives the header colour + identity glyph (see lib/kinds.ts). */
+/** A node kind. Drives the header colour and the fallback identity glyph (lib/kinds.ts). */
 export type NodeKind =
   | "value"
   | "trigger"
@@ -109,6 +109,11 @@ export interface NodeDef {
   /** passthrough shape {inputPort: outputPort}: when disabled, the runtime wires
    *  through (source of inputPort -> consumers of outputPort) instead of cutting. */
   bypass?: Record<string, string>;
+  /** the Ionicons name the node declares for itself; empty: its kind glyph. */
+  icon?: string;
+  /** the header subline template: text with {field|filter} placeholders
+   *  (lib/nodeMeta renderSubline); empty: the category in lower case. */
+  subline?: string;
 }
 
 /** GET /api/object_info payload. */

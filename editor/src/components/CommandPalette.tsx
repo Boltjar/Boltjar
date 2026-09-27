@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { NodeDef } from "../types/protocol";
 import type { WFNode } from "../lib/graphAdapter";
-import { Icon } from "../lib/icons";
+import { Icon, hasIcon } from "../lib/icons";
 import { libraryGroup, nodeIcon } from "../lib/kinds";
 import { capabilityHint } from "../lib/nodeMeta";
 import { PALETTE_GROUPS, inGroupOrder, type PaletteGroup } from "../lib/paletteGroups";
@@ -80,7 +80,7 @@ export function CommandPalette(props: CommandPaletteProps) {
       .map((d) => ({
         key: `add:${d.id}`,
         group: "Add node",
-        icon: nodeIcon(d),
+        icon: nodeIcon(d, hasIcon),
         label: d.name,
         hint: `${libraryGroup(d).toLowerCase()} · ${capabilityHint(d)}`,
         run: () => {
@@ -112,7 +112,7 @@ export function CommandPalette(props: CommandPaletteProps) {
         return {
           key: `go:${n.id}`,
           group: "Go to node",
-          icon: def ? nodeIcon(def) : "cube-outline",
+          icon: def ? nodeIcon(def, hasIcon) : "cube-outline",
           label: n.id,
           hint: `#${n.id} · ${def ? libraryGroup(def).toLowerCase() : "node"}`,
           kbd: "↵",
