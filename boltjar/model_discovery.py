@@ -871,6 +871,25 @@ def closest(model_id: str, kind: str, rows: list[Entry] | None = None) -> str | 
     return min(candidates, key=score).manifest.id if candidates else None
 
 
+# How the Problems panel names a model family: one model, then the family.
+_FAMILY_WORDS = {
+    "llm": ("an LLM", "LLMs"),
+    "embed": ("an embedding model", "embedding models"),
+    "tts": ("a TTS model", "TTS models"),
+    "stt": ("an STT model", "STT models"),
+    "rerank": ("a rerank model", "rerank models"),
+}
+
+
+def _family_words(kind: str) -> tuple[str, str]:
+    """("an LLM", "LLMs") for "llm"; a family nothing here names (a pack's own)
+    reads "a <kind> model" with the article its first letter takes."""
+    if kind in _FAMILY_WORDS:
+        return _FAMILY_WORDS[kind]
+    article = "an" if kind[:1].lower() in "aeiou" else "a"
+    return f"{article} {kind} model", f"{kind} models"
+
+
 def model_problem(model_id: str, kind: str, snap: Snapshot | None = None) -> str | None:
     """Why a saved graph cannot run `model_id` on a node that takes `kind` models:
     the model vanished (no manifest names it and no provider lists it, or its
@@ -882,7 +901,8 @@ def model_problem(model_id: str, kind: str, snap: Snapshot | None = None) -> str
     snap = snap or Snapshot.now()
     entry = _lookup(model_id, snap.rows)
     if entry is not None and entry.manifest.kind != kind:
-        return f"model {model_id} is a {entry.manifest.kind} model; this node takes {kind} models"
+        return (f"model {model_id} is {_family_words(entry.manifest.kind)[0]}; "
+                f"this node takes {_family_words(kind)[1]}")
     if entry is not None and not entry.unlisted:
         return None
     provider = model_id.split("/", 1)[0] if "/" in model_id else ""
@@ -896,7 +916,7 @@ def model_problem(model_id: str, kind: str, snap: Snapshot | None = None) -> str
         why = "not in the model list" + (f" ({reason})" if not ok and reason else "")
     nearest = closest(model_id, kind, snap.rows)
     hint = (f"closest available: {nearest}" if nearest
-            else f"pick another model, or connect a {kind} model in Connections")
+            else f"pick another model, or connect {_family_words(kind)[0]} in Connections")
     return f"model {model_id} is {why}; {hint}"
 
 

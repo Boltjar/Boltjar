@@ -809,12 +809,20 @@ def test_a_manifest_its_provider_dropped_suggests_the_same_family(fresh, vendor_
 def test_an_unknown_model_with_nothing_available_says_what_to_do(fresh):
     [problem] = _model_problems(_llm_graph("acme/gone"))
     assert problem["message"] == ("model acme/gone is not in the model list; pick another "
-                                  "model, or connect a llm model in Connections")
+                                  "model, or connect an LLM in Connections")
+    [problem] = _model_problems(_llm_graph("acme/gone", "core.ai.stt"))
+    assert problem["message"].endswith("connect an STT model in Connections")
 
 
-def test_a_model_of_another_family_is_named(fresh):
+def test_a_model_of_another_family_is_named(fresh, vendor_http):
     [problem] = _model_problems(_llm_graph("ollama/gemma4:e4b", "core.ai.tts"))
-    assert problem["message"] == "model ollama/gemma4:e4b is a llm model; this node takes tts models"
+    assert problem["message"] == "model ollama/gemma4:e4b is an LLM; this node takes TTS models"
+    vendor_http.reply = vendors()
+    refresh()
+    [problem] = _model_problems(_llm_graph("ollama/nomic-embed-text:latest"))
+    assert problem["message"] == ("model ollama/nomic-embed-text:latest is an embedding model; "
+                                  "this node takes LLMs")
+    assert md._family_words("image") == ("an image model", "image models")
 
 
 def _pulled(*names: str) -> dict:
