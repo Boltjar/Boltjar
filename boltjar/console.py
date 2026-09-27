@@ -476,9 +476,10 @@ class Console:
 
     # ------------------------------------------------ the banner
     def banner(self, version: str, rows: Sequence[Row]) -> None:
-        """The flask, `Boltjar` in big letters, the version with the tagline and
-        the boot checklist, side by side. A window too narrow for the flask
-        drops it; one too narrow for the letters gets a single line instead."""
+        """The flask and the `Boltjar` wordmark (both braille), the version with
+        the tagline and the boot checklist, side by side. A window too narrow for
+        the flask drops it; one too narrow for the word, or a terminal without
+        the unicode set, gets a single line instead."""
         for line in self.banner_lines(version, rows):
             self.write(line)
 
@@ -489,12 +490,13 @@ class Console:
         need = max(max(map(len, banner_art.WORD)), visible_len(heading))
         flask_width = max(map(len, banner_art.FLASK))
         room = width - 2 - flask_width - ART_GAP
+        art = self.caps.unicode  # the flask and the word are drawn in braille
         # the flask is decoration: it steps aside before a link or a command
         # beside it would have to break
-        if room >= need and _longest_word(rows) <= room - 2 - LABEL_WIDTH:
+        if art and room >= need and _longest_word(rows) <= room - 2 - LABEL_WIDTH:
             right = self._word() + ["", heading, ""] + self._checklist(rows, room)
             return ["", *self._beside(s.art(banner_art.FLASK, banner_art.FLASK_RGB), right), ""]
-        if width >= 2 + need:
+        if art and width >= 2 + need:
             lines = self._word() + ["", heading, ""]
         else:
             name = f"{s('Boltjar', bold=True)} {s(f'v{version}', 'soft', bold=True)}"

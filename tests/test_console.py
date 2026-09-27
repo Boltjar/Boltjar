@@ -288,6 +288,13 @@ def test_a_window_too_narrow_for_the_flask_keeps_the_word_and_the_checklist():
     assert "  ✓ Editor     bundle ready" in lines
 
 
+def test_a_terminal_without_braille_gets_the_name_on_one_line():
+    lines = banner(120, caps=Caps(unicode=False))
+    assert not any(banner_art.FLASK[5].strip() in line or banner_art.WORD[2].strip() in line for line in lines)
+    assert "  Boltjar v0.1.0  Catch the spark. Keep it running." in lines
+    assert "  + Editor     bundle ready" in lines
+
+
 def test_a_window_narrower_still_gets_one_plain_line():
     lines = banner(40)
     assert not any(banner_art.WORD[3] in line for line in lines)
