@@ -36,7 +36,7 @@ OPENAI_KEY = "OPENAI_API_KEY"
 # a name is the provider id its models carry (<name>/<model>), so it is short,
 # lowercase and never one a built-in provider or the model picker already uses.
 _NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}$")
-RESERVED = frozenset(_secrets.PROVIDERS) | {"mock", "auto", "rerank"}
+RESERVED = frozenset(_secrets.PROVIDERS) | {"mock", "rerank"}
 # the secrets that hold a built-in provider's key (XAI_API_KEY, OPENAI_API_KEY...).
 BUILTIN_KEYS = frozenset(v for v in _secrets.PROVIDERS.values() if v)
 

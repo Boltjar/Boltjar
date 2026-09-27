@@ -27,7 +27,7 @@ function moduleUrl(file) {
   }
   return urls.get(file);
 }
-const { serializeGraph, GRAPH_FORMAT } = await import(moduleUrl(resolve(here, "../src/lib/graphAdapter.ts")));
+const { serializeGraph, migrateGraph, GRAPH_FORMAT } = await import(moduleUrl(resolve(here, "../src/lib/graphAdapter.ts")));
 
 let failures = 0;
 function check(label, got, want) {
@@ -54,6 +54,31 @@ check("the rest of the graph is unchanged", { name: saved.name, nodes: saved.nod
   nodes: [{ id: "text", type: "core.value.text", config: { text: "hi" }, pos: [10, 21] }],
   edges: [{ src: "text", src_port: "out", dst: "log", dst_port: "in" }],
 });
+
+// ---- a draft from before format 2 (it never passed through the server)
+// loads the way the server migrates it: the "auto" model is gone, so a model
+// picker that held it holds none. A picked model stays exactly as saved.
+const draft = {
+  format: 1, name: "chat",
+  nodes: [
+    { id: "llm", type: "core.ai.llm", config: { model: "auto", promoted: [] }, pos: [0, 0] },
+    { id: "tts", type: "core.ai.tts", config: { model: "fish/s2", params: { voice: "v" } }, pos: [1, 1] },
+    { id: "http", type: "core.net.http", config: { response_type: "auto" }, pos: [2, 2] },
+  ],
+  edges: [],
+};
+const before = JSON.stringify(draft);
+const migrated = migrateGraph(draft);
+check("the format 1 draft changed", migrated.changed, true);
+check("it is in the current format", migrated.graph.format, GRAPH_FORMAT);
+check("the LLM on auto holds no model", migrated.graph.nodes[0].config, { promoted: [] });
+check("a picked model stays as saved", migrated.graph.nodes[1].config, { model: "fish/s2", params: { voice: "v" } });
+check("an auto that is no model stays", migrated.graph.nodes[2].config, { response_type: "auto" });
+check("the draft itself is not mutated", JSON.stringify(draft), before);
+const current = { format: GRAPH_FORMAT, name: "x", nodes: [{ id: "llm", type: "core.ai.llm", config: { model: "auto" }, pos: [0, 0] }], edges: [] };
+check("a current graph comes back as is", migrateGraph(current).graph === current && !migrateGraph(current).changed, true);
+check("a graph with no format migrates like format 0",
+  migrateGraph({ name: "old", nodes: [{ id: "a", type: "core.ai.llm", config: { model: "auto" }, pos: [0, 0] }], edges: [] }).graph.nodes[0].config, {});
 
 if (failures) {
   console.error(`\n${failures} check(s) failed`);

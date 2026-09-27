@@ -5,7 +5,8 @@ with the response shapes the real endpoints return (checked live 2026-09-27):
 Ollama GET /api/tags + POST /api/show, xAI GET /v1/language-models, Anthropic
 GET /v1/models, and an OpenAI-compatible GET <base>/models. Covers the mapping
 onto the manifest shape, the merge with the TOML manifests, the cache and its
-offline fallback, the "auto" model, and the validation of a vanished model.
+offline fallback, that the list never names a model to run on its own, and the
+validation of a vanished model.
 """
 from __future__ import annotations
 
@@ -19,6 +20,7 @@ import pytest
 import boltjar.nodes.core  # noqa: F401  (registers nodes + loads manifests)
 import boltjar.secrets as secrets
 from boltjar import endpoints, model_discovery as md, models
+from boltjar.graph_format import CURRENT_FORMAT
 from boltjar.runtime import Runtime
 from local_client import local_client
 
@@ -391,7 +393,6 @@ def test_no_provider_answering_never_breaks_the_list(fresh, vendor_http):
     assert by_id["ollama/gemma4:e4b"]["available"] is False
     assert by_id["ollama/gemma4:e4b"]["reason"] == "Ollama is not running"
     assert body["providers"]["ollama"]["ok"] is False and body["updated"] is None
-    assert body["auto"] is None
 
 
 def test_each_failure_says_what_kind_it_was(fresh, vendor_http, monkeypatch):
@@ -720,91 +721,34 @@ def test_the_llm_node_calls_openai_and_custom_endpoints(fresh, vendor_http, monk
     assert str(vendor_http.last.url) == "http://localhost:1234/v1/chat/completions"
 
 
-# ----------------------------------------------------------------- auto
+# ----------------------------------------------------- nothing chosen for you
 
-def test_auto_runs_the_first_installed_ollama_chat_model(fresh, vendor_http, monkeypatch):
+def test_the_list_never_names_a_model_to_run(fresh, vendor_http, monkeypatch):
+    # a model can cost money: with Ollama up and a key set, the list still only
+    # lists; only a person picks the model a node runs.
     monkeypatch.setenv("XAI_API_KEY", "test-xai-key")
     vendor_http.reply = vendors(xai=XAI_MODELS)
     refresh()
-    # curated first: the installed model a manifest describes.
-    assert md.resolve_auto().id == "ollama/gemma4:e4b"
-    assert md.payload()["auto"] == "ollama/gemma4:e4b"
+    body = client.get("/api/models").json()
+    assert set(body) == {"models", "updated", "refreshing", "providers"}
+    assert not hasattr(md, "resolve_auto") and not hasattr(md, "AUTO")
+
+
+def test_an_llm_holding_auto_is_never_resolved(fresh, vendor_http, monkeypatch):
+    # "auto" (the value format 1 had) loads as none picked (boltjar.graph_format);
+    # one that still reaches the node is no model id, so no provider is called.
+    monkeypatch.setenv("XAI_API_KEY", "test-xai-key")
+    vendor_http.reply = vendors(xai=XAI_MODELS, chat=COMPLETION)
+    refresh()
+    asked = len(vendor_http.requests)
     out = _run_llm("auto")
-    assert out["response"] == "from ollama"
-    generate = [r for r in vendor_http.requests if r.url.path == "/api/generate"][-1]
-    assert json.loads(generate.content)["model"] == "gemma4:e4b"
-
-
-def test_auto_without_ollama_uses_a_provider_with_a_key(fresh, vendor_http, monkeypatch):
-    monkeypatch.setenv("XAI_API_KEY", "test-xai-key")
-    vendor_http.reply = vendors(ollama=False, xai=XAI_MODELS, chat=COMPLETION)
-    refresh()
-    assert md.resolve_auto().id == "xai/grok-4.20"
-    assert _run_llm("auto")["response"] == "Hello!"
-    call = [r for r in vendor_http.requests if r.url.path.endswith("/chat/completions")][-1]
-    assert str(call.url) == "https://api.x.ai/v1/chat/completions"
-    assert json.loads(call.content)["model"] == "grok-4.20-0309-non-reasoning"
-
-
-def test_auto_skips_an_ollama_that_stopped_answering(fresh, vendor_http, monkeypatch):
-    vendor_http.reply = vendors()
-    refresh()
-    vendor_http.reply = vendors(ollama=False)
-    refresh()
-    assert md.resolve_auto() is None, "the cached Ollama list is shown, not run"
-
-
-def test_auto_with_nothing_connected_says_how_to_connect(fresh, vendor_http):
-    vendor_http.reply = vendors(ollama=False)
-    refresh()
-    out = _run_llm("auto")
-    assert out["response"] == md.AUTO_MOCK_REPLY
-    assert "open Settings (the gear)" in md.AUTO_MOCK_REPLY and md.AUTO_MOCK_REPLY.count(".") == 1
-    assert "trigger" in out, "the mock reply still completes the node"
-
-
-def _openai_list(*ids: str) -> dict:
-    return {"object": "list", "data": [{"id": i, "object": "model"} for i in ids]}
-
-
-def test_auto_never_picks_a_model_chat_completions_refuses(fresh, vendor_http, monkeypatch):
-    monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
-    # api.openai.com answers in no useful order; the first row is completions only.
-    vendor_http.reply = vendors(ollama=False, openai=_openai_list(
-        "gpt-3.5-turbo-instruct", "o1-pro", "gpt-6-luna", "gpt-4o"))
-    refresh()
-    assert md.payload()["auto"] == "openai/gpt-4o", "a curated model before a bare listed one"
-    # with no curated model listed, a listed chat model still serves.
-    vendor_http.reply = vendors(ollama=False, openai=_openai_list("gpt-3.5-turbo-instruct", "o3"))
-    refresh()
-    assert md.payload()["auto"] == "openai/o3"
-
-
-def test_auto_prefers_a_curated_model_over_an_earlier_listed_one(fresh, vendor_http, monkeypatch):
-    monkeypatch.setenv("XAI_API_KEY", "test-xai-key")
-    monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
-    only_new = {"models": [m for m in XAI_MODELS["models"] if m["id"] == "grok-4.7"]}
-    vendor_http.reply = vendors(ollama=False, xai=only_new, openai=_openai_list("gpt-4o"))
-    refresh()
-    # xAI ranks first, but grok-4.7 has no manifest: a bare listing waits.
-    assert md.resolve_auto().id == "openai/gpt-4o"
-
-
-def test_auto_skips_a_provider_that_did_not_answer(fresh, vendor_http, monkeypatch):
-    endpoints.save("lmstudio", "http://localhost:1234")
-    vendor_http.reply = vendors(ollama=False, endpoints_={"http://localhost:1234/v1": LMSTUDIO_MODELS})
-    refresh()
-    assert md.resolve_auto().id == "lmstudio/qwen2.5-7b-instruct"
-    # LM Studio stopped: its cached list stays in the picker, auto no longer runs it.
-    vendor_http.reply = vendors(ollama=False)
-    refresh()
-    assert md.payload()["providers"]["lmstudio"]["ok"] is False
-    assert md.resolve_auto() is None
-    # a key the provider refused is skipped the same way.
-    monkeypatch.setenv("XAI_API_KEY", "test-xai-key")
-    vendor_http.reply = vendors(ollama=False, xai=lambda r: httpx.Response(401, text="bad key"))
-    refresh()
-    assert md.resolve_auto() is None
+    assert out["response"].startswith("[mock]")
+    assert vendor_http.requests[asked:] == [], "no model ran"
+    # an older graph loads it as none picked; in a current one it is a model
+    # nothing lists, and validation names it like any other.
+    assert _model_problems(_llm_graph("auto")) == []
+    [problem] = _model_problems({"format": CURRENT_FORMAT, **_llm_graph("auto")})
+    assert problem["message"].startswith("model auto is not in the model list")
 
 
 # -------------------------------------------------------- vanished models
@@ -925,7 +869,7 @@ def test_a_model_of_another_family_is_not_rechecked(fresh, vendor_http):
 def test_models_that_can_run_raise_no_problem(fresh, vendor_http):
     vendor_http.reply = vendors()
     refresh()
-    for model in ("", "auto", "mock/echo", "ollama/gemma4:e4b", "ollama/llama3.2:latest",
+    for model in ("", "mock/echo", "ollama/gemma4:e4b", "ollama/llama3.2:latest",
                   "ollama/llama3.2"):
         assert _model_problems(_llm_graph(model)) == [], model
     # a manifest whose provider has never answered is not called vanished.

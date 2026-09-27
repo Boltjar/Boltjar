@@ -162,7 +162,9 @@ async def list_models() -> dict:
     """List every model: the declared manifests plus what each connected provider
     lists now, with capabilities, params, `source` and `available` (the catalog
     the LLM node reshapes itself to). Use to pick a valid `model` id for a
-    `core.ai.llm` node's config: an available one, or "auto"."""
+    model node's config: an available one of the node's family. Leave it out
+    only on an LLM, which then answers with the free offline mock; any other
+    model node needs one picked before its graph turns On."""
     return await _get("/api/models")
 
 

@@ -115,3 +115,35 @@ def test_a_picked_model_is_saved_and_loaded_exactly_as_picked(dirs):
     assert client.put("/api/graphs/pick", json=graph).json()["ok"]
     loaded = client.get("/api/graphs/pick").json()
     assert next(n for n in loaded["nodes"] if n["id"] == "m")["config"] == config
+
+
+# --------------------------------------------------------------- the old "auto"
+
+def test_a_saved_auto_model_turns_on_as_none_picked(vendor_http):
+    # format 1 had an "auto" model that ran whatever could run. It loads as no
+    # model picked: the LLM answers with the mock and no provider is called.
+    graph = {"format": 1, **_graph("core.ai.llm", {"model": "auto"})}
+    graph["nodes"] += [{"id": "text", "type": "core.value.text", "config": {"text": "hello"}},
+                       {"id": "log", "type": "core.output.log"}]
+    graph["edges"] += [{"src": "text", "src_port": "out", "dst": "m", "dst_port": "prompt"},
+                       {"src": "m", "src_port": "response", "dst": "log", "dst_port": "in"}]
+    hub = server.Hub()
+    queue: asyncio.Queue = asyncio.Queue()
+    hub.subscribers.add(queue)
+
+    async def drive() -> list[dict]:
+        assert await hub.power_on(graph) is None
+        assert "model" not in next(n for n in hub.graph["nodes"] if n["id"] == "m")["config"]
+        seen: list[dict] = []
+        for _ in range(60):
+            await asyncio.sleep(0.05)
+            while not queue.empty():
+                seen.append(queue.get_nowait())
+            if any(e["kind"] == "log" for e in seen):
+                break
+        await hub.power_off()
+        return seen
+
+    seen = asyncio.run(drive())
+    assert "[mock] hello" in [e["message"] for e in seen if e["kind"] == "log"][0]
+    assert vendor_http.requests == []

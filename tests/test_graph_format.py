@@ -106,6 +106,46 @@ def test_every_format_below_the_current_one_has_a_step():
     assert sorted(graph_format._STEPS) == list(range(CURRENT_FORMAT))
 
 
+# a format 1 graph: an LLM on "auto" (gone in format 2), one with a model picked,
+# a TTS with a voice picked, and an HTTP node whose own "auto" is not a model.
+FORMAT_1 = {
+    "format": 1, "name": "fmt1",
+    "nodes": [
+        {"id": "auto", "type": "core.ai.llm", "config": {"model": "auto", "promoted": []}},
+        {"id": "picked", "type": "core.ai.llm",
+         "config": {"model": "xai/grok-4.20", "params": {"temperature": 0.6}}},
+        {"id": "voice", "type": "core.ai.tts", "config": {"model": "fish/s2", "params": {"voice": "v"}}},
+        {"id": "http", "type": "core.net.http", "config": {"response_type": "auto"}},
+    ],
+    "edges": [],
+}
+
+
+def test_format_2_loads_an_auto_model_as_none_picked():
+    out = migrate(FORMAT_1)
+    assert out["format"] == CURRENT_FORMAT == 2
+    configs = {n["id"]: n["config"] for n in out["nodes"]}
+    assert configs["auto"] == {"promoted": []}, "no model picked, never resolved"
+    assert configs["picked"] == FORMAT_1["nodes"][1]["config"], "a picked model stays as saved"
+    assert configs["voice"] == FORMAT_1["nodes"][2]["config"]
+    assert configs["http"] == {"response_type": "auto"}, "only a model picker's auto is dropped"
+    assert FORMAT_1["nodes"][0]["config"]["model"] == "auto"  # the input is never modified
+
+
+def test_format_2_step_survives_nodes_without_a_config():
+    graph = {"format": 1, "nodes": [{"id": "a", "type": "core.trigger.manual"},
+                                    {"id": "b", "type": "core.ai.llm", "config": None}], "edges": []}
+    assert migrate(graph)["nodes"] == graph["nodes"]
+
+
+def test_a_saved_auto_model_opens_as_none_picked(dirs):
+    user, _ = dirs
+    _write(user, "fmt1", FORMAT_1)
+    served = client.get("/api/graphs/fmt1").json()
+    assert "model" not in next(n for n in served["nodes"] if n["id"] == "auto")["config"]
+    assert next(n for n in served["nodes"] if n["id"] == "picked")["config"]["model"] == "xai/grok-4.20"
+
+
 # --------------------------------------------------------------- the server
 
 def test_loading_an_unstamped_graph_returns_the_current_format(dirs):

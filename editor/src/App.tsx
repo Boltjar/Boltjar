@@ -16,7 +16,7 @@ import { useTabsStatus } from "./hooks/useTabsStatus";
 import { useGraph } from "./hooks/useGraph";
 import { useVersion } from "./hooks/useVersion";
 import { EditorProvider, type InboundWire } from "./lib/editorContext";
-import { outputType, DATABASE_ID, KV_STORE_ID } from "./lib/graphAdapter";
+import { migrateGraph, outputType, DATABASE_ID, KV_STORE_ID } from "./lib/graphAdapter";
 import { WIRELESS_IN_ID, WIRELESS_OUT_ID, ROUTER_ID, isGhostHandle, type WirelessChannelMap, type WirelessSocket } from "./lib/dynamicPorts";
 import { deadWireNotice, healDeadWires } from "./lib/deadWires";
 import { notifyStoreChanged } from "./lib/storeEvents";
@@ -279,15 +279,18 @@ export default function App() {
       lastFlowPos.current = { ...NEW_NODE_AT };
       setOpenedGraphs((n) => n + 1);
     };
-    // Every graph loads healed (lib/deadWires): a wire on a port its node no
-    // longer has is dropped before it reaches the canvas, each removal is
-    // reported on the console, and the draft autosave below persists the clean
-    // graph. A node whose definition or model manifest is unknown is not judged.
+    // Every graph loads in the current format (lib/graphAdapter migrateGraph: a
+    // draft from before it never passed through the server) and healed
+    // (lib/deadWires): a wire on a port its node no longer has is dropped
+    // before it reaches the canvas, each removal is reported on the console,
+    // and the draft autosave below persists the clean graph. A node whose
+    // definition or model manifest is unknown is not judged.
     const loadHealed = (g: Graph) => {
-      const { graph: clean, removed } = healDeadWires(g, defs, models);
+      const { graph: current, changed } = migrateGraph(g);
+      const { graph: clean, removed } = healDeadWires(current, defs, models);
       // a healed graph differs from the saved file, so it arrives unsaved: the
       // primary button offers Save, and On never runs the file's dead wire.
-      show(clean, { dirty: removed.length > 0 });
+      show(clean, { dirty: changed || removed.length > 0 });
       for (const w of removed) socket.notice(deadWireNotice(w), "warn");
     };
     (async () => {

@@ -162,7 +162,31 @@ export function projectGraph(
 /** The graph format this editor writes: the shape serializeGraph produces. It
  *  equals the server's CURRENT_FORMAT (boltjar/graph_format.py, which a test
  *  checks), and the server migrates every graph it serves to that format. */
-export const GRAPH_FORMAT = 1;
+export const GRAPH_FORMAT = 2;
+
+/** The model value format 1 had for "run whatever model can run now". It is
+ *  gone: a model can cost money, so only a person picks one. */
+const FORMAT_1_AUTO = "auto";
+
+/**
+ * A graph the editor holds from before GRAPH_FORMAT (a localStorage draft never
+ * passes through the server) in the current format, the way the server's
+ * migrate (boltjar/graph_format.py) turns it: format 2 drops the "auto" model,
+ * so a model picker that held it holds none. `changed` says whether anything
+ * was dropped. A current graph comes back as is; the input is never mutated.
+ */
+export function migrateGraph(graph: Graph): { graph: Graph; changed: boolean } {
+  if ((graph.format ?? 0) >= GRAPH_FORMAT) return { graph, changed: false };
+  let changed = false;
+  const nodes = graph.nodes.map((n) => {
+    if (n.config?.model !== FORMAT_1_AUTO) return n;
+    changed = true;
+    const config = { ...n.config };
+    delete config.model;
+    return { ...n, config };
+  });
+  return { graph: { ...graph, format: GRAPH_FORMAT, nodes }, changed };
+}
 
 /** Reconstruct a backend Graph from the live React Flow state. */
 export function serializeGraph(

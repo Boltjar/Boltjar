@@ -78,12 +78,6 @@ XAI_MODELS_URL = "https://api.x.ai/v1/language-models"
 ANTHROPIC_MODELS_URL = "https://api.anthropic.com/v1/models"
 ANTHROPIC_VERSION = "2023-06-01"
 
-# The LLM model value that picks a runnable model at run time (resolve_auto).
-AUTO = "auto"
-# What an "auto" LLM replies with while nothing runnable is connected.
-AUTO_MOCK_REPLY = ("No model is connected yet: open Settings (the gear) to add a provider key "
-                   "or install an Ollama model, and this node will use it.")
-
 # the manifest kinds each provider's list covers: a manifest of another kind (xAI
 # TTS, for one) is never marked unavailable because a chat list lacks it.
 _LISTED_KINDS = {"ollama": frozenset({"llm", "embed"})}
@@ -707,7 +701,7 @@ async def confirm_missing(refs: list[tuple[str, str]]) -> None:
     snap = Snapshot.now()
     ask: set[str] = set()
     for model_id, kind in refs:
-        if not model_id or model_id == AUTO or model_id.startswith("mock/"):
+        if not model_id or model_id.startswith("mock/"):
             continue
         entry = _lookup(model_id, snap.rows)
         if entry is not None and (entry.manifest.kind != kind or not entry.unlisted):
@@ -758,14 +752,6 @@ class View:
         _secrets.ensure_loaded()
         listed = endpoints.list_endpoints()
         return cls({e.name: e for e in listed}, tuple(_discoverers(listed)))
-
-    def has_key(self, provider: str) -> bool:
-        """A cloud provider whose key exists, or a usable OpenAI-compatible endpoint."""
-        env = _secrets.PROVIDERS.get(provider)
-        if env:
-            return bool(_secrets.get_secret(env))
-        endpoint = self.custom.get(provider)
-        return endpoint is not None and endpoint.ready()
 
     def rank(self, provider: str) -> tuple[int, str]:
         order = list(_secrets.PROVIDERS)
@@ -884,44 +870,6 @@ def catalog(rows: list[Entry] | None = None) -> list[dict]:
     return out
 
 
-def _chat(manifest: ModelManifest) -> bool:
-    return manifest.kind == "llm" and "text" in manifest.outputs
-
-
-def _answering(provider: str, view: View) -> bool:
-    """Whether "auto" may run a model of `provider` now: a provider discovery
-    asks must have answered the last time it was asked (a local server that is
-    down, or a key that was refused, is skipped); one it never asks (a pack's
-    own) needs its key."""
-    listing = _state.get(provider)
-    if provider in view.usable and listing is not None:
-        return listing.ok
-    return view.has_key(provider)
-
-
-def resolve_auto(snap: Snapshot | None = None) -> ModelManifest | None:
-    """What an "auto" LLM runs: the first installed Ollama chat model when Ollama
-    answered the last time it was asked; else, among the other providers that
-    answered, the first curated chat model (a manifest describes it) and only
-    then the first model a provider merely lists, since a bare list says nothing
-    about price or fitness and some lists (OpenRouter's) run to hundreds; else
-    None (the node replies with AUTO_MOCK_REPLY)."""
-    snap = snap or Snapshot.now()
-    ollama = _state.get("ollama")
-    if ollama is not None and ollama.ok:
-        for entry in snap.rows:
-            if entry.manifest.provider == "ollama" and entry.installed and _chat(entry.manifest):
-                return entry.manifest
-    runnable = [e for e in snap.rows
-                if e.manifest.provider != "ollama" and e.available and _chat(e.manifest)
-                and _answering(e.manifest.provider, snap.view)]
-    for curated in (True, False):
-        for entry in runnable:
-            if (entry.source != "discovered") == curated:
-                return entry.manifest
-    return None
-
-
 def _lookup(model_id: str, rows: list[Entry]) -> Entry | None:
     target = models.ALIASES.get(model_id, model_id)
     return next((e for e in rows if e.manifest.id == target), None)
@@ -978,9 +926,9 @@ def model_problem(model_id: str, kind: str, snap: Snapshot | None = None) -> str
     """Why a saved graph cannot run `model_id` on a node that takes `kind` models:
     the model vanished (no manifest names it and no provider lists it, or its
     provider's list no longer has it) or it is another kind of model. None when
-    it can run, or when it is empty, "auto" or the offline mock. A caller that
-    checks several models passes one Snapshot."""
-    if not model_id or model_id == AUTO or model_id.startswith("mock/"):
+    it can run, or when it is empty (nothing picked) or the offline mock. A
+    caller that checks several models passes one Snapshot."""
+    if not model_id or model_id.startswith("mock/"):
         return None
     snap = snap or Snapshot.now()
     entry = _lookup(model_id, snap.rows)
@@ -1006,9 +954,9 @@ def model_problem(model_id: str, kind: str, snap: Snapshot | None = None) -> str
 
 
 def payload() -> dict:
-    """GET /api/models: the merged list, what "auto" resolves to (None = the
-    mock), each asked provider's last answer, and whether a refresh is running.
-    Times are ISO 8601 UTC."""
+    """GET /api/models: the merged list, each asked provider's last answer, and
+    whether a refresh is running. Times are ISO 8601 UTC. It never names a model
+    to run: a model can cost money, so only a person picks one."""
     snap = Snapshot.now()
     providers = {}
     for name in snap.view.usable:
@@ -1019,6 +967,5 @@ def payload() -> dict:
                            "updated": listing.updated, "error": listing.error,
                            "failure": listing.failure, "count": len(listing.models)}
     updated = max((p["updated"] for p in providers.values() if p["updated"]), default=None)
-    auto = resolve_auto(snap)
-    return {"models": catalog(snap.rows), "auto": auto.id if auto else None,
-            "updated": updated, "refreshing": refreshing(), "providers": providers}
+    return {"models": catalog(snap.rows), "updated": updated, "refreshing": refreshing(),
+            "providers": providers}

@@ -1050,8 +1050,8 @@ def object_info() -> dict:
 async def list_models() -> dict:
     """The live model list: every manifest and every model a usable provider
     lists, each with `source` (manifest, discovered, both) and `available` (plus
-    `reason` when not); `auto` is the model an "auto" LLM runs now (null: the
-    mock); `updated` is the newest successful refresh (ISO 8601 UTC); `providers`
+    `reason` when not); `updated` is the newest successful refresh (ISO 8601
+    UTC); `providers`
     is each asked provider's last answer. A stale list (Ollama's after 30 s,
     another provider's after 3 h) is refreshed in the background, so this never
     waits on a provider; the editor reads it again while `refreshing`."""

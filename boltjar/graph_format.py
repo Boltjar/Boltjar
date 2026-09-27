@@ -17,7 +17,7 @@ from __future__ import annotations
 import copy
 from typing import Callable
 
-CURRENT_FORMAT = 1
+CURRENT_FORMAT = 2
 
 
 class GraphFormatError(ValueError):
@@ -30,9 +30,27 @@ def _from_0(graph: dict) -> dict:
     return graph
 
 
+# The model value format 1 had for "run whatever model can run now". It is gone:
+# a model can cost money, so only a person picks one.
+_AUTO = "auto"
+
+
+def _from_1(graph: dict) -> dict:
+    """Format 2 drops the "auto" model: a model picker that held it holds none,
+    which is what it loads as (the LLM answers with the offline mock, any other
+    model node waits for a model to be picked). "auto" was only ever the value
+    of a model picker, and every model picker Boltjar shipped is `model`."""
+    for node in graph.get("nodes") or []:
+        config = node.get("config") if isinstance(node, dict) else None
+        if isinstance(config, dict) and config.get("model") == _AUTO:
+            del config["model"]
+    return graph
+
+
 # the step that turns a graph of format N (the key) into format N + 1.
 _STEPS: dict[int, Callable[[dict], dict]] = {
     0: _from_0,
+    1: _from_1,
 }
 
 

@@ -1,5 +1,5 @@
 {
-  "format": 1,
+  "format": 2,
   "name": "demo",
   "nodes": [
     { "id": "Fire",          "type": "core.trigger.manual", "config": {}, "pos": [0, -20] },
