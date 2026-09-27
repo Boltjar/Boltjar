@@ -1806,9 +1806,9 @@ button{font-family:inherit;}
 .swf-row.open .swf-row-name{ color:var(--ink-bright); }
 .swf-row-open{
   font-family:var(--font-mono); font-size:var(--fs-micro); letter-spacing:var(--tr-mono);
-  color:var(--good); padding:2px 6px;
-  border:1px solid rgba(var(--good-rgb),0.30); border-radius:var(--radius-xs);
-  background:rgba(var(--good-rgb),0.08);
+  color:var(--accent); padding:2px 6px;
+  border:1px solid rgba(var(--accent-rgb),0.30); border-radius:var(--radius-xs);
+  background:rgba(var(--accent-rgb),0.08);
 }
 
 /* ============================================================================

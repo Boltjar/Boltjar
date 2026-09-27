@@ -3,7 +3,7 @@
    Single source of truth for the React editor. Import this file and consume the
    CSS custom properties; do not hard-code hex anywhere downstream.
 
-   Aesthetic: warm near-black shell, restrained ink, one calm teal accent.
+   Aesthetic: near-black shell, restrained ink, the Boltjar cyan as the one accent.
    Color comes from OBJECTS (nodes, wires, status pills), never from the shell.
    The base ramp carries zero chroma; warmth comes only from the slight yellow
    bias of the near-black steps.
@@ -53,16 +53,16 @@
   --ink-ghost: #5A5854;   /* disabled, watermark, placeholder grid labels         */
 
   /* ---------------------------------------------------------------------------
-     4. ACCENTS: calm, low-saturation signal palette.
-     --accent  : primary action / focus / live signal (calm teal)
-     --accent-2: secondary / structural highlight (antique brass)
+     4. ACCENTS: the Boltjar brand pair.
+     --accent  : primary action / focus / live signal (Primary Cyan)
+     --accent-2: secondary / structural highlight (Electric Blue)
      --------------------------------------------------------------------------- */
-  --accent:      #6EC6C0;   /* calm teal: primary action, focus, RUN-armed        */
-  --accent-2:    #CC785C;   /* antique brass: selection, links, secondary         */
-  --accent-rgb:    110, 198, 192;
-  --accent-2-rgb:  204, 120, 92;
-  --accent-dim:  #4E908C;   /* pressed / muted accent                              */
-  --accent-glow: rgba(110, 198, 192, 0.20);  /* focus ring / armed bloom           */
+  --accent:      #00E5FF;   /* Primary Cyan: primary action, focus, RUN-armed     */
+  --accent-2:    #3B82F6;   /* Electric Blue: selection, links, secondary         */
+  --accent-rgb:    0, 229, 255;
+  --accent-2-rgb:  59, 130, 246;
+  --accent-dim:  #00A7BD;   /* pressed / muted accent                              */
+  --accent-glow: rgba(0, 229, 255, 0.20);  /* focus ring / armed bloom           */
 
   /* ---------------------------------------------------------------------------
      5. SEMANTIC: status. Reused for node state, console levels, run-state.
