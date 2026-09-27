@@ -18,7 +18,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const js = ts.transpileModule(readFileSync(resolve(here, "../src/lib/serverGraph.ts"), "utf8"), {
   compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020, removeComments: true },
 }).outputText;
-const { fetchServerGraph, serverError, unreadableNotice } =
+const { fetchSavedSlugs, fetchServerGraph, serverError, unreadableNotice } =
   await import("data:text/javascript," + encodeURIComponent(js));
 
 let failures = 0;
@@ -87,6 +87,20 @@ check("an error body without a string `error` falls back to the status",
 
 check("the console line names the graph and the reason",
   unreadableNotice("future", NEWER), `did not open future: ${NEWER}`);
+
+// ---- the list of slugs the server has (New workflow and Clone mint around it)
+{
+  const { get, urls } = answering(json({ graphs: ["chat", "demo", "untitled"] }, 200));
+  const slugs = await fetchSavedSlugs(get);
+  check("the server's slugs read as a set", slugs ? [...slugs] : slugs, ["chat", "demo", "untitled"]);
+  check("they come from the list, never from a slug's own URL", urls, ["/api/graphs"]);
+}
+check("a list that cannot be read is null, so nothing is taken as free",
+  await fetchSavedSlugs(answering(new Response("Internal Server Error", { status: 500 })).get), null);
+check("no answer is null", await fetchSavedSlugs(answering(new TypeError("Failed to fetch")).get), null);
+check("an answer that is not a list is null", await fetchSavedSlugs(answering(json({ graphs: "chat" }, 200)).get), null);
+check("anything but a slug in the list is left out",
+  [...(await fetchSavedSlugs(answering(json({ graphs: ["chat", 7, null] }, 200)).get))], ["chat"]);
 
 if (failures) {
   console.error(`\n${failures} check(s) failed`);

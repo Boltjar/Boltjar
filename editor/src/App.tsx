@@ -16,12 +16,15 @@ import { useTabsStatus } from "./hooks/useTabsStatus";
 import { useGraph } from "./hooks/useGraph";
 import { useVersion } from "./hooks/useVersion";
 import { EditorProvider, type InboundWire } from "./lib/editorContext";
-import { outputType, DATABASE_ID, KV_STORE_ID, GRAPH_FORMAT } from "./lib/graphAdapter";
+import { outputType, DATABASE_ID, KV_STORE_ID } from "./lib/graphAdapter";
 import { WIRELESS_IN_ID, WIRELESS_OUT_ID, ROUTER_ID, isGhostHandle, type WirelessChannelMap, type WirelessSocket } from "./lib/dynamicPorts";
 import { deadWireNotice, healDeadWires } from "./lib/deadWires";
 import { notifyStoreChanged } from "./lib/storeEvents";
 import { changedStores, declarationSignature, ensureDeclaredStores, ensureNotices } from "./lib/storeSchema";
-import { fetchServerGraph, serverError, unreadableNotice } from "./lib/serverGraph";
+import { fetchSavedSlugs, fetchServerGraph, serverError, unreadableNotice } from "./lib/serverGraph";
+import {
+  freeSlug, graphSource, parseTabs, withTabClosed, withTabOpened, withTabRenamed, withTabSaved, type TabsState,
+} from "./lib/tabs";
 import { mod } from "./lib/platform";
 import { DOCS_URL, FEEDBACK_URL, SPONSOR_URL, bugReportUrl, copyText, diagnosticsText, openExternal, osName } from "./lib/help";
 import logoUrl from "./assets/boltjar-logo-dark.svg";
@@ -54,28 +57,30 @@ const BOOT_GRAPH = "chat";
 function draftKey(slug: string): string {
   return `boltjar:draft:${slug}:v2`;
 }
+/** Every slug with a working draft in localStorage. */
+function draftSlugs(): string[] {
+  const out: string[] = [];
+  try {
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith("boltjar:draft:") && k.endsWith(":v2")) {
+        out.push(k.slice("boltjar:draft:".length, -":v2".length));
+      }
+    }
+  } catch { /* storage unavailable */ }
+  return out;
+}
 /** Persists open/closed state and library mode for both rails. */
 const RAILS_KEY = "boltjar:ui:rails";
 /** Persists the open tabs (browser-like multi-workflow strip) + active slug. */
 const TABS_KEY = "boltjar:ui:tabs";
 
-interface TabsState {
-  open: string[];
-  active: string | null;
-}
-const DEFAULT_TABS: TabsState = { open: [BOOT_GRAPH], active: BOOT_GRAPH };
+const DEFAULT_TABS: TabsState = { open: [BOOT_GRAPH], active: BOOT_GRAPH, unsaved: [] };
 
 function readTabs(): TabsState {
-  try {
-    const raw = localStorage.getItem(TABS_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as Partial<TabsState>;
-      const open = Array.isArray(parsed.open) ? parsed.open.filter((s) => typeof s === "string" && s.length > 0) : [];
-      const active = typeof parsed.active === "string" && open.includes(parsed.active) ? parsed.active : (open[0] ?? null);
-      return { open, active };
-    }
-  } catch { /* ignore */ }
-  return { ...DEFAULT_TABS };
+  let raw: string | null = null;
+  try { raw = localStorage.getItem(TABS_KEY); } catch { /* storage unavailable */ }
+  return parseTabs(raw) ?? { ...DEFAULT_TABS };
 }
 
 function writeTabs(s: TabsState) {
@@ -126,16 +131,7 @@ export default function App() {
   // Take a tab off the strip. When it was the active one, the previous tab (or
   // the next, or none when the strip goes empty) becomes active.
   const dropTab = useCallback((slug: string) => {
-    setTabsState((prev) => {
-      const idx = prev.open.indexOf(slug);
-      if (idx < 0) return prev;
-      const open = prev.open.filter((s) => s !== slug);
-      let active = prev.active;
-      if (active === slug) {
-        active = open[idx - 1] ?? open[idx] ?? open[0] ?? null;
-      }
-      return { open, active };
-    });
+    setTabsState((prev) => withTabClosed(prev, slug));
   }, [setTabsState]);
 
   // The runtime socket follows the active tab. The hook tears down + reopens
@@ -246,8 +242,8 @@ export default function App() {
 
   // ── slug-switch effect: when the active tab changes, save the outgoing
   //    slug's draft into localStorage, then load the new slug's draft (or
-  //    fetch it from the server; a slug the server does not know starts as an
-  //    empty graph). Runs on first mount with the boot slug
+  //    fetch it from the server; a slug the server does not know, or one never
+  //    saved, starts as an empty graph). Runs on first mount with the boot slug
   //    (defaultTabs.active) and on every switch. ──
   useEffect(() => {
     // wait for BOTH catalogs: every load heals the graph's dead wires, and that
@@ -297,18 +293,22 @@ export default function App() {
     (async () => {
       // A workflow's identity is its slug; the graph `name` is always forced to
       // the slug on load so the internal name can never diverge from it.
+      let draft: Graph | null = null;
       try {
         const saved = localStorage.getItem(draftKey(target));
-        if (saved) {
-          const g = JSON.parse(saved) as Graph;
-          if (g && Array.isArray(g.nodes) && g.nodes.length > 0) {
-            loadHealed({ ...g, name: target });
-            loadedSlugRef.current = target;
-            setGraphLoading(false);
-            return;
-          }
-        }
-      } catch { /* corrupt draft, fall through */ }
+        if (saved) draft = JSON.parse(saved) as Graph;
+      } catch { /* corrupt draft: read as none */ }
+      // lib/tabs: the draft when it has nodes; a workflow never saved (New
+      // workflow, Clone) opens empty without asking the server, which does not
+      // have it; any other slug asks the server.
+      const source = graphSource(tabsState, target, draft);
+      if (source !== "server") {
+        if (source === "draft" && draft) loadHealed({ ...draft, name: target });
+        else show({ ...EMPTY_GRAPH, name: target });
+        loadedSlugRef.current = target;
+        setGraphLoading(false);
+        return;
+      }
       // else fetch the server graph. Only a slug the server does not know opens
       // empty; one it cannot serve (a graph from a newer Boltjar, a server error)
       // is reported and its tab closed, and the canvas keeps what it showed, so
@@ -548,6 +548,8 @@ export default function App() {
         // primary stays "Save & Restart" after Save -> On).
         clearDraft();
         setLastSaved(Date.now());
+        // the server holds it now: a new workflow loads like any saved one
+        setTabsState((prev) => withTabSaved(prev, target));
         return true;
       }
       // a refused save says why (a saved graph this Boltjar cannot read is kept).
@@ -558,7 +560,7 @@ export default function App() {
     } finally {
       setSaving(false);
     }
-  }, [toGraph, markSaved, activeSlug, socket.notice]);
+  }, [toGraph, markSaved, activeSlug, socket.notice, setTabsState]);
 
   // ── power: validate then start (gated), stop, restart ──
   const powerOn = useCallback(async () => {
@@ -769,48 +771,24 @@ export default function App() {
     setTabsState((prev) => {
       if (!prev.open.includes(slug)) return prev;
       const open = bringToFront(prev.open, slug);
-      return { open, active: slug };
+      return { ...prev, open, active: slug };
     });
   }, [setTabsState]);
 
   const openTab = useCallback((slug: string) => {
-    setTabsState((prev) => {
-      if (prev.open.includes(slug)) {
-        return prev.active === slug ? prev : { ...prev, active: slug };
-      }
-      return { open: [...prev.open, slug], active: slug };
-    });
+    setTabsState((prev) => withTabOpened(prev, slug));
   }, [setTabsState]);
 
-  // Create a brand-new untitled workflow as a fresh tab. We pick a stable slug
-  // (untitled, untitled-2, untitled-3...) by scanning local drafts AND the open
-  // tab list so the user never lands on a slug already in use elsewhere.
-  const newWorkflow = useCallback(() => {
+  // Create a brand-new untitled workflow as a fresh tab, under the first of
+  // untitled, untitled-2, untitled-3... that no open tab, local draft or server
+  // graph uses. Known to be free on the server, it opens empty and is never
+  // fetched until its first Save (lib/tabs); when the server's list cannot be
+  // read, it opens the way any slug does.
+  const newWorkflow = useCallback(async () => {
+    const saved = await fetchSavedSlugs();
     setTabsState((prev) => {
-      const taken = new Set<string>(prev.open);
-      try {
-        for (let i = 0; i < localStorage.length; i += 1) {
-          const k = localStorage.key(i);
-          if (k && k.startsWith("boltjar:draft:") && k.endsWith(":v2")) {
-            taken.add(k.slice("boltjar:draft:".length, -":v2".length));
-          }
-        }
-      } catch { /* ignore */ }
-      let slug = "untitled";
-      let n = 2;
-      while (taken.has(slug)) {
-        slug = `untitled-${n}`;
-        n += 1;
-      }
-      // seed an empty draft so the slug-switch effect loads a fresh canvas
-      // instead of fetching /api/graphs/<slug> (which will 404 for a new one).
-      try {
-        localStorage.setItem(
-          `boltjar:draft:${slug}:v2`,
-          JSON.stringify({ format: GRAPH_FORMAT, name: slug, nodes: [], edges: [] }),
-        );
-      } catch { /* ignore */ }
-      return { open: [...prev.open, slug], active: slug };
+      const slug = freeSlug("untitled", new Set([...prev.open, ...draftSlugs(), ...(saved ?? [])]));
+      return withTabOpened(prev, slug, { unsaved: saved !== null });
     });
     // ensure the rail is open so the user sees their new tab + workflow list.
     setRails((p) => p.library === "open" ? p : { ...p, library: "open" });
@@ -860,26 +838,27 @@ export default function App() {
         }
         localStorage.removeItem(draftKey(slug));
       } catch { /* ignore */ }
-      const open = prev.open.map((s) => s === slug ? fresh : s);
-      const active = prev.active === slug ? fresh : prev.active;
-      return { open, active };
+      return withTabRenamed(prev, slug, fresh);
     });
     // best-effort: PUT under the new slug + DELETE the old one
     try {
       const raw = localStorage.getItem(draftKey(fresh));
       if (raw) {
-        await fetch(`/api/graphs/${encodeURIComponent(fresh)}`, {
+        const put = await fetch(`/api/graphs/${encodeURIComponent(fresh)}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: raw,
         });
+        // saved under its new name: it loads like any saved graph now
+        if (put.ok) setTabsState((prev) => withTabSaved(prev, fresh));
       }
       await fetch(`/api/graphs/${encodeURIComponent(slug)}`, { method: "DELETE" }).catch(() => {});
     } catch { /* ignore */ }
   }, [setTabsState]);
 
-  // Clone: fetch the source (draft preferred, else server), mint untitled / -2 /
-  // ..., seed a fresh draft, open as a new active tab.
+  // Clone: fetch the source (draft preferred, else server), mint <slug>-copy /
+  // -copy-2 / ... (a slug no open tab, draft or server graph uses), seed a fresh
+  // draft, open as a new active tab, unsaved like a new workflow.
   const cloneTab = useCallback(async (slug: string) => {
     let raw = localStorage.getItem(draftKey(slug));
     if (!raw) {
@@ -889,25 +868,15 @@ export default function App() {
       } catch { /* ignore */ }
     }
     if (!raw) return;
+    const saved = await fetchSavedSlugs();
     setTabsState((prev) => {
-      const taken = new Set<string>(prev.open);
-      try {
-        for (let i = 0; i < localStorage.length; i += 1) {
-          const k = localStorage.key(i);
-          if (k && k.startsWith("boltjar:draft:") && k.endsWith(":v2")) {
-            taken.add(k.slice("boltjar:draft:".length, -":v2".length));
-          }
-        }
-      } catch { /* ignore */ }
-      const base = `${slug}-copy`;
-      let next = base; let n = 2;
-      while (taken.has(next)) { next = `${base}-${n}`; n += 1; }
+      const next = freeSlug(`${slug}-copy`, new Set([...prev.open, ...draftSlugs(), ...(saved ?? [])]));
       try {
         const g = JSON.parse(raw!);
         g.name = next;
         localStorage.setItem(draftKey(next), JSON.stringify(g));
       } catch { /* ignore */ }
-      return { open: [...prev.open, next], active: next };
+      return withTabOpened(prev, next, { unsaved: saved !== null });
     });
   }, [setTabsState]);
 

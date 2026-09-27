@@ -35,6 +35,20 @@ export async function fetchServerGraph(slug: string, get: Get = (url) => fetch(u
   }
 }
 
+/** GET /api/graphs: every slug the server can load (the saved graphs and the
+ *  shipped examples), or null when the list cannot be read. Never throws. */
+export async function fetchSavedSlugs(get: Get = (url) => fetch(url)): Promise<Set<string> | null> {
+  try {
+    const res = await get("/api/graphs");
+    if (!res.ok) return null;
+    const body = (await res.json()) as { graphs?: unknown };
+    if (!Array.isArray(body.graphs)) return null;
+    return new Set(body.graphs.filter((s): s is string => typeof s === "string"));
+  } catch {
+    return null;
+  }
+}
+
 /** The reason a failed response gives: the server's own `error` when it sent
  *  one (a graph from a newer Boltjar, a save it refused), else the status. */
 export async function serverError(res: Response): Promise<string> {
