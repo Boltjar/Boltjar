@@ -82,6 +82,12 @@ Keys you add in the editor are stored in `user/data/secrets.json`, and keys
 you put in `.env` stay in that file. Both are plain text and both are
 gitignored, so anyone who can read your user account's files can read your keys.
 
+A `{{secret.NAME}}` token reads the keys added in the editor and the provider
+keys (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_API_KEY`, `XAI_API_KEY`,
+`FISH_API_KEY`, `ELEVENLABS_API_KEY`), never any other `.env` or environment
+variable. A graph that uses a secret nobody defined does not turn On, and
+validation names the secret.
+
 A graph saved with `{{secret.NAME}}` tokens is safe to share. A key typed
 straight into a field is saved as plain text in the graph file, in its
 snapshots under `user/autosave/` and in the browser's local draft. Live values

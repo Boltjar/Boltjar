@@ -465,6 +465,14 @@ def _format_problem(exc: GraphFormatError) -> dict:
     return {"node": None, "kind": "format", "message": str(exc)}
 
 
+def _widget_in_use(node_id: str, cfg: dict, widget, edges_in: set) -> bool:
+    """Whether a widget's own value reaches the node: not hidden under another
+    operation (op_field), and not promoted to an input that a wire now feeds."""
+    if widget.op_field and cfg.get(widget.op_field) not in widget.op_values:
+        return False
+    return not (widget.name in (cfg.get("promoted") or []) and (node_id, widget.name) in edges_in)
+
+
 def validate_graph(graph: dict) -> list[dict]:
     """Pre-run validation: a graph cannot turn On if any node is broken."""
     problems: list[dict] = []
@@ -519,6 +527,19 @@ def validate_graph(graph: dict) -> list[dict]:
                              "message": f"tool name '{nm}' already used by {tool_names[nm]}"})
         else:
             tool_names[nm] = n["id"]
+    # a {{secret.NAME}} nobody defined stays literal text where it is used (sent
+    # as a key, or refused as a Webhook's secret), so name it before On. Only
+    # stored secrets and provider keys resolve, never another .env name.
+    for n in graph.get("nodes", []):
+        spec = NODE_REGISTRY.get(n["type"])
+        if n.get("disabled") or spec is None:
+            continue
+        cfg = node_config(spec, n.get("config"))
+        text = "\n".join(str(cfg.get(w.name) or "") for w in spec.widgets
+                         if w.accepts_secrets and _widget_in_use(n["id"], cfg, w, edges_in))
+        for name in _secrets.unresolved(text):
+            problems.append({"node": n["id"], "kind": "missing-secret",
+                             "message": f"secret {name} is not defined: add it in Connections"})
     # every edge: src/dst ports exist (statically or as a legal dynamic port) and
     # the wire's types are compatible. Runs after the node checks so an unknown /
     # disabled node is already handled and its edges are skipped.

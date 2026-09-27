@@ -52,6 +52,50 @@ def test_validate_skips_disabled_nodes() -> None:
     assert problems == [], f"disabled node should not produce problems, got {problems}"
 
 
+def _missing_secrets(graph: dict) -> list[dict]:
+    return [p for p in validate_graph(graph) if p["kind"] == "missing-secret"]
+
+
+def test_validate_names_a_secret_nobody_defined(monkeypatch) -> None:
+    # a .env name other than a provider key does not resolve: the Webhook would
+    # refuse every call, and HTTP Request would send the literal token.
+    monkeypatch.setenv("HOOK_ONLY_IN_ENV", "from-env")
+    monkeypatch.setenv("XAI_API_KEY", "xai-from-env")
+    graph = {"nodes": [
+        {"id": "hook", "type": "core.trigger.webhook",
+         "config": {"secret": "{{secret.HOOK_ONLY_IN_ENV}}"}},
+        {"id": "http", "type": "core.net.http", "config": {
+            "headers": "Authorization: Bearer {{secret.XAI_API_KEY}}\nX-Other: {{secret.NO_SUCH_KEY}}",
+            "body": "{{secret.NO_SUCH_KEY}}"}},
+    ], "edges": [{"src": "hook", "src_port": "trigger", "dst": "http", "dst_port": "trigger"}]}
+    assert _missing_secrets(graph) == [
+        {"node": "hook", "kind": "missing-secret",
+         "message": "secret HOOK_ONLY_IN_ENV is not defined: add it in Connections"},
+        {"node": "http", "kind": "missing-secret",
+         "message": "secret NO_SUCH_KEY is not defined: add it in Connections"},
+    ]
+
+
+def test_validate_ignores_a_secret_the_node_never_reads() -> None:
+    graph = {"nodes": [
+        {"id": "iv", "type": "core.trigger.interval", "config": {}},
+        # the DB's sql field only runs for query and exec.
+        {"id": "db", "type": "core.db", "config": {"operation": "insert", "sql": "{{secret.NO_SUCH_KEY}}"}},
+        # promoted to an input that a wire feeds.
+        {"id": "src", "type": "core.value.text", "config": {"text": "https://example.com"}},
+        {"id": "http", "type": "core.net.http",
+         "config": {"url": "{{secret.NO_SUCH_KEY}}", "promoted": ["url"]}},
+        # a bypassed node never runs.
+        {"id": "off", "type": "core.net.http", "config": {"body": "{{secret.NO_SUCH_KEY}}"},
+         "disabled": True},
+        # a field that takes no secrets keeps the token as plain text.
+        {"id": "txt", "type": "core.value.text", "config": {"text": "{{secret.NO_SUCH_KEY}}"}},
+    ], "edges": [{"src": "src", "src_port": "out", "dst": "http", "dst_port": "url"}]}
+    assert _missing_secrets(graph) == []
+    graph["nodes"][1]["config"]["operation"] = "query"
+    assert [p["node"] for p in _missing_secrets(graph)] == ["db"]
+
+
 def test_validate_flags_duplicate_wireless_channel() -> None:
     # a wireless channel may have only one Wireless In (the broadcast source).
     graph = {"nodes": [
