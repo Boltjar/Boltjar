@@ -85,7 +85,7 @@ check("an added column changes the declaration",
 check("a node that never declared reads as none", sameDeclaration(undefined, []), true);
 check("a first table is a change from none", sameDeclaration(undefined, CHAT), false);
 
-// ---- the signature that re-runs the ensure: only declaring nodes count
+// ---- the signature that asks the server again: only declaring nodes count
 const node = (id, typeId, config) => ({ id, data: { typeId, config } });
 const base = [node("database", DATABASE.id, { db_key: "chat", schema: CHAT }), node("t", TEXT.id, { text: "hi" })];
 const sig = declarationSignature(base, defs);
@@ -100,7 +100,7 @@ check("an empty declaration is no signature",
   declarationSignature([node("database", DATABASE.id, { db_key: "chat", schema: [] })], defs), "");
 check("a graph without store nodes has no signature", declarationSignature([base[1]], defs), "");
 
-// ---- what an ensure answer means for the editor
+// ---- what the server's answer means for the editor
 const result = {
   stores: [
     { node: "database", key: "chat", created: ["chat_history"], added: [] },

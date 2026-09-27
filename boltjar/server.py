@@ -908,7 +908,13 @@ def ensure_declared_schemas(graph: dict) -> dict:
         key = database_key(str(n.get("id") or ""), cfg)
         if not key.strip():
             continue
-        out = STORE.ensure_schema(key, tables)
+        try:
+            out = STORE.ensure_schema(key, tables)
+        except (sqlite3.Error, OSError) as exc:
+            # a store that cannot be opened is reported like a conflict: the
+            # graph still opens, and its DB nodes name the failure when they run.
+            warnings.append({"node": n.get("id"), "message": f"its database could not be opened: {exc}"})
+            continue
         stores.append({"node": n.get("id"), "key": key,
                        "created": out["created"], "added": out["added"]})
         warnings.extend({"node": n.get("id"), "message": m} for m in out["conflicts"])

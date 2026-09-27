@@ -64,7 +64,7 @@ export function declarationSignature(
   return parts.length ? JSON.stringify(parts) : "";
 }
 
-/** The stores whose tables or columns an ensure just created, so the table
+/** The stores whose tables or columns the server just created, so the table
  *  pickers wired to them read their lists again. */
 export function changedStores(result: EnsureResult): string[] {
   return result.stores

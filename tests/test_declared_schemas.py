@@ -6,6 +6,7 @@ and a declaration the database cannot match is a warning, never a refusal."""
 from __future__ import annotations
 
 import asyncio
+import sqlite3
 
 import pytest
 from local_client import local_client
@@ -90,6 +91,18 @@ def test_ensure_reports_a_conflict_as_a_warning(store):
     ]
     body = next(c for c in store.schema("k1")[0]["columns"] if c["name"] == "body")
     assert body["type"] == "REAL"  # reported, never altered
+
+
+def test_a_store_that_cannot_open_is_a_warning(store, monkeypatch):
+    def broken(key, tables):
+        raise sqlite3.OperationalError("unable to open database file")
+
+    monkeypatch.setattr(store, "ensure_schema", broken)
+    r = client.post("/api/stores/ensure", json=_graph(_db("a", NOTES, db_key="k1")))
+    assert r.status_code == 200
+    assert r.json() == {"stores": [], "warnings": [
+        {"node": "a", "message": "its database could not be opened: unable to open database file"},
+    ]}
 
 
 def test_ensure_refuses_a_graph_from_a_newer_boltjar(store):
