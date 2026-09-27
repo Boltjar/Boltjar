@@ -19,7 +19,7 @@ const read = (path) => readFileSync(resolve(here, path), "utf8");
 const js = ts.transpileModule(read("../src/lib/consoleFeed.ts"), {
   compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 },
 }).outputText;
-const { streamOf, appendLine, visibleEntries, latestEntry, EMPTY_FEED, CONSOLE_KEEP } =
+const { streamOf, appendLine, visibleEntries, latestEntry, settleOffer, EMPTY_FEED, CONSOLE_KEEP } =
   await import("data:text/javascript," + encodeURIComponent(js));
 
 let failures = 0;
@@ -95,6 +95,20 @@ for (const kind of ["log", "warning", "node_error", "error", "invalid", "status"
   for (let i = 0; i < CONSOLE_KEEP + 5; i += 1) g = appendLine(g, line("log", `l${i}`));
   check("the readable stream is bounded too", [g.readable.length, g.readable[0].message], [CONSOLE_KEEP, "l5"]);
   check("CONSOLE_KEEP is 500", CONSOLE_KEEP, 500);
+}
+
+// ---- a line offering a choice (Restore / Discard) keeps its own buttons
+{
+  const ask = (msg) => ({ kind: "notice", ts: "10:00:00", level: "warn", message: msg, offer: "aside:chat", actions: [{ label: "Restore", run() {} }] });
+  let f = appendLine(EMPTY_FEED, ask("kept your edits aside"));
+  f = appendLine(f, ask("kept your edits aside"));
+  check("two identical offers stay two entries", f.readable.map((e) => e.count), [1, 1]);
+  f = appendLine(f, { kind: "notice", ts: "10:00:01", level: "warn", message: "kept your edits aside" });
+  check("a plain line never folds into an offer", f.readable.length, 3);
+  const settled = settleOffer(f, "aside:chat");
+  check("settling takes the buttons off", settled.readable.map((e) => !!e.actions), [false, false, false]);
+  check("settling keeps the words", settled.readable.map((e) => e.message), f.readable.map((e) => e.message));
+  check("settling an unknown offer returns the same feed", settleOffer(settled, "nope") === settled, true);
 }
 
 // ---- the hook and the panel use it
