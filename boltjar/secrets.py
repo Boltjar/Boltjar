@@ -269,3 +269,10 @@ def resolve_secrets(text: str) -> str:
         return value if value is not None else m.group(0)
 
     return _TOKEN_RE.sub(_replace, text)
+
+
+def unresolved(text: str) -> list[str]:
+    """The names of the {{secret.NAME}} tokens in text that resolve to nothing
+    (resolve_secrets leaves those as literal text), each named once."""
+    names = dict.fromkeys(m.group(1) for m in _TOKEN_RE.finditer(text))
+    return [name for name in names if get_secret(name) is None]

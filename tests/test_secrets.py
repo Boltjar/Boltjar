@@ -72,6 +72,16 @@ def test_stored_secret_resolves_by_any_valid_name():
     assert secrets.resolve_secrets("{{secret.MY_SERVICE_TOKEN}}") == "stored"
 
 
+def test_unresolved_names_each_token_that_resolves_to_nothing(monkeypatch):
+    secrets.set_secret("KNOWN_KEY", "k")
+    monkeypatch.setenv("XAI_API_KEY", "xai-from-env")
+    monkeypatch.setenv("ENV_ONLY_NAME", "not-a-secret")
+    text = ("{{secret.KNOWN_KEY}} {{secret.XAI_API_KEY}} {{secret.ENV_ONLY_NAME}} "
+            "{{ secret.MISSING }} {{secret.ENV_ONLY_NAME}}")
+    assert secrets.unresolved(text) == ["ENV_ONLY_NAME", "MISSING"]
+    assert secrets.unresolved("no tokens here") == []
+
+
 # ---------------------------------------------------------------------------
 # set / get / delete round-trip + persistence across a reload
 # ---------------------------------------------------------------------------

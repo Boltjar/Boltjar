@@ -966,8 +966,16 @@ async def webhook_handler(slug: str, path: str, request: Request):
     # Optional shared-secret header check. The configured value may carry a
     # {{secret.NAME}} token, so resolve before comparing.
     cfg = getattr(node.obj, "_node_cfg", {}) or {}
-    secret_cfg = cfg.get("secret") if cfg.get("secret") is not None else getattr(node.obj, "secret", "")
-    secret_expected = _secrets.resolve_secrets(str(secret_cfg or "")).strip()
+    secret_cfg = str((cfg.get("secret") if cfg.get("secret") is not None
+                      else getattr(node.obj, "secret", "")) or "")
+    missing = _secrets.unresolved(secret_cfg)
+    if missing:
+        # an undefined secret stays literal text, which anyone who has seen the
+        # graph knows: never compare against it, refuse every call instead.
+        message = f"Webhook secret is not defined: {', '.join(missing)}"
+        runtime.log(node.id, f"ERROR {message}")
+        return JSONResponse({"error": message}, status_code=503)
+    secret_expected = _secrets.resolve_secrets(secret_cfg).strip()
     if secret_expected:
         provided = request.headers.get("x-webhook-secret", "")
         # constant time, so the response timing never leaks how much matched.

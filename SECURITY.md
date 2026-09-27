@@ -73,7 +73,8 @@ server.
 To receive webhooks, expose only `/hook/*`. Those routes skip the token and
 host checks because outside services call them, so give every Webhook node a
 secret; callers send it in the `X-Webhook-Secret` header. The secret and other
-credential headers are never passed into the graph.
+credential headers are never passed into the graph. A Webhook whose secret is a
+`{{secret.NAME}}` that is not defined refuses every call.
 
 ## Secrets at rest
 

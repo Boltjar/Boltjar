@@ -248,6 +248,37 @@ def test_secret_headers_never_reach_the_graph():
         _close(ws)
 
 
+def test_an_undefined_secret_refuses_every_call(monkeypatch, tmp_path):
+    # the secret resolved when the graph turned On and is gone now (deleted, or
+    # a .env name, which {{secret.NAME}} does not read): its literal token must
+    # never become the expected value, since anyone who saw the graph knows it.
+    from boltjar import secrets
+    monkeypatch.setattr(secrets, "_PATH", tmp_path / "secrets.json")
+    secrets.set_secret("WH_GONE_SECRET", "real-value")
+    slug = "wh-secret-undefined"
+    ws = _power_on(slug, _graph(secret="{{secret.WH_GONE_SECRET}}"))
+    try:
+        assert client.post(f"/hook/{slug}/foo", json={},
+                           headers={"X-Webhook-Secret": "real-value"}).status_code == 200
+        secrets.delete_secret("WH_GONE_SECRET")
+        monkeypatch.setenv("WH_GONE_SECRET", "real-value")
+        for provided in ("real-value", "{{secret.WH_GONE_SECRET}}", ""):
+            resp = client.post(f"/hook/{slug}/foo", json={}, headers={"X-Webhook-Secret": provided})
+            assert resp.status_code == 503, provided
+            assert resp.json() == {"error": "Webhook secret is not defined: WH_GONE_SECRET"}
+        # the graph's own log says why, on the Webhook node.
+        for _ in range(60):
+            evt = ws.receive_json()
+            if evt.get("kind") == "log" and evt.get("node") == "hook":
+                assert evt["message"] == "ERROR Webhook secret is not defined: WH_GONE_SECRET"
+                break
+        else:
+            raise AssertionError("the Webhook logged nothing")
+    finally:
+        secrets.delete_secret("WH_GONE_SECRET")
+        _close(ws)
+
+
 # ---------------------------------------------------------------------------
 # Method filter: a node with method=GET rejects a POST with 404
 # ---------------------------------------------------------------------------
