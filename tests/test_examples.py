@@ -17,7 +17,6 @@ import pytest
 from local_client import local_client
 
 import boltjar.server as server
-from boltjar.runtime import Runtime
 from boltjar.sqlite_store import SqliteStore
 
 client = local_client()
@@ -102,36 +101,78 @@ def test_shipped_example_validates_under_its_own_slug(path):
     assert server.validate_graph(graph) == []
 
 
-def test_chat_example_first_turn_on_a_fresh_install(tmp_path, monkeypatch, vendor_http):
-    """A fresh install has an empty database: the chat example creates its own
-    chat_history table before it reads the history, so the very first message
-    runs without a node error and stores both sides of the turn."""
-    store = SqliteStore(root=tmp_path)
-    monkeypatch.setattr(server, "STORE", store)
-    monkeypatch.setenv("XAI_API_KEY", "test-xai-key")  # the TTS call is faked below
-    vendor_http.reply = lambda r: httpx.Response(200, content=b"ID3mp3")
+def _chat_example() -> dict:
     graph = json.loads((SHIPPED / "chat.json").read_text(encoding="utf-8"))
     for n in graph["nodes"]:
         if n["type"] == "core.ai.llm":
             n["config"]["model"] = "mock/echo"  # offline: no real model is called
-    db_key = next(n["config"]["db_key"] for n in graph["nodes"]
-                  if n["type"] == "core.store.database")
+    return graph
 
-    events: list[dict] = []
-    rt = Runtime(observer=events.append)
-    rt.build(graph)
+
+def _chat_db_key(graph: dict) -> str:
+    return next(n["config"]["db_key"] for n in graph["nodes"]
+                if n["type"] == "core.store.database")
+
+
+def test_chat_example_declares_its_table_instead_of_creating_it():
+    """The chat table is part of the graph (the Database node's schema), not a
+    CREATE TABLE node that has to fire before Chat Append can see the table."""
+    graph = json.loads((SHIPPED / "chat.json").read_text(encoding="utf-8"))
+    assert not [n for n in graph["nodes"] if "CREATE TABLE" in str(n.get("config", {}).get("sql", ""))]
+    assert "Chat Setup" not in {n["id"] for n in graph["nodes"]}
+    db = next(n for n in graph["nodes"] if n["type"] == "core.store.database")
+    tables = {t["name"]: [c["name"] for c in t["columns"]] for t in db["config"]["schema"]}
+    assert tables == {"chat_history": ["id", "time", "sender", "message"]}
+    # the chat trigger still reaches Chat History first, as it did through setup.
+    assert {"src": "chat", "src_port": "trigger", "dst": "Chat History",
+            "dst_port": "trigger"} in graph["edges"]
+
+
+def test_opening_the_chat_example_gives_chat_append_its_table(tmp_path, monkeypatch):
+    """Opening the example in the editor makes chat_history exist, so Chat
+    Append's table list has it before any node fires."""
+    store = SqliteStore(root=tmp_path)
+    monkeypatch.setattr(server, "STORE", store)
+    graph = _chat_example()
+    key = _chat_db_key(graph)
+    assert client.get(f"/api/db/{key}/schema").json()["schema"] == []
+    r = client.post("/api/stores/ensure", json=graph)
+    assert r.status_code == 200
+    assert r.json() == {"stores": [{"node": "database", "key": key, "created": ["chat_history"],
+                                    "added": []}], "warnings": []}
+    tables = client.get(f"/api/db/{key}/schema").json()["schema"]
+    assert [t["name"] for t in tables] == ["chat_history"]
+
+
+def test_chat_example_first_turn_on_a_fresh_install(tmp_path, monkeypatch, vendor_http):
+    """A fresh install has an empty database: powering the chat example on
+    creates the chat_history table it declares, so the very first message runs
+    without a node error and stores both sides of the turn."""
+    store = SqliteStore(root=tmp_path)
+    monkeypatch.setattr(server, "STORE", store)
+    monkeypatch.setenv("XAI_API_KEY", "test-xai-key")  # the TTS call is faked below
+    vendor_http.reply = lambda r: httpx.Response(200, content=b"ID3mp3")
+    graph = _chat_example()
+    db_key = _chat_db_key(graph)
+
+    hub = server.Hub()
+    events: asyncio.Queue = asyncio.Queue()
+    hub.subscribers.add(events)
+    seen: list[dict] = []
 
     async def drive() -> None:
-        await rt.run()
-        rt.send_chat("chat", "hi")
+        assert await hub.power_on(graph) is None
+        hub.send_chat("chat", "hi")
         for _ in range(60):  # until the spoken reply reaches the audio preview
             await asyncio.sleep(0.05)
-            if any(e["kind"] == "value" and e["node"] == "Audio Preview" for e in events):
+            while not events.empty():
+                seen.append(events.get_nowait())
+            if any(e["kind"] == "value" and e["node"] == "Audio Preview" for e in seen):
                 break
-        await rt.stop()
+        await hub.power_off()
 
     asyncio.run(drive())
-    assert not [e for e in events if e["kind"] == "node_error"], events
+    assert not [e for e in seen if e["kind"] in ("node_error", "warning", "error")], seen
     rows = store.query(db_key, "SELECT sender, message FROM chat_history ORDER BY id")
     assert [r["sender"] for r in rows] == ["User", "Assistant"]
     assert rows[0]["message"] == "hi"

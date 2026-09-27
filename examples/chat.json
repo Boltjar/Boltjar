@@ -75,7 +75,34 @@
       "id": "database",
       "type": "core.store.database",
       "config": {
-        "db_key": "chat"
+        "db_key": "chat",
+        "schema": [
+          {
+            "name": "chat_history",
+            "columns": [
+              {
+                "name": "id",
+                "type": "INTEGER",
+                "pk": true
+              },
+              {
+                "name": "time",
+                "type": "TEXT",
+                "pk": false
+              },
+              {
+                "name": "sender",
+                "type": "TEXT",
+                "pk": false
+              },
+              {
+                "name": "message",
+                "type": "TEXT",
+                "pk": false
+              }
+            ]
+          }
+        ]
       },
       "pos": [
         -884,
@@ -99,25 +126,6 @@
       "size": [
         290,
         404
-      ]
-    },
-    {
-      "id": "Chat Setup",
-      "type": "core.db",
-      "config": {
-        "operation": "exec",
-        "sql": "CREATE TABLE IF NOT EXISTS chat_history (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  time TEXT,\n  sender TEXT,\n  message TEXT\n)",
-        "table": "",
-        "fields": "",
-        "where": ""
-      },
-      "pos": [
-        -356,
-        -556
-      ],
-      "size": [
-        353,
-        306
       ]
     },
     {
@@ -261,23 +269,11 @@
     {
       "src": "database",
       "src_port": "db",
-      "dst": "Chat Setup",
-      "dst_port": "db"
-    },
-    {
-      "src": "database",
-      "src_port": "db",
       "dst": "Chat History",
       "dst_port": "db"
     },
     {
       "src": "chat",
-      "src_port": "trigger",
-      "dst": "Chat Setup",
-      "dst_port": "trigger"
-    },
-    {
-      "src": "Chat Setup",
       "src_port": "trigger",
       "dst": "Chat History",
       "dst_port": "trigger"
