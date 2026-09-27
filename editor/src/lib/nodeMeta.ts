@@ -4,7 +4,7 @@
 // (NodeDef, config) so they stay testable and the components stay dumb.
 // ============================================================================
 import type { NodeDef, Port } from "../types/protocol";
-import { templateTags } from "./dynamicPorts";
+import { modelWidgetOf, templateTags } from "./dynamicPorts";
 
 /** Truncate a value to a short, single-line preview for dense surfaces. */
 function preview(value: unknown, max = 22): string {
@@ -20,6 +20,12 @@ function preview(value: unknown, max = 22): string {
  * node's category in lowercase.
  */
 export function headerSubline(def: NodeDef, config: Record<string, unknown>): string {
+  // a model node (declared by its model widget, any pack's too): the model it
+  // runs, the picked one, else the widget's declared default.
+  const modelWidget = modelWidgetOf(def);
+  if (modelWidget) {
+    return modelSubline(String(config[modelWidget.name] || modelWidget.default || ""));
+  }
   switch (def.id) {
     case "core.trigger.interval": {
       const s = config.seconds ?? defaultOf(def, "seconds") ?? 2;
@@ -39,8 +45,6 @@ export function headerSubline(def: NodeDef, config: Record<string, unknown>): st
       return `float · ${config.number ?? 0}`;
     case "core.value.boolean":
       return `bool · ${config.on ? "true" : "false"}`;
-    case "core.ai.llm":
-      return modelSubline(String(config.model ?? defaultOf(def, "model") ?? "mock/echo"));
     case "core.data.template": {
       const tpl = String(config.template ?? defaultOf(def, "template") ?? "");
       const tags = templateTags(def, tpl).length;
@@ -50,11 +54,6 @@ export function headerSubline(def: NodeDef, config: Record<string, unknown>): st
       return `compute · ${preview(config.expression ?? "value", 14)}`;
     case "core.logic.condition":
       return `route · ${preview(config.expression ?? "value", 14)}`;
-    case "core.ai.stt":
-    case "core.ai.tts":
-      // the model the node runs: the picked one, else the model widget's declared
-      // default (what the backend uses when nothing is picked).
-      return modelSubline(String(config.model || defaultOf(def, "model") || ""));
     case "core.store.memory":
       return "memory · recall";
     case "core.store.state":
@@ -71,9 +70,12 @@ export function headerSubline(def: NodeDef, config: Record<string, unknown>): st
 }
 
 /** A model id as a subline: `xai/tts` -> `xai · tts`, a bare id -> `model · id`. */
-function modelSubline(id: string): string {
-  const [provider, model] = id.includes("/") ? id.split("/", 2) : ["", id];
-  return provider ? `${provider} · ${model}` : `model · ${id}`;
+export function modelSubline(id: string): string {
+  if (!id) return "model · none picked";
+  // split at the FIRST slash only: an endpoint model id keeps its own slashes
+  // (openrouter/meta-llama/llama-3.3-70b-instruct).
+  const cut = id.indexOf("/");
+  return cut > 0 ? `${id.slice(0, cut)} · ${id.slice(cut + 1)}` : `model · ${id}`;
 }
 
 /** The default value of a widget by name, if declared. */

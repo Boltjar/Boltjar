@@ -19,15 +19,14 @@ import { liveGatePasses } from "../../lib/liveClassify";
 import { functionColorVar, nodeIcon } from "../../lib/kinds";
 import { typeColorVar, typesCompatible } from "../../lib/types";
 import { Icon } from "../../lib/icons";
-import { bodySummary, defaultOf, headerSubline } from "../../lib/nodeMeta";
+import { bodySummary, headerSubline } from "../../lib/nodeMeta";
 import { useDraft } from "../../lib/useDraft";
 import {
   concreteInputs,
   concreteOutputs,
   opVisible,
-  llmModelId,
   llmPromoted,
-  modelKindForNode,
+  modelWidgetOf,
   nodePromoted,
   reservedInputNames,
   templateTags,
@@ -205,11 +204,11 @@ function WorkflowNodeImpl({ id, data, selected }: NodeProps) {
     : undefined;
   const isAudioPreview = !!inWire && (inWire.srcType === "audio" || inWire.srcType === "pcm-audio");
   const isLLM = def.id === LLM_ID;
-  // TTS / STT are model-driven the same way the LLM is (a kind=model widget), so
-  // the picker + per-model param knobs render the same way; the manifest list is
-  // filtered to the matching kind.
-  const modelKind = modelKindForNode(def.id);
-  const isModelNode = modelKind !== null;
+  // any node that declares a model widget (LLM, TTS, STT, Embed, Rerank, a pack's
+  // own) gets the same picker + per-model param knobs; the list is filtered to
+  // the family the widget declares (model_kind).
+  const modelWidget = modelWidgetOf(def);
+  const isModelNode = modelWidget !== null;
   const isChatOut = def.id === "core.output.chat";
   const isTool = def.id === "core.ai.tool";
   const isDbStore = def.id === "core.store.database";
@@ -432,12 +431,11 @@ function WorkflowNodeImpl({ id, data, selected }: NodeProps) {
         </div>
       )}
 
-      {isModelNode && (
+      {modelWidget && (
         <div className="node-special">
           <LLMBody
             config={nd.config}
-            kind={modelKind!}
-            defaultModel={String(defaultOf(def, "model") ?? "")}
+            widget={modelWidget}
             onSelectModel={(mid) => setLlmModel(id, mid)}
             onParamChange={(name, value) =>
               updateConfig(id, "params", { ...llmParams(nd.config), [name]: value })
@@ -659,38 +657,35 @@ function llmParams(config: Record<string, unknown>): Record<string, unknown> {
   return p && typeof p === "object" ? (p as Record<string, unknown>) : {};
 }
 
-/** The model-driven node body (LLM / TTS / STT): the same picker + per-model
- *  knob surface. The manifest list is filtered to the requested `kind` so a TTS
- *  node only lists TTS models, etc. With nothing picked it shows the model the
- *  backend runs, the node's declared default (TTS xai/tts, STT fish/asr); a node
- *  whose default is empty (the LLM) shows a picker only and its base ports. */
+/** The model-driven node body (any node with a model widget): the same picker +
+ *  per-model knob surface. The picker lists the models of the family the widget
+ *  declares, so a TTS node only lists TTS models. With nothing picked it shows
+ *  the model the backend runs, the widget's declared default (TTS xai/tts, STT
+ *  fish/asr); a node whose default is empty (the LLM) shows a picker only and
+ *  its base ports. */
 function LLMBody({
   config,
-  kind,
-  defaultModel,
+  widget,
   onSelectModel,
   onParamChange,
   onPromote,
 }: {
   config: Record<string, unknown>;
-  kind: "llm" | "tts" | "stt" | "embed" | "rerank";
-  defaultModel: string;
+  widget: Widget;
   onSelectModel: (modelId: string) => void;
   onParamChange: (name: string, value: unknown) => void;
   onPromote: (name: string) => void;
 }) {
   const { models } = useEditor();
-  // filter manifests to this node's family. A manifest without a kind is treated
-  // as an LLM (the legacy default), so older TOMLs keep working in the LLM node.
-  const manifests = [...models.values()].filter((m) => (m.kind ?? "llm") === kind);
-  const selectedId = llmModelId(config) || defaultModel;
+  const picked = config[widget.name];
+  const selectedId = (typeof picked === "string" && picked) || String(widget.default ?? "");
   const manifest = models.get(selectedId);
   const promoted = llmPromoted(config);
 
   return (
     <div className="llm-body nodrag">
       <ModelPicker
-        manifests={manifests}
+        manifests={[...models.values()].filter((m) => (m.kind ?? "llm") === (widget.model_kind || "llm"))}
         selectedId={selectedId}
         selected={manifest}
         onSelect={onSelectModel}

@@ -81,6 +81,10 @@ export interface Widget {
   /** a code/text field that grows vertically when the node is resized (others stay
    *  fixed). A node with >=1 expandable field is resizable. */
   expand?: boolean;
+  /** a model picker (kind "model") lists the models of this family: llm | tts |
+   *  stt | embed | rerank. Its `options` are the special values it offers above
+   *  the list ("auto" on the LLM). null on every other widget. */
+  model_kind?: string | null;
 }
 
 /** A registered node definition from GET /api/object_info. */

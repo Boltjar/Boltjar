@@ -25,8 +25,7 @@ import {
   concreteInputs,
   concreteOutputs,
   isGhostHandle,
-  llmModelId,
-  modelKindForNode,
+  modelWidgetOf,
   WIRELESS_IN_ID,
   type WirelessSocket,
 } from "./dynamicPorts";
@@ -105,8 +104,8 @@ function wireJudge(
   const loadedDef = (node: GraphNode): NodeDef | undefined => {
     const def = defs.get(node.type);
     if (!def) return undefined;
-    const modelDriven = modelKindForNode(def.id) !== null || def.widgets.some((w) => w.kind === "model");
-    if (modelDriven && !models.has(llmModelId(node.config ?? {}))) return undefined;
+    const picker = modelWidgetOf(def);
+    if (picker && !models.has(String(node.config?.[picker.name] ?? ""))) return undefined;
     return def;
   };
   const hasInput = (node: GraphNode, def: NodeDef, handle: string): boolean =>

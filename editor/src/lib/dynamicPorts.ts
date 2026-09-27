@@ -70,26 +70,23 @@ export type WirelessChannelMap = ReadonlyMap<string, ReadonlyArray<WirelessSocke
 
 /** The LLM node id; its concrete ports come from its selected model's manifest. */
 export const LLM_ID = "core.ai.llm";
-/** The TTS / STT node ids: model-driven like the LLM, with the same picker. */
-export const TTS_ID = "core.ai.tts";
-export const STT_ID = "core.ai.stt";
-/** Embed / Rerank: also model-driven (kind=embed / kind=rerank manifests). */
-export const EMBED_ID = "core.ai.embed";
-export const RERANK_ID = "core.ai.rerank";
 /** The HTTP Request node id; its `tag` growable mirrors Template's, and its
  *  `body` output type is reshaped from the `response_type` widget. */
 export const HTTP_ID = "core.net.http";
 
-/** Map a model-driven node type to the manifest `kind` its picker should list. */
-export function modelKindForNode(
-  nodeTypeId: string,
-): "llm" | "tts" | "stt" | "embed" | "rerank" | null {
-  if (nodeTypeId === LLM_ID) return "llm";
-  if (nodeTypeId === TTS_ID) return "tts";
-  if (nodeTypeId === STT_ID) return "stt";
-  if (nodeTypeId === EMBED_ID) return "embed";
-  if (nodeTypeId === RERANK_ID) return "rerank";
-  return null;
+/** A node's model picker: its first `model` widget, or null for a node without
+ *  one. Declared on the widget, never keyed off a node id, so any pack node that
+ *  declares a model widget gets the picker and its per-model knobs. */
+export function modelWidgetOf(def: NodeDef): Widget | null {
+  return def.widgets.find((w) => w.kind === "model") ?? null;
+}
+
+/** The manifest family (llm, tts, stt, embed, rerank) a node's model picker
+ *  lists, from its widget's `model_kind` (a model widget that declares none
+ *  lists LLMs, the manifest default). null for a node with no model picker. */
+export function modelKindOf(def: NodeDef): string | null {
+  const widget = modelWidgetOf(def);
+  return widget ? widget.model_kind || "llm" : null;
 }
 
 /** A lookup from a model id to its manifest (the editor context's models map). */
@@ -697,8 +694,9 @@ export function concreteOutputs(
 }
 
 /**
- * The config a model-driven node (LLM / TTS / STT / Embed / Rerank) takes when
- * its model is switched: the new model id, params reset to EXACTLY the new
+ * The config a model-driven node (any node with a model widget) takes when its
+ * model is switched: the new model id under the model widget's own name, params
+ * reset to EXACTLY the new
  * manifest's defaults (nothing carries over, so a Fish `voice` can never reach
  * xAI as its voice_id, nor grok-4.3's `think` reach grok-4.20), and only the
  * promotions that still exist (a param of the new model, or a node widget).
@@ -716,7 +714,8 @@ export function modelSwitchConfig(
     ...(manifest?.params ?? []).map((p) => p.name),
     ...def.widgets.map((w) => w.name),
   ]);
-  return { ...config, model: modelId, params, promoted: nodePromoted(config).filter((n) => kept.has(n)) };
+  const key = modelWidgetOf(def)?.name ?? "model";
+  return { ...config, [key]: modelId, params, promoted: nodePromoted(config).filter((n) => kept.has(n)) };
 }
 
 /** One wire on a node that is being reshaped, seen from that node: an input
