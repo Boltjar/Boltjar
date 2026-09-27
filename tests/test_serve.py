@@ -273,6 +273,66 @@ def test_the_server_ends_the_apps_connections_before_uvicorn_waits_on_them(monke
     assert server.graphs_stopped == 2
 
 
+def _stuck_server(monkeypatch, seconds: float):
+    """A server whose app shutdown never finishes, with `seconds` of grace; it
+    records what happens around that stop."""
+    import uvicorn
+
+    seen: dict = {"cancelled": False, "uvicorn shutdown": False}
+
+    async def never_stops():
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            seen["cancelled"] = True
+            raise
+
+    async def uvicorn_shutdown(self, sockets=None):
+        seen["uvicorn shutdown"] = True
+
+    monkeypatch.setattr(serve, "GRACEFUL_SECONDS", seconds)
+    monkeypatch.setattr(uvicorn.Server, "shutdown", uvicorn_shutdown)
+    server = serve.make_server(uvicorn.Config(app=None), never_stops, on_ready=lambda: None,
+                               on_stop=lambda: None, running=lambda: ["sd-stuck"])
+    return server, seen
+
+
+def test_a_stop_that_never_finishes_is_left_after_the_grace_time(monkeypatch, caplog):
+    server, seen = _stuck_server(monkeypatch, 0.2)
+
+    async def scenario():
+        started = asyncio.get_running_loop().time()
+        await asyncio.wait_for(server.shutdown(), 5)
+        await asyncio.sleep(0)  # let the cancel land
+        return asyncio.get_running_loop().time() - started
+
+    with caplog.at_level(logging.WARNING, logger="boltjar.serve"):
+        took = asyncio.run(scenario())
+    assert 0.2 <= took < 1.5
+    assert seen == {"cancelled": True, "uvicorn shutdown": True}
+    # uvicorn's own shutdown skips the app's lifespan, which would wait on it again
+    assert server.force_exit
+    assert server.graphs_stopped == 0
+    assert "sd-stuck did not stop within 0.2 s" in caplog.text
+
+
+def test_a_second_ctrl_c_ends_the_wait_at_once(monkeypatch, caplog):
+    server, seen = _stuck_server(monkeypatch, 60)
+
+    async def scenario():
+        loop = asyncio.get_running_loop()
+        loop.call_later(0.1, setattr, server, "force_exit", True)  # what uvicorn's handler does
+        started = loop.time()
+        await asyncio.wait_for(server.shutdown(), 5)
+        return loop.time() - started
+
+    with caplog.at_level(logging.WARNING, logger="boltjar.serve"):
+        took = asyncio.run(scenario())
+    assert took < 1.5
+    assert seen["uvicorn shutdown"]
+    assert "Ctrl+C again: exiting without waiting for sd-stuck" in caplog.text
+
+
 def test_ready_waits_for_a_real_start(monkeypatch):
     import uvicorn
 
@@ -366,6 +426,6 @@ def test_a_boot_over_ssh_leaves_the_browser_closed(boot, monkeypatch):
     monkeypatch.setattr(serve, "bind", lambda host, port: socket.socket())
     monkeypatch.setattr(serve, "packs_check", lambda: ("core", "ok", None))
     monkeypatch.setattr(serve, "providers_check", lambda: ("none yet", "info", None))
-    monkeypatch.setattr(serve, "make_server", lambda config, shutdown_app, on_ready, on_stop: Server(on_ready))
+    monkeypatch.setattr(serve, "make_server", lambda config, shutdown_app, on_ready, **kw: Server(on_ready))
     assert boot(port=9001) == 0
     assert opened == []

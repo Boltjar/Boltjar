@@ -17,6 +17,7 @@ host names a request may carry, a comma list) and BOLTJAR_PORT.
 """
 from __future__ import annotations
 
+import asyncio
 import errno
 import ipaddress
 import logging
@@ -41,9 +42,10 @@ LOOPBACK_NAMES = ("localhost", "127.0.0.1", "::1")
 WILDCARD_HOSTS = ("0.0.0.0", "::", "")
 PYTHON_RANGE = ((3, 11), (3, 13))
 START = "start.bat" if os.name == "nt" else "./start.sh"
-# Once the graphs are stopped and the app's own streams have ended, anything
-# still open (an Ollama model pull mid-download) gets this long before uvicorn
-# cancels it, so an exit never hangs on a response the app does not own.
+# How long each stage of an exit may wait: the graphs stopping (a node whose
+# close hangs is left behind after this), then anything still open once they
+# have (an Ollama model pull mid-download) before uvicorn cancels it. So an exit
+# never hangs, and a second Ctrl+C ends either wait at once.
 GRACEFUL_SECONDS = 5
 
 # socket errors by meaning; Windows reports its own WSA codes in `winerror`.
@@ -261,11 +263,13 @@ def browser_can_open(platform: str | None = None, env: Mapping[str, str] | None 
 
 
 def make_server(config, shutdown_app: Callable[[], Awaitable[int]],
-                on_ready: Callable[[], None], on_stop: Callable[[], None]):
+                on_ready: Callable[[], None], on_stop: Callable[[], None],
+                running: Callable[[], list[str]] = list):
     """uvicorn's Server with Boltjar's start and stop around it: `on_ready` once
     the app has started and the socket is listening; on shutdown, stop taking
     connections, then `shutdown_app()` (stop the graphs, end the streams), then
-    uvicorn's own shutdown, which waits for connections that are now closing."""
+    uvicorn's own shutdown, which waits for connections that are now closing.
+    `running()` names the graphs still running, for a stop that runs late."""
     import uvicorn
 
     class BoltjarServer(uvicorn.Server):
@@ -282,8 +286,36 @@ def make_server(config, shutdown_app: Callable[[], Awaitable[int]],
             # socket closes, and must find nothing listening.
             for listener in getattr(self, "servers", []):
                 listener.close()
-            self.graphs_stopped = await shutdown_app()
+            await self.stop_app()
             await super().shutdown(sockets=sockets)
+
+        async def stop_app(self) -> None:
+            """shutdown_app() for GRACEFUL_SECONDS at most, and no longer once a
+            second Ctrl+C sets force_exit: a stop that never finishes (a pack
+            node whose close hangs) must not hold the exit. Graphs still
+            stopping by then are named and left behind."""
+            before = len(running())
+            task = asyncio.ensure_future(shutdown_app())
+            loop = asyncio.get_running_loop()
+            deadline = loop.time() + GRACEFUL_SECONDS
+            # polled like uvicorn polls it: the signal handler only sets a flag
+            while not task.done() and not self.force_exit and loop.time() < deadline:
+                await asyncio.wait({task}, timeout=min(0.1, max(0.0, deadline - loop.time())))
+            if task.done():
+                self.graphs_stopped = task.result()
+                return
+            task.cancel()
+            left = running()
+            self.graphs_stopped = before - len(left)
+            names = ", ".join(left) or "the graphs"
+            if self.force_exit:
+                _log.warning("Ctrl+C again: exiting without waiting for %s", names)
+            else:
+                _log.warning("%s did not stop within %s s: exiting without waiting longer",
+                             names, GRACEFUL_SECONDS)
+            # uvicorn would otherwise run the app's lifespan shutdown next, which
+            # waits on the very stop that just ran out of time.
+            self.force_exit = True
 
     return BoltjarServer(config)
 
@@ -368,7 +400,8 @@ def _serve(out: console.Console, host: str, port: int, open_browser: bool,
         log_config=console.log_config(verbose), access_log=verbose,
         timeout_graceful_shutdown=GRACEFUL_SECONDS,
     )
-    server = make_server(config, app_module.shutdown_all, on_ready=ready, on_stop=out.write)
+    server = make_server(config, app_module.shutdown_all, on_ready=ready, on_stop=out.write,
+                         running=app_module.running_graphs)
     try:
         server.run(sockets=[sock])
     except KeyboardInterrupt:
