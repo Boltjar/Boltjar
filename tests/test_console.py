@@ -429,6 +429,46 @@ def test_access_lines_show_status_method_and_path():
     assert fmt.tone(rec) == "warn"
 
 
+# every control character but the line break the formatter writes itself
+RAW_CONTROL = re.compile(r"[\x00-\x09\x0b-\x1f\x7f-\x9f]")
+
+
+def test_a_message_never_drives_the_terminal():
+    out = plain_formatter().format(record("got \x1b[2J\x1b[1A\x9b2Kforged\x07 line\rReady"))
+    assert not RAW_CONTROL.search(out)
+    assert out.splitlines() == [
+        f"▌ {time.strftime('%H:%M:%S', time.localtime(0))}  ℹ got \\x1b[2J\\x1b[1A\\x9b2Kforged\\x07 line",
+        "▌ " + " " * 12 + "Ready",
+    ]
+
+
+def test_an_exception_never_drives_the_terminal():
+    try:
+        raise RuntimeError("401 from the API:\n\x1b]52;c;SGk=\x07 body")
+    except RuntimeError:
+        rec = record("could not stop graph chat cleanly", logging.ERROR, exc_info=sys.exc_info())
+    short = plain_formatter().format(rec)
+    assert not RAW_CONTROL.search(short)
+    assert short.splitlines()[0].endswith("RuntimeError: 401 from the API: \\x1b]52;c;SGk=\\x07 body")
+    assert not RAW_CONTROL.search(plain_formatter(verbose=True).format(rec))
+
+
+def test_a_graph_line_never_drives_the_terminal():
+    rec = graph_record("bad", "n\x1b[2J", "E\x1b[1A", hints=["h\x07"])
+    rec.tag = "g\x9b2K"
+    out = plain_formatter().format(rec)
+    assert not RAW_CONTROL.search(out)
+    assert "g\\x9b2K" in out and "n\\x1b[2J" in out and "E\\x1b[1A" in out and "h\\x07" in out
+
+
+def test_an_access_line_never_drives_the_terminal():
+    fmt = console.AccessFormatter(stream=FakeStream(tty=False))
+    rec = logging.LogRecord("uvicorn.access", logging.INFO, __file__, 1, '%s - "%s %s HTTP/%s" %d',
+                            ("127.0.0.1:5000", "GET", "/x\x1b[2J", "1.1", 404), None)
+    out = fmt.format(rec)
+    assert not RAW_CONTROL.search(out) and out.endswith(" 404 GET /x\\x1b[2J")
+
+
 def test_log_config_is_quiet_unless_verbose():
     quiet, loud = console.log_config(False), console.log_config(True)
     assert quiet["loggers"]["uvicorn.access"]["level"] == "WARNING"
@@ -515,6 +555,25 @@ def test_a_log_node_echo_prints_its_message_summarized(lines):
     (tag, tone, event, detail), = seen()
     assert (tag, tone, event) == ("chat", "info", "Log")
     assert detail.startswith("log: yyy") and detail.endswith("chars)") and len(detail) <= 200
+
+
+def test_a_log_node_echo_reaches_the_terminal_as_escapes():
+    # the whole path a Log node's message takes: GraphLines, then the console handler
+    stream = FakeStream(tty=False)
+    handler = logging.StreamHandler(stream)
+    handler.setFormatter(plain_formatter())
+    logger = logging.getLogger("test.graph.escapes")
+    logger.addHandler(handler)
+    logger.propagate = False
+    logger.setLevel(logging.DEBUG)
+    try:
+        GraphLines(logger).feed({"kind": "log", "node": "log1", "slug": "chat", "echo": True,
+                                 "message": "log: \x1b[1A\x1b[2KReady \x1b]52;c;SGk=\x07"})
+    finally:
+        logger.removeHandler(handler)
+    out = stream.getvalue()
+    assert not RAW_CONTROL.search(out.replace("\n", ""))
+    assert "log: \\x1b[1A\\x1b[2KReady \\x1b]52;c;SGk=\\x07" in out
 
 
 def test_only_a_true_echo_prints(lines):

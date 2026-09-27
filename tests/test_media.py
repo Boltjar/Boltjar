@@ -98,6 +98,18 @@ def test_whitespace_collapses_to_one_line():
     assert media.summarize("one\n\ntwo\tthree") == "one two three"
 
 
+def test_control_characters_print_as_escapes():
+    # an LLM reply or an HTTP body holding ESC, CSI or BEL would otherwise move
+    # the cursor over earlier lines, clear the screen or set the clipboard
+    line = media.summarize("o: \x1b[1A\x1b[2Kforged\x07 \x9b2J \x1b]52;c;SGk=\x07\x7f\x00", 200)
+    assert line == "o: \\x1b[1A\\x1b[2Kforged\\x07 \\x9b2J \\x1b]52;c;SGk=\\x07\\x7f\\x00"
+
+
+def test_a_cut_line_counts_its_escapes():
+    line = media.summarize("\x1b" * 100, limit=60)
+    assert len(line) <= 60 and "\x1b" not in line and line.startswith("\\x1b\\x1b")
+
+
 def test_data_urls_inside_structures_are_summarized_in_place():
     clip = _data_url("audio/wav", _wav(1.0))
     line = media.summarize({"text": "hi", "audio": clip})

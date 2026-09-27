@@ -6,7 +6,8 @@ frame) or pages of text. The console never prints that raw: `summarize` turns a
 data URL into what a person needs at a glance, `audio/wav · 42 KB · 3.1 s` or
 `image/png · 12 KB · 640x480`, and cuts long text to one line with its full
 length noted. Only the first few KB of a payload are decoded (enough for a WAV
-or image header), never the whole clip. Stdlib only.
+or image header), never the whole clip. A control character in the text prints
+as its escape (`printable`), so a value can never drive the terminal. Stdlib only.
 """
 from __future__ import annotations
 
@@ -28,6 +29,12 @@ _DATA_URL_RE = re.compile(r"data:[\w.+-]+/[\w.+-]+(?:;[\w.+=-]+)*,[^\s'\"<>]*")
 _MIME_RE = re.compile(r"^[\w.+-]+/[\w.+-]+$")
 
 _WAV_MIMES = {"audio/wav", "audio/x-wav", "audio/wave", "audio/vnd.wave"}
+
+# C0 and C1 control characters and DEL. A terminal acts on them: ESC and CSI
+# open sequences that move the cursor, clear the screen or set the clipboard,
+# BEL rings, CR goes back to the start of the line. Text from outside (an HTTP
+# response, an LLM reply, a webhook body) reaches the terminal without them.
+_CONTROL_RE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 
 
 def format_bytes(n: int) -> str:
@@ -80,13 +87,20 @@ def describe_bytes(data: bytes | bytearray) -> str:
     return " · ".join([mime, format_bytes(len(data)), *_details(mime, head, len(data))])
 
 
+def printable(text: str) -> str:
+    """`text` with every control character written out as its escape, ESC as
+    the four characters `\\x1b`, so a terminal shows it and never acts on it."""
+    return _CONTROL_RE.sub(lambda m: f"\\x{ord(m.group()):02x}", text)
+
+
 def summarize(value: Any, limit: int = 160) -> str:
     """One console-safe line for any wire value.
 
     A data URL becomes its description; data URLs inside longer text (a dict,
     an error message) are each replaced by `<description>`; whitespace runs
-    collapse to one space; text over `limit` characters is cut with an ellipsis
-    and its full length noted."""
+    collapse to one space and any other control character is written out
+    (`printable`); text over `limit` characters is cut with an ellipsis and its
+    full length noted."""
     if isinstance(value, (bytes, bytearray)):
         return describe_bytes(value)
     text = value if isinstance(value, str) else _to_text(value)
@@ -96,7 +110,7 @@ def summarize(value: Any, limit: int = 160) -> str:
     full = len(text)
     if "data:" in text:
         text = _DATA_URL_RE.sub(lambda m: f"<{describe_data_url(m.group(0))}>", text)
-    text = " ".join(text.split())
+    text = printable(" ".join(text.split()))
     if len(text) <= limit:
         return text
     note = f"… ({full:,} chars)"
