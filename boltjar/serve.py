@@ -1,0 +1,330 @@
+"""
+boltjar.serve: `python -m boltjar serve`, the command that runs Boltjar.
+
+    python -m boltjar serve [--host 127.0.0.1] [--port 8770] [--no-browser]
+                            [--verbose] [--allow-remote]
+
+It prints the banner and a boot checklist (Python, the virtualenv, the
+requirements, the editor bundle, the port, the node packs, the providers),
+binds the port itself so a busy one is reported before anything starts, runs
+uvicorn in this process with the console's quiet log setup, opens the browser
+once the server reports ready, and on Ctrl+C stops every graph and ends every
+live connection BEFORE uvicorn waits on them, so one press exits.
+
+The server learns its bind through the environment: BOLTJAR_ALLOWED_HOSTS (the
+host names a request may carry, a comma list) and BOLTJAR_PORT.
+"""
+from __future__ import annotations
+
+import errno
+import ipaddress
+import logging
+import logging.config
+import os
+import pathlib
+import socket
+import sys
+import threading
+import webbrowser
+from typing import Awaitable, Callable, Optional
+
+from boltjar import __version__, console, deps
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+EDITOR_INDEX = ROOT / "editor" / "dist" / "index.html"
+
+DEFAULT_HOST = "127.0.0.1"
+DEFAULT_PORT = 8770
+TAGLINE = "a visual node builder for always-on AI systems"
+LOOPBACK_NAMES = ("localhost", "127.0.0.1", "::1")
+WILDCARD_HOSTS = ("0.0.0.0", "::", "")
+PYTHON_RANGE = ((3, 11), (3, 13))
+START = "start.bat" if os.name == "nt" else "./start.sh"
+# Once the graphs are stopped and the app's own streams have ended, anything
+# still open (an Ollama model pull mid-download) gets this long before uvicorn
+# cancels it, so an exit never hangs on a response the app does not own.
+GRACEFUL_SECONDS = 5
+
+# socket errors by meaning; Windows reports its own WSA codes in `winerror`.
+_IN_USE = {errno.EADDRINUSE, 10048}
+_DENIED = {errno.EACCES, 10013}
+
+_log = logging.getLogger(__name__)
+
+# (detail, tone, fix): one checklist line.
+Check = tuple[str, str, Optional[str]]
+
+
+# ---------------------------------------------------------------- the bind
+def is_loopback(host: str) -> bool:
+    name = host.strip().strip("[]").lower()
+    if name == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(name).is_loopback
+    except ValueError:
+        return False
+
+
+def host_problem(host: str, allow_remote: bool) -> str | None:
+    """Why `host` may not be served, or None. Anything but loopback puts the
+    editor, and every key it can spend, on the network, so it needs the
+    explicit --allow-remote."""
+    if allow_remote or is_loopback(host):
+        return None
+    return f"{host or 'every interface'} can be reached from other machines"
+
+
+def allowed_hosts(host: str, existing: str = "") -> list[str]:
+    """The host names a request may carry: the loopback names, the bind host,
+    and for a wildcard bind this machine's name and addresses. Names already in
+    BOLTJAR_ALLOWED_HOSTS (`existing`, say a reverse proxy's) are kept."""
+    names = [n.strip() for n in existing.split(",")] + list(LOOPBACK_NAMES)
+    bare = host.strip().strip("[]")
+    names += _machine_names() if bare in WILDCARD_HOSTS else [bare]
+    out: list[str] = []
+    seen: set[str] = set()
+    for name in names:
+        if name and name.lower() not in seen:
+            seen.add(name.lower())
+            out.append(name)
+    return out
+
+
+def _machine_names() -> list[str]:
+    try:
+        hostname = socket.gethostname()
+        _, aliases, addresses = socket.gethostbyname_ex(hostname)
+    except OSError:
+        return []
+    return [hostname, *aliases, *addresses]
+
+
+def local_url(host: str, port: int) -> str:
+    """The address to open on this machine (a wildcard bind is reached on loopback)."""
+    bare = host.strip().strip("[]")
+    if bare in WILDCARD_HOSTS:
+        bare = DEFAULT_HOST
+    if ":" in bare:
+        bare = f"[{bare}]"
+    return f"http://{bare}:{port}"
+
+
+def bind(host: str, port: int) -> socket.socket:
+    """Bind the listening socket before anything else starts, so a busy port is
+    reported plainly up front. uvicorn then serves on this very socket, so no
+    other process can take the port in between."""
+    bare = host.strip().strip("[]") or "0.0.0.0"
+    family = socket.AF_INET6 if ":" in bare else socket.AF_INET
+    sock = socket.socket(family, socket.SOCK_STREAM)
+    try:
+        if os.name != "nt":
+            # as uvicorn does: a port the last run left in TIME_WAIT is free to
+            # reuse. On Windows the same flag would let two servers share a port.
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.bind((bare, port))
+    except OSError:
+        sock.close()
+        raise
+    return sock
+
+
+def port_problem(exc: OSError, port: int) -> Check:
+    code = getattr(exc, "winerror", None) or exc.errno
+    other = port + 1 if port < 65535 else port - 1
+    if code in _IN_USE:
+        return (f"{port} is in use by another program (maybe another Boltjar)", "bad",
+                f"stop that program, or use another port: --port {other}")
+    if code in _DENIED:
+        return (f"{port} is reserved or blocked by the system", "bad",
+                f"use another port: --port {other}")
+    return (f"cannot listen on {port}: {exc.strerror or exc}", "bad",
+            f"use another port: --port {other}")
+
+
+# ---------------------------------------------------------------- the checklist
+def python_check(version: tuple = tuple(sys.version_info[:3])) -> Check:
+    text = ".".join(str(part) for part in version[:3])
+    low, high = PYTHON_RANGE
+    if low <= tuple(version[:2]) <= high:
+        return text, "ok", None
+    return (f"{text} is untested (3.11 to 3.13 are supported)", "warn",
+            f"{START} sets up a supported Python for you")
+
+
+def venv_check(prefix: str = sys.prefix, base_prefix: str = sys.base_prefix) -> Check:
+    if prefix == base_prefix:
+        return ("none: packages come from the system Python", "warn",
+                f"{START} creates .venv for you")
+    path = pathlib.Path(prefix).resolve()
+    return (path.relative_to(ROOT).as_posix() if path.is_relative_to(ROOT) else str(path)), "ok", None
+
+
+def requirements_check(state: str | None = None) -> Check:
+    state = deps.status() if state is None else state
+    if state == "current":
+        return "up to date", "ok", None
+    if state == "changed":
+        return ("requirements.txt changed since the last install", "warn",
+                f"run {START} again, or: python -m pip install -r requirements.txt")
+    return "installed by hand (not tracked)", "info", None
+
+
+def editor_check(index: pathlib.Path = EDITOR_INDEX) -> Check:
+    if index.is_file():
+        return "built", "ok", None
+    return ("not built: the API runs, the editor page does not", "warn",
+            "npm ci --prefix editor, then npm run build --prefix editor (needs Node.js 18+)")
+
+
+def packs_check() -> Check:
+    """The node packs that loaded (and any that did not), with the node and model counts."""
+    from boltjar import models
+    from boltjar.sdk import NODE_REGISTRY
+
+    counts = f"{len(NODE_REGISTRY)} nodes, {len(models.MODELS)} models"
+    try:
+        from boltjar import packs
+    except ImportError:  # a Boltjar with the built-in nodes only
+        return f"core ({counts})", "ok", None
+    report = packs.report()
+    loaded = ", ".join(str(p.get("id")) for p in report.get("loaded", []))
+    failed = report.get("failed", [])
+    if not failed:
+        return f"{loaded} ({counts})", "ok", None
+    names = ", ".join(str(f.get("id") or f.get("folder")) for f in failed)
+    return (f"{loaded} ({counts}); failed: {names}", "warn",
+            "the reason is in the log line above, and at /api/packs")
+
+
+def providers_check() -> Check:
+    """The providers ready to use, by name only (never a key)."""
+    from boltjar import secrets
+
+    ready = [p["provider"] for p in secrets.provider_status() if p["connected"]]
+    if ready:
+        return ", ".join(ready), "ok", None
+    return ("none yet: an LLM node answers in mock mode", "info",
+            "add a key in the editor's Connections, or in .env")
+
+
+# ---------------------------------------------------------------- the server
+def make_server(config, shutdown_app: Callable[[], Awaitable[int]],
+                on_ready: Callable[[], None], on_stop: Callable[[], None]):
+    """uvicorn's Server with Boltjar's start and stop around it: `on_ready` once
+    the app has started and the socket is listening; on shutdown, stop taking
+    connections, then `shutdown_app()` (stop the graphs, end the streams), then
+    uvicorn's own shutdown, which waits for connections that are now closing."""
+    import uvicorn
+
+    class BoltjarServer(uvicorn.Server):
+        graphs_stopped = 0
+
+        async def startup(self, sockets=None) -> None:
+            await super().startup(sockets=sockets)
+            if self.started and not self.should_exit:
+                on_ready()
+
+        async def shutdown(self, sockets=None) -> None:
+            on_stop()
+            # stop accepting first: an editor tab reconnects the moment its
+            # socket closes, and must find nothing listening.
+            for listener in getattr(self, "servers", []):
+                listener.close()
+            self.graphs_stopped = await shutdown_app()
+            await super().shutdown(sockets=sockets)
+
+    return BoltjarServer(config)
+
+
+def serve(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT, open_browser: bool = True,
+          verbose: bool = False, allow_remote: bool = False) -> int:
+    """Run Boltjar until Ctrl+C. Returns the process exit code."""
+    console.prepare_streams()
+    out = console.Console()
+    logging.config.dictConfig(console.log_config(verbose))
+    try:
+        return _serve(out, host, port, open_browser, verbose, allow_remote)
+    except KeyboardInterrupt:  # Ctrl+C during the checklist
+        out.write()
+        out.goodbye("stopped")
+        return 130
+    finally:
+        out.show_cursor()
+
+
+def _serve(out: console.Console, host: str, port: int, open_browser: bool,
+           verbose: bool, allow_remote: bool) -> int:
+    sep = out.style.glyphs["sep"]
+    out.banner(__version__, TAGLINE)
+
+    problem = host_problem(host, allow_remote)
+    if problem:
+        out.check("host", problem, "bad",
+                  fix=f"add --allow-remote to serve {host or 'every interface'} on purpose")
+        return 2
+    out.check("python", *python_check())
+    out.check("venv", *venv_check())
+    out.check("requirements", *requirements_check())
+    out.check("editor", *editor_check())
+
+    try:
+        sock = bind(host, port)
+    except OSError as exc:
+        out.check("port", *port_problem(exc, port))
+        return 1
+    remote = not is_loopback(host)
+    out.check("port", f"{host or '0.0.0.0'}:{port}" + (f" {sep} reachable from other machines" if remote else ""),
+              "warn" if remote else "ok")
+
+    # read by the server when it builds its host check (see boltjar.security)
+    os.environ["BOLTJAR_ALLOWED_HOSTS"] = ",".join(
+        allowed_hosts(host, os.environ.get("BOLTJAR_ALLOWED_HOSTS", "")))
+    os.environ["BOLTJAR_PORT"] = str(port)
+
+    try:
+        with out.step("packs") as step:
+            from boltjar import server as app_module
+            step.done(*packs_check())
+    except Exception as exc:
+        sock.close()
+        missing = isinstance(exc, ImportError)
+        out.check("packs", f"{type(exc).__name__}: {exc}", "bad",
+                  fix=f"run {START} again to install what is missing" if missing
+                  else "run with --verbose for the full traceback")
+        if verbose:
+            _log.exception("the server could not load")
+        return 1
+
+    import uvicorn
+
+    url = local_url(host, port)
+
+    def ready() -> None:
+        # after the app's startup, so the providers line sees the keys it loaded.
+        with out.step("providers") as step:
+            step.done(*providers_check())
+        out.ready(url, f"Ctrl+C stops the server {sep} log times are local ({console.local_zone()})")
+        if open_browser:
+            threading.Thread(target=webbrowser.open, args=(url,), daemon=True).start()
+
+    config = uvicorn.Config(
+        app_module.app, host=host, port=port,
+        log_config=console.log_config(verbose), access_log=verbose,
+        timeout_graceful_shutdown=GRACEFUL_SECONDS,
+    )
+    server = make_server(config, app_module.shutdown_all, on_ready=ready, on_stop=out.write)
+    try:
+        server.run(sockets=[sock])
+    except KeyboardInterrupt:
+        pass  # uvicorn hands back the Ctrl+C it handled, once it has shut down
+    except SystemExit as exc:  # uvicorn exits this way when the app cannot start
+        out.check("server", "could not start", "bad",
+                  fix="the reason is in the log above; --verbose shows more")
+        return exc.code if isinstance(exc.code, int) else 1
+    finally:
+        sock.close()
+    stopped = server.graphs_stopped
+    turned_off = f", {stopped} graph{'' if stopped == 1 else 's'} turned off" if stopped else ""
+    out.goodbye(f"stopped{turned_off}")
+    return 0

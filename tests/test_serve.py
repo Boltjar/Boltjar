@@ -1,0 +1,265 @@
+"""`python -m boltjar serve` and the command line around it: argument parsing,
+the bind policy, the busy-port check, the checklist, and the start/stop order
+around uvicorn. Nothing here listens for real connections."""
+from __future__ import annotations
+
+import asyncio
+import logging.config
+import os
+import socket
+
+import pytest
+
+from boltjar import __main__ as cli
+from boltjar import console, serve
+
+
+@pytest.fixture
+def boot(monkeypatch):
+    """serve() as the terminal runs it, minus the process-wide setup (logging
+    config, stream encodings) that would leak into the rest of the suite."""
+    monkeypatch.setattr(logging.config, "dictConfig", lambda config: None)
+    monkeypatch.setattr(console, "prepare_streams", lambda: None)
+    return serve.serve
+
+
+# ---------------------------------------------------------------- the command line
+def test_serve_defaults():
+    args = cli.parse_args(["serve"])
+    assert (args.command, args.host, args.port) == ("serve", "127.0.0.1", 8770)
+    assert (args.no_browser, args.verbose, args.allow_remote) == (False, False, False)
+
+
+def test_serve_flags():
+    args = cli.parse_args(["serve", "--host", "0.0.0.0", "--port", "9000", "--no-browser",
+                           "--verbose", "--allow-remote"])
+    assert (args.host, args.port, args.no_browser, args.verbose, args.allow_remote) == \
+        ("0.0.0.0", 9000, True, True, True)
+
+
+@pytest.mark.parametrize("port", ["0", "65536", "http"])
+def test_a_bad_port_is_a_usage_error(port, capsys):
+    with pytest.raises(SystemExit) as exc:
+        cli.parse_args(["serve", "--port", port])
+    assert exc.value.code == 2
+    assert "--port" in capsys.readouterr().err
+
+
+def test_run_command_and_the_original_headless_form():
+    run = cli.parse_args(["run", "examples/demo.json", "2"])
+    legacy = cli.parse_args(["examples/demo.json", "2"])
+    for args in (run, legacy):
+        assert (args.command, args.graph, args.seconds) == ("run", "examples/demo.json", 2.0)
+    assert cli.parse_args(["examples/demo.json"]).seconds == 6.0
+
+
+def test_no_command_prints_help(capsys):
+    assert cli.main([]) == 2
+    assert "serve" in capsys.readouterr().out
+
+
+def test_serve_dispatches_with_its_options(monkeypatch):
+    seen = {}
+    monkeypatch.setattr(serve, "serve", lambda **kw: seen.update(kw) or 0)
+    assert cli.main(["serve", "--port", "8771", "--no-browser"]) == 0
+    assert seen == {"host": "127.0.0.1", "port": 8771, "open_browser": False,
+                    "verbose": False, "allow_remote": False}
+
+
+# ---------------------------------------------------------------- the bind policy
+@pytest.mark.parametrize("host", ["127.0.0.1", "localhost", "::1", "[::1]", "127.0.0.2"])
+def test_loopback_hosts_need_no_flag(host):
+    assert serve.is_loopback(host)
+    assert serve.host_problem(host, allow_remote=False) is None
+
+
+@pytest.mark.parametrize("host", ["0.0.0.0", "::", "192.168.1.20", "myhost.lan"])
+def test_a_reachable_host_needs_allow_remote(host):
+    assert serve.host_problem(host, allow_remote=False)
+    assert serve.host_problem(host, allow_remote=True) is None
+
+
+def test_allowed_hosts_for_a_loopback_bind_are_the_loopback_names():
+    assert serve.allowed_hosts("127.0.0.1") == ["localhost", "127.0.0.1", "::1"]
+
+
+def test_allowed_hosts_add_the_bind_address():
+    assert serve.allowed_hosts("192.168.1.20")[-1] == "192.168.1.20"
+
+
+def test_a_wildcard_bind_allows_this_machines_names(monkeypatch):
+    monkeypatch.setattr(serve, "_machine_names", lambda: ["studio", "192.168.1.20"])
+    assert serve.allowed_hosts("0.0.0.0") == ["localhost", "127.0.0.1", "::1", "studio", "192.168.1.20"]
+
+
+def test_names_already_allowed_are_kept_once():
+    hosts = serve.allowed_hosts("127.0.0.1", existing="proxy.example, LOCALHOST")
+    assert hosts == ["proxy.example", "LOCALHOST", "127.0.0.1", "::1"]
+
+
+@pytest.mark.parametrize("host, url", [
+    ("127.0.0.1", "http://127.0.0.1:8770"),
+    ("0.0.0.0", "http://127.0.0.1:8770"),
+    ("::1", "http://[::1]:8770"),
+    ("localhost", "http://localhost:8770"),
+])
+def test_local_url(host, url):
+    assert serve.local_url(host, 8770) == url
+
+
+# ---------------------------------------------------------------- the port
+def test_a_busy_port_is_caught_before_anything_starts():
+    holder = socket.socket()
+    holder.bind(("127.0.0.1", 0))
+    holder.listen()
+    port = holder.getsockname()[1]
+    try:
+        with pytest.raises(OSError) as exc:
+            serve.bind("127.0.0.1", port)
+        detail, tone, fix = serve.port_problem(exc.value, port)
+        assert tone == "bad"
+        assert f"{port} is in use" in detail
+        assert f"--port {port + 1}" in fix
+    finally:
+        holder.close()
+
+
+def test_a_free_port_is_bound_and_handed_over():
+    sock = serve.bind("127.0.0.1", 0)
+    try:
+        assert sock.getsockname()[0] == "127.0.0.1"
+    finally:
+        sock.close()
+
+
+def test_a_reserved_port_says_so():
+    denied = OSError(10013, "access denied")
+    denied.winerror = 10013
+    detail, _tone, fix = serve.port_problem(denied, 8000)
+    assert "reserved or blocked" in detail and "--port 8001" in fix
+
+
+# ---------------------------------------------------------------- the checklist
+def test_python_check():
+    assert serve.python_check((3, 12, 9)) == ("3.12.9", "ok", None)
+    detail, tone, fix = serve.python_check((3, 14, 0))
+    assert tone == "warn" and "3.11 to 3.13" in detail and fix
+
+
+def test_venv_check(tmp_path):
+    assert serve.venv_check(str(tmp_path), str(tmp_path))[1] == "warn"
+    assert serve.venv_check(str(serve.ROOT / ".venv"), str(tmp_path)) == (".venv", "ok", None)
+
+
+def test_requirements_check_reads_the_install_stamp():
+    assert serve.requirements_check("current")[:2] == ("up to date", "ok")
+    assert serve.requirements_check("changed")[1] == "warn"
+    assert serve.requirements_check("untracked")[1] == "info"
+
+
+def test_editor_check(tmp_path):
+    index = tmp_path / "index.html"
+    assert serve.editor_check(index)[1] == "warn"
+    index.write_text("<html></html>")
+    assert serve.editor_check(index) == ("built", "ok", None)
+
+
+def test_packs_check_counts_what_loaded():
+    import boltjar.nodes.core  # noqa: F401  (registers the core nodes)
+    detail, tone, _fix = serve.packs_check()
+    assert tone == "ok"
+    assert "core" in detail and "nodes" in detail and "models" in detail
+
+
+def test_providers_check_names_providers_only(monkeypatch):
+    from boltjar import secrets
+    monkeypatch.setattr(secrets, "provider_status", lambda: [
+        {"provider": "ollama", "connected": False, "envVar": None},
+        {"provider": "xai", "connected": True, "envVar": "XAI_API_KEY"},
+    ])
+    assert serve.providers_check() == ("xai", "ok", None)
+    monkeypatch.setattr(secrets, "provider_status", lambda: [])
+    assert serve.providers_check()[1] == "info"
+
+
+# ---------------------------------------------------------------- start and stop order
+def test_the_server_ends_the_apps_connections_before_uvicorn_waits_on_them(monkeypatch):
+    import uvicorn
+
+    order: list[str] = []
+
+    class Listener:
+        def close(self) -> None:
+            order.append("stop accepting")
+
+    async def uvicorn_shutdown(self, sockets=None):
+        order.append("uvicorn waits for connections")
+
+    async def uvicorn_startup(self, sockets=None):
+        self.started = True
+
+    async def shutdown_app():
+        order.append("graphs stopped, streams ended")
+        return 2
+
+    monkeypatch.setattr(uvicorn.Server, "shutdown", uvicorn_shutdown)
+    monkeypatch.setattr(uvicorn.Server, "startup", uvicorn_startup)
+    server = serve.make_server(uvicorn.Config(app=None), shutdown_app,
+                               on_ready=lambda: order.append("ready"),
+                               on_stop=lambda: order.append("stopping"))
+    server.servers = [Listener()]
+
+    asyncio.run(server.startup())
+    asyncio.run(server.shutdown())
+    assert order == ["ready", "stopping", "stop accepting", "graphs stopped, streams ended",
+                     "uvicorn waits for connections"]
+    assert server.graphs_stopped == 2
+
+
+def test_ready_waits_for_a_real_start(monkeypatch):
+    import uvicorn
+
+    async def failed_startup(self, sockets=None):
+        self.should_exit = True  # e.g. the app's startup raised
+
+    monkeypatch.setattr(uvicorn.Server, "startup", failed_startup)
+    ready = []
+    server = serve.make_server(uvicorn.Config(app=None), None, on_ready=lambda: ready.append(1),
+                               on_stop=lambda: None)
+    asyncio.run(server.startup())
+    assert ready == []
+
+
+def test_a_busy_port_stops_the_boot_with_exit_code_1(boot, monkeypatch, capsys):
+    holder = socket.socket()
+    holder.bind(("127.0.0.1", 0))
+    holder.listen()
+    port = holder.getsockname()[1]
+    monkeypatch.setattr(serve, "make_server", lambda *a, **k: pytest.fail("the boot went on"))
+    try:
+        assert boot(port=port, open_browser=False) == 1
+    finally:
+        holder.close()
+    assert f"{port} is in use" in capsys.readouterr().out
+
+
+def test_a_remote_host_without_the_flag_stops_the_boot(boot, monkeypatch, capsys):
+    monkeypatch.setattr(serve, "bind", lambda *a: pytest.fail("bound anyway"))
+    assert boot(host="0.0.0.0", open_browser=False) == 2
+    assert "--allow-remote" in capsys.readouterr().out
+
+
+def test_allow_remote_hands_the_bind_to_the_server(boot, monkeypatch):
+    import boltjar.server  # noqa: F401  (imported up front, so the boot's import step is instant)
+
+    def stop_here():
+        raise RuntimeError("stop before uvicorn")
+
+    monkeypatch.setattr(serve, "_machine_names", lambda: ["studio"])
+    monkeypatch.setattr(serve, "bind", lambda host, port: socket.socket())
+    monkeypatch.setattr(serve, "packs_check", stop_here)  # the step right after the env is set
+    monkeypatch.setenv("BOLTJAR_ALLOWED_HOSTS", "")
+    monkeypatch.setenv("BOLTJAR_PORT", "")
+    assert boot(host="0.0.0.0", port=9001, open_browser=False, allow_remote=True) == 1
+    assert os.environ["BOLTJAR_ALLOWED_HOSTS"] == "localhost,127.0.0.1,::1,studio"
+    assert os.environ["BOLTJAR_PORT"] == "9001"
