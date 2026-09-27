@@ -245,9 +245,9 @@ def test_a_pack_node_with_an_optional_trigger_is_skipped(root):
             outputs = [Port("out", "text")]
     """)
     report = packs.load_all(root)
-    assert failed(report)["lazy"] == ("ValueError: trigger input 'go' cannot be optional: "
-                                      "a trigger fires the node and must be wired "
-                                      "(drop optional=True)")
+    assert failed(report)["lazy"] == ("ValueError: node 'lazy.thing': trigger input 'go' "
+                                      "cannot be optional: a trigger fires the node and "
+                                      "must be wired (drop optional=True)")
     assert "lazy.thing" not in NODE_REGISTRY
     assert "hello" in loaded(report)
 

@@ -64,12 +64,11 @@ class Kind(str, enum.Enum):
 class Port:
     """A typed input or output socket. Inputs may be triggering or latching.
 
-    A trigger input (`trigger=True`) fires the node, and a node with a trigger
-    runs only when one fires, so it must be wired: a graph with an unwired
-    trigger does not turn On, and declaring one `optional` raises here. A
-    growable trigger needs a wire on at least one of its sockets. Every other
-    input latches data and is pulled when the node fires; `optional` lets one
-    of those stay unwired."""
+    A trigger input (`trigger=True`) fires the node, so it must be wired: a
+    graph with an unwired trigger does not turn On, and ``@node`` refuses one
+    declared `optional`, naming the node. A growable trigger needs a wire on at
+    least one of its sockets. Every other input latches data and is pulled when
+    the node fires; `optional` lets one of those stay unwired."""
     name: str
     type: str
     growable: bool = False   # one socket per wire, an empty socket always ready
@@ -92,11 +91,6 @@ class Port:
     # e.g. a Tool's `call` output scaffolds its Tool Args body. Purely UX; the
     # runtime ignores it.
     scaffold: Optional[str] = None
-
-    def __post_init__(self) -> None:
-        if self.trigger and self.optional:
-            raise ValueError(f"trigger input {self.name!r} cannot be optional: a trigger "
-                             f"fires the node and must be wired (drop optional=True)")
 
     def as_dict(self) -> dict:
         return {
@@ -531,6 +525,14 @@ def node(*, id: str, name: str, kind: Kind, category: str,
                 value.label = value.label or attr.replace("_", " ").title()
                 widgets.append(value)
                 seen.add(attr)
+
+        for p in inputs:
+            if p.trigger and p.optional:
+                # checked here, not on the Port, so the error a pack author reads
+                # (the pack loader lists it) names the node as well as the port.
+                raise ValueError(f"node {id!r}: trigger input {p.name!r} cannot be optional: "
+                                 f"a trigger fires the node and must be wired "
+                                 f"(drop optional=True)")
 
         spec = NodeSpec(id=id, name=name, kind=kind, category=category,
                         version=version, summary=summary, cls=cls,

@@ -118,7 +118,7 @@ class Upper:
 A few things to know:
 
 - `pulled=True` makes a data node. It runs on demand, when a fired node needs its value. A node that does work takes an input with `trigger=True` instead: it fires when an event arrives and pulls its other inputs at that moment.
-- A trigger fires the node and must be wired. A graph with an unwired trigger input does not turn On, and `Port(trigger=True, optional=True)` raises where it is declared. `optional=True` is for data inputs that may stay unwired.
+- A trigger fires the node and must be wired. A graph with an unwired trigger input does not turn On, and `@node` refuses a trigger declared `optional=True`, naming the node, so the pack is skipped with that reason. `optional=True` is for data inputs that may stay unwired.
 - Knobs are annotated class attributes (`seconds: float = 2.0`) or `Widget` values from `boltjar.sdk` (`select`, `slider`, `code`). In the editor, a right-click turns a knob into an input, unless its `Widget` sets `promotable=False`.
 - Put behavior on the `Port` and `Widget` declarations (`growable`, `optional`, `op_field` and the rest). The editor reads those generically.
 - `icon=` and `subline=` on `@node` set how the node looks. `icon` is an Ionicons name the editor ships (the list is in `editor/src/lib/icons.tsx`). `subline` is the line under the title, a template over the node's knobs such as `every · {seconds}s`, with the filters listed in `SUBLINE_FILTERS` in `boltjar/sdk.py`. Leave them out and the node draws its kind's icon and its category.

@@ -9,7 +9,7 @@ no node can offer one."""
 import pytest
 
 import boltjar.nodes.core  # noqa: F401  (registers the core nodes)
-from boltjar.sdk import NODE_REGISTRY, Port
+from boltjar.sdk import NODE_REGISTRY, Kind, Port, node
 from boltjar.server import validate_graph
 
 # the triggers that used to be declared optional: each is required like any other.
@@ -47,11 +47,17 @@ def test_every_once_optional_trigger_is_checked():
     assert ONCE_OPTIONAL <= set(TRIGGERS)
 
 
-def test_the_sdk_refuses_an_optional_trigger():
-    with pytest.raises(ValueError, match="trigger input 'go' cannot be optional"):
-        Port("go", "event", trigger=True, optional=True)
-    with pytest.raises(ValueError, match="must be wired"):
-        Port("in", "event", growable=True, trigger=True, optional=True)
+def test_the_sdk_refuses_an_optional_trigger_naming_the_node():
+    for node_id, port in (("test.lazy", Port("go", "event", trigger=True, optional=True)),
+                          ("test.lazy_sync", Port("in", "event", growable=True, trigger=True,
+                                                  optional=True))):
+        with pytest.raises(ValueError) as err:
+            node(id=node_id, name="Probe", kind=Kind.TRANSFORM, category="Test")(
+                type("Probe", (), {"inputs": [port]}))
+        assert str(err.value) == (f"node {node_id!r}: trigger input {port.name!r} cannot be "
+                                  f"optional: a trigger fires the node and must be wired "
+                                  f"(drop optional=True)")
+        assert node_id not in NODE_REGISTRY
     assert Port("name", "text", optional=True).optional, "a data input may be optional"
 
 
