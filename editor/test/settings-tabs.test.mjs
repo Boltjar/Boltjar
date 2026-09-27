@@ -39,7 +39,7 @@ check("the gear opens General", GEAR_TAB, "general");
 check("an opening that names no tab lands on the gear's", openingTab(), "general");
 check("null lands on the gear's too", openingTab(null), "general");
 check("Add a connection lands on AI Providers", openingTab(SETTINGS_LINKS.addConnection), "providers");
-check("Open Connections lands on AI Providers", openingTab(SETTINGS_LINKS.openConnections), "providers");
+check("Open AI Providers lands on AI Providers", openingTab(SETTINGS_LINKS.openConnections), "providers");
 check("Open Settings lands on General", openingTab(SETTINGS_LINKS.openSettings), "general");
 check("Secrets can be asked for", openingTab("secrets"), "secrets");
 check("a tab that does not exist lands on the gear's", openingTab("local-ai"), "general");
@@ -69,7 +69,7 @@ const app = read("../src/App.tsx");
 check("the gear opens on GEAR_TAB", /onOpenSettings=\{\(\) => setSettingsTab\(GEAR_TAB\)\}/.test(app), true);
 check("Add a connection opens on its link's tab",
   /openConnections: \(\) => setSettingsTab\(SETTINGS_LINKS\.addConnection\)/.test(app), true);
-check("the palette's Open Connections opens on its link's tab",
+check("the palette's Open AI Providers opens on its link's tab",
   /run: \(\) => setSettingsTab\(SETTINGS_LINKS\.openConnections\)/.test(app), true);
 check("the panel is handed the tab it opens on", /initialTab=\{settingsTab\}/.test(app), true);
 const panel = read("../src/components/ConnectionsWindow.tsx");

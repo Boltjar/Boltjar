@@ -234,7 +234,7 @@ export function SecretAutocompleteField({
             <div className="tpl-ac-empty">
               {auto.mode === "secret"
                 ? (names.length === 0
-                    ? "no secrets yet: add one in Connections"
+                    ? "no secrets yet: add one in Settings, Secrets"
                     : `no secret matches "${auto.query}"`)
                 : (candidates.length === 0
                     ? "wire a node into the tag port"

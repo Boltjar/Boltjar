@@ -1032,7 +1032,7 @@ export default function App() {
       ...(socket.power === "on" ? [{ id: "restart", label: "Save & Restart", hint: "apply live edits", icon: "refresh-outline", run: () => void restart() }] : []),
       { id: "save", label: "Save graph", hint: "PUT /api/graphs", icon: "save-outline", kbd: mod("S"), run: () => void putGraph() },
       { id: "settings", label: "Open Settings", hint: "startup, providers and secrets", icon: "settings-outline", run: () => setSettingsTab(SETTINGS_LINKS.openSettings) },
-      { id: "connections", label: "Open Connections", hint: "manage providers and secrets", icon: "git-network-outline", run: () => setSettingsTab(SETTINGS_LINKS.openConnections) },
+      { id: "connections", label: "Open AI Providers", hint: "provider keys, endpoints and local models", icon: "git-network-outline", run: () => setSettingsTab(SETTINGS_LINKS.openConnections) },
       { id: "reset", label: "Reset to default graph", hint: "discard local edits", icon: "refresh-outline", run: () => { try { if (activeSlug) localStorage.removeItem(draftKey(activeSlug)); } catch { /* ignore */ } window.location.reload(); } },
       { id: "undo", label: "Undo", hint: "step back", icon: "arrow-undo-outline", kbd: mod("Z"), run: undo },
       { id: "redo", label: "Redo", hint: "step forward", icon: "arrow-redo-outline", kbd: mod("Y"), run: redo },

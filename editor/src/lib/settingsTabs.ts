@@ -30,7 +30,7 @@ export const GEAR_TAB: SettingsTab = "general";
 export const SETTINGS_LINKS = {
   /** the model picker's "Add a connection" row */
   addConnection: "providers",
-  /** the command palette's "Open Connections" */
+  /** the command palette's "Open AI Providers" */
   openConnections: "providers",
   /** the command palette's "Open Settings" */
   openSettings: "general",

@@ -81,7 +81,7 @@ ANTHROPIC_VERSION = "2023-06-01"
 # The LLM model value that picks a runnable model at run time (resolve_auto).
 AUTO = "auto"
 # What an "auto" LLM replies with while nothing runnable is connected.
-AUTO_MOCK_REPLY = ("No model is connected yet: open Connections to add a provider key "
+AUTO_MOCK_REPLY = ("No model is connected yet: open Settings (the gear) to add a provider key "
                    "or install an Ollama model, and this node will use it.")
 
 # the manifest kinds each provider's list covers: a manifest of another kind (xAI
@@ -787,7 +787,7 @@ def _provider_label(provider: str) -> str:
 
 def _unlisted_reason(provider: str) -> str:
     if provider == "ollama":
-        return "not installed in Ollama: pull it in Connections"
+        return "not installed in Ollama: pull it in Settings, AI Providers"
     return f"no longer offered by {_provider_label(provider)}"
 
 
@@ -798,11 +798,11 @@ def _unlisted_availability(provider: str, view: View) -> tuple[bool, str | None]
     env = _secrets.PROVIDERS.get(provider)
     if env is not None:
         return (True, None) if _secrets.get_secret(env) else (
-            False, f"no {_provider_label(provider)} key: add it in Connections")
+            False, f"no {_provider_label(provider)} key: add it in Settings, AI Providers")
     endpoint = view.custom.get(provider)
     if endpoint is not None:
         return (True, None) if endpoint.ready() else (
-            False, f"secret {endpoint.key_secret} is not defined: add it in Connections")
+            False, f"secret {endpoint.key_secret} is not defined: add it in Settings, Secrets")
     return True, None  # a provider nothing here knows (a pack's own) is assumed usable
 
 
@@ -1000,7 +1000,7 @@ def model_problem(model_id: str, kind: str, snap: Snapshot | None = None) -> str
         why = "not in the model list" + (f" ({reason})" if not ok and reason else "")
     nearest = closest(model_id, kind, snap.rows)
     hint = (f"closest available: {nearest}" if nearest
-            else f"pick another model, or connect {_family_words(kind)[0]} in Connections")
+            else f"pick another model, or connect {_family_words(kind)[0]} in Settings, AI Providers")
     return f"model {model_id} is {why}; {hint}"
 
 

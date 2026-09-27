@@ -5,7 +5,7 @@ OpenAI itself and many other servers (OpenRouter, Groq, LM Studio, llama.cpp,
 vLLM) speak the same wire format: GET <base>/models lists the models and POST
 <base>/chat/completions runs one. Two kinds of provider use it:
 
-  - `openai`: api.openai.com, with the key OPENAI_API_KEY (a Connections key).
+  - `openai`: api.openai.com, with the key OPENAI_API_KEY (set in Settings, AI Providers).
   - a named custom endpoint: a name (the provider id its models carry, e.g.
     "openrouter"), a base URL and, when the server wants a key, the name of the
     secret that holds it. The list lives in user/data/endpoints.json; the key

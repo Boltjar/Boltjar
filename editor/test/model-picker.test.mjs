@@ -42,12 +42,12 @@ const model = (id, extra = {}) => ({
 const served = [
   model("ollama/gemma4:e4b", { label: "Gemma 4 e4b (Ollama)", source: "both" }),
   model("ollama/llama3.2:latest"),
-  model("ollama/qwen3:14b", { available: false, reason: "not installed in Ollama: pull it in Connections", source: "manifest" }),
+  model("ollama/qwen3:14b", { available: false, reason: "not installed in Ollama: pull it in Settings, AI Providers", source: "manifest" }),
   model("ollama/nomic-embed-text:latest", { kind: "embed" }),
   model("anthropic/claude-opus-5", { label: "Claude Opus 5" }),
   model("xai/grok-4.7", { summary: "Listed by xAI" }),
   model("xai/tts", { kind: "tts", source: "manifest" }),
-  model("fish/s2", { kind: "tts", available: false, reason: "no Fish Audio key: add it in Connections", source: "manifest" }),
+  model("fish/s2", { kind: "tts", available: false, reason: "no Fish Audio key: add it in Settings, AI Providers", source: "manifest" }),
   // an older TOML with no kind is an LLM.
   { ...model("pack/legacy"), kind: undefined },
 ];
@@ -134,7 +134,7 @@ check("auto with nothing connected runs the mock",
   modelStatus(AUTO_MODEL, byId, meta()), { state: "auto", note: "runs the mock until a model is connected" });
 check("an unavailable model carries the server's reason",
   modelStatus("ollama/qwen3:14b", byId, meta()),
-  { state: "unavailable", note: "not installed in Ollama: pull it in Connections" });
+  { state: "unavailable", note: "not installed in Ollama: pull it in Settings, AI Providers" });
 check("a vanished model is missing",
   modelStatus("ollama/llama3.1:8b", byId, meta()), { state: "missing", note: "not in the model list any more" });
 check("a runnable model is ok", modelStatus("xai/grok-4.7", byId, meta()), { state: "ok", note: "" });

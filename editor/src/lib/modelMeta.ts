@@ -126,7 +126,7 @@ export function failureWords(failure: string | null | undefined): string {
   return FAILURE_WORDS[failure ?? "error"] ?? FAILURE_WORDS.error;
 }
 
-/** A provider's last listing in a few words, for its row in Connections: how
+/** A provider's last listing in a few words, for its row in Settings, AI Providers: how
  *  many models it listed, why its last attempt failed, or that it was never
  *  asked (no listing: the server asks it on its next refresh). */
 export function listingNote(listing: ModelsMeta["providers"][string] | undefined): {

@@ -596,7 +596,7 @@ def test_ctrl_c_prints_the_shutdown_steps_and_bye(boot, monkeypatch, capsys):
 
 
 def test_the_boot_never_lists_providers_or_keys(boot, monkeypatch, capsys):
-    # providers and keys change while the server runs (the editor's Connections),
+    # providers and keys change while the server runs (the editor's Settings),
     # so a line about them would go stale: the terminal never asks, never lists.
     import boltjar.server  # noqa: F401  (imported up front, so the boot's import step is instant)
     from boltjar import secrets

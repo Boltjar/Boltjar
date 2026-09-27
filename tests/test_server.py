@@ -70,9 +70,9 @@ def test_validate_names_a_secret_nobody_defined(monkeypatch) -> None:
     ], "edges": [{"src": "hook", "src_port": "trigger", "dst": "http", "dst_port": "trigger"}]}
     assert _missing_secrets(graph) == [
         {"node": "hook", "kind": "missing-secret",
-         "message": "secret HOOK_ONLY_IN_ENV is not defined: add it in Connections"},
+         "message": "secret HOOK_ONLY_IN_ENV is not defined: add it in Settings, Secrets"},
         {"node": "http", "kind": "missing-secret",
-         "message": "secret NO_SUCH_KEY is not defined: add it in Connections"},
+         "message": "secret NO_SUCH_KEY is not defined: add it in Settings, Secrets"},
     ]
 
 

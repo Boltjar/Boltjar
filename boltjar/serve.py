@@ -7,7 +7,7 @@ boltjar.serve: `python -m boltjar serve`, the command that runs Boltjar.
 It prints the banner with the boot checklist beside it (Python and its
 virtualenv, the editor bundle, the port, the node packs): only facts that hold
 for the whole run. Providers and keys change while it runs, in the editor's
-Connections, so the editor shows them and the terminal never does. It binds the
+Settings, so the editor shows them and the terminal never does. It binds the
 port itself so a busy one is reported before anything starts, runs uvicorn in
 this process with the console's quiet log setup, opens the browser once the
 server reports ready (when a screen is in front of whoever started it, see

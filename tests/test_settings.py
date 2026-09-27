@@ -125,3 +125,16 @@ def test_a_broken_settings_file_is_set_aside_before_a_write(store):
     settings.update({"start_ollama": True})
     assert (store.parent / "settings.json.bad").read_text(encoding="utf-8") == "{not json"
     assert json.loads(store.read_text(encoding="utf-8")) == {"start_ollama": True}
+
+
+def test_no_message_sends_a_person_to_connections():
+    """The gear opens Settings (AI Providers, Secrets): no message names the
+    Connections window, which the editor no longer shows."""
+    import re
+
+    root = pathlib.Path(__file__).resolve().parent.parent
+    files = [*root.joinpath("boltjar").rglob("*.py"), *root.joinpath("editor", "src").rglob("*.ts*")]
+    stale = [f"{path.relative_to(root)}:{n}" for path in files
+             for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
+             if re.search(r"\b(in|open) Connections\b", line)]
+    assert stale == []

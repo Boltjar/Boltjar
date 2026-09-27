@@ -939,7 +939,7 @@ def validate_graph(graph: dict) -> list[dict]:
                          if w.accepts_secrets and _widget_in_use(n["id"], cfg, w, edges_in))
         for name in _secrets.unresolved(text):
             problems.append({"node": n["id"], "kind": "missing-secret",
-                             "message": f"secret {name} is not defined: add it in Connections"})
+                             "message": f"secret {name} is not defined: add it in Settings, Secrets"})
     # a model picker whose model vanished (no manifest names it and no provider
     # lists it any more), or that holds another family's model: name it and the
     # closest available one before On, instead of a mock reply or a failed call.

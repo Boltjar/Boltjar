@@ -759,7 +759,7 @@ def test_auto_with_nothing_connected_says_how_to_connect(fresh, vendor_http):
     refresh()
     out = _run_llm("auto")
     assert out["response"] == md.AUTO_MOCK_REPLY
-    assert "Connections" in md.AUTO_MOCK_REPLY and md.AUTO_MOCK_REPLY.count(".") == 1
+    assert "open Settings (the gear)" in md.AUTO_MOCK_REPLY and md.AUTO_MOCK_REPLY.count(".") == 1
     assert "trigger" in out, "the mock reply still completes the node"
 
 
@@ -826,7 +826,7 @@ def test_a_vanished_ollama_model_names_the_closest_installed_one(fresh, vendor_h
     [problem] = _model_problems(_llm_graph("ollama/llama3.1:8b"))
     assert problem["node"] == "m"
     assert problem["message"] == ("model ollama/llama3.1:8b is not installed in Ollama: pull it "
-                                  "in Connections; closest available: ollama/llama3.2:latest")
+                                  "in Settings, AI Providers; closest available: ollama/llama3.2:latest")
 
 
 def test_a_manifest_its_provider_dropped_suggests_the_same_family(fresh, vendor_http, monkeypatch):
@@ -841,9 +841,9 @@ def test_a_manifest_its_provider_dropped_suggests_the_same_family(fresh, vendor_
 def test_an_unknown_model_with_nothing_available_says_what_to_do(fresh):
     [problem] = _model_problems(_llm_graph("acme/gone"))
     assert problem["message"] == ("model acme/gone is not in the model list; pick another "
-                                  "model, or connect an LLM in Connections")
+                                  "model, or connect an LLM in Settings, AI Providers")
     [problem] = _model_problems(_llm_graph("acme/gone", "core.ai.stt"))
-    assert problem["message"].endswith("connect an STT model in Connections")
+    assert problem["message"].endswith("connect an STT model in Settings, AI Providers")
 
 
 def test_a_model_of_another_family_is_named(fresh, vendor_http):
