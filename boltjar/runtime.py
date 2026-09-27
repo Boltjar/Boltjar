@@ -498,7 +498,7 @@ class FlatGraph:
     """The wires a graph runs on (see flatten_graph)."""
     flattened: set[str]                      # node ids never instantiated
     live: list[tuple[str, str, str, str]]    # (src, src_port, dst, dst_port), src resolved
-    dead: list[tuple[str, str, str]]         # (dst, dst_port, via): resolves to nothing
+    dead: list[tuple[str, str, str]]         # (dst, dst_port, stop): resolves to nothing
 
 
 def flatten_graph(graph: dict) -> FlatGraph:
@@ -507,9 +507,10 @@ def flatten_graph(graph: dict) -> FlatGraph:
     In/Out pair and the Router (virtual wires, always resolved to a direct
     source -> consumer edge). `live` is every wire into a node that runs, its
     source walked back to the real one. `dead` is every wire into a node that
-    runs whose source resolves to nothing, with `via`, the flattened node it
-    leaves (a bypassed sink, a Wireless Out on a channel with no Wireless In):
-    the runtime drops it. One walk, shared by the runtime (Runtime.build) and
+    runs whose source resolves to nothing, with `stop`, the flattened node where
+    the walk back ends (a bypassed node that passes nothing on, a Wireless Out on
+    a channel with no Wireless In), however many hops up the wire it is: the
+    runtime drops the wire. One walk, shared by the runtime (Runtime.build) and
     validation (server.validate_graph), so a trigger validation counts as wired
     is one the runtime fires."""
     nodes = graph.get("nodes", [])
@@ -536,28 +537,26 @@ def flatten_graph(graph: dict) -> FlatGraph:
         spec = NODE_REGISTRY.get(types_by_id.get(node_id, ""))
         return spec.bypass if spec else {}
 
-    def resolve_source(node_id: str, out_port: str, seen: frozenset) -> Optional[tuple[str, str]]:
+    def resolve_source(node_id: str, out_port: str,
+                       seen: frozenset) -> tuple[Optional[tuple[str, str]], str]:
         """Walk back through flattened nodes to the real source that should feed
         `(node_id, out_port)`: a Wireless Out routes through its channel's
         Wireless In socket of the same name; a disabled passthrough walks its
-        `bypass` shape. Returns None at a dead-end. Cycle-safe via `seen`."""
+        `bypass` shape. Returns (source, "") or, at a dead-end, (None, the
+        flattened node the walk stops at). Cycle-safe via `seen`."""
         if node_id in seen:
-            return None
+            return None, node_id
         if types_by_id.get(node_id) == WIRELESS_OUT:
             ch = str(configs_by_id.get(node_id, {}).get("channel", "1"))
             in_id = wireless_in_by_channel.get(ch)
             # the Out's output mirrors the In's socket of the same name.
             up = raw_into.get((in_id, out_port)) if in_id else None
-            if up is None:
-                return None
-            return resolve_source(up[0], up[1], seen | {node_id}) if up[0] in flattened else up
-        in_port = next((i for i, o in bypass_map(node_id).items() if o == out_port), None)
-        if in_port is None:
-            return None
-        up = raw_into.get((node_id, in_port))
+        else:
+            in_port = next((i for i, o in bypass_map(node_id).items() if o == out_port), None)
+            up = raw_into.get((node_id, in_port)) if in_port is not None else None
         if up is None:
-            return None
-        return resolve_source(up[0], up[1], seen | {node_id}) if up[0] in flattened else up
+            return None, node_id
+        return resolve_source(up[0], up[1], seen | {node_id}) if up[0] in flattened else (up, "")
 
     live: list[tuple[str, str, str, str]] = []
     dead: list[tuple[str, str, str]] = []
@@ -568,10 +567,10 @@ def flatten_graph(graph: dict) -> FlatGraph:
             # or a Wireless In socket): consumed by resolution, so drop it here.
             continue
         if src in flattened:
-            resolved = resolve_source(src, sp, frozenset())
+            resolved, stop = resolve_source(src, sp, frozenset())
             if resolved is None:
                 # dead-end (unmatched channel, disabled sink): the edge is dropped.
-                dead.append((dst, dp, src))
+                dead.append((dst, dp, stop))
                 continue
             src, sp = resolved
         live.append((src, sp, dst, dp))

@@ -131,6 +131,22 @@ def test_a_trigger_wired_through_a_bypassed_node_that_passes_nothing_is_not_conn
         "required trigger 'in' is wired through bypassed 'llm', which passes nothing on"]
 
 
+def test_a_dead_end_names_the_node_the_wire_stops_at_however_far_up():
+    # Log <- Router <- a bypassed Template's `out`, which it never passes on.
+    graph = {"nodes": [{"id": "go", "type": "core.trigger.manual"},
+                       {"id": "tpl", "type": "core.data.template", "config": {}, "disabled": True},
+                       {"id": "r", "type": "core.flow.router", "config": {}},
+                       {"id": "lg", "type": "core.output.log", "config": {}}],
+             "edges": [{"src": "go", "src_port": "trigger", "dst": "tpl", "dst_port": "trigger"},
+                       {"src": "tpl", "src_port": "out", "dst": "r", "dst_port": "in"},
+                       {"src": "r", "src_port": "out", "dst": "lg", "dst_port": "in"}]}
+    assert [p["message"] for p in _trigger_problems(graph)] == [
+        "required trigger 'in' is wired through bypassed 'tpl', which passes nothing on"]
+    # its `trigger` passes on, so the same Router carries that one to the Log.
+    graph["edges"][1]["src_port"] = "trigger"
+    assert _trigger_problems(graph) == []
+
+
 def test_a_trigger_wired_through_a_bypassed_passthrough_reaches_its_source():
     for pv_in, pv_out in (("in", "out"), ("trigger", "trigger")):
         pv = {"id": "pv", "type": "core.output.preview", "config": {}, "disabled": True}

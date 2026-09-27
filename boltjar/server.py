@@ -887,15 +887,15 @@ def _trigger_problem(spec, node: dict, port, live: set[str], dead: dict[str, str
     """Why the trigger input `port` of `node` can never fire, or None when a wire
     reaches it from a node that runs. `live` and `dead` are the ports of `node`
     that the flattened graph wires (flatten_graph, the walk the runtime builds
-    from): a wire through a bypassed node with no passthrough for it, or through
-    a Wireless Out whose channel has no Wireless In, reaches nothing."""
+    from); `dead` names the node each dead wire stops at: a bypassed node with
+    no passthrough for it, or a Wireless Out whose channel has no Wireless In."""
     if _trigger_sockets(spec, node, port, live):
         return None
     through = _trigger_sockets(spec, node, port, dead)
     if not through:
         return f"required trigger '{port.name}' is not connected"
-    via = dead[through[0]]
-    where = f"bypassed '{via}'" if via in disabled else f"'{via}'"
+    stop = dead[through[0]]
+    where = f"bypassed '{stop}'" if stop in disabled else f"'{stop}'"
     return f"required trigger '{port.name}' is wired through {where}, which passes nothing on"
 
 
@@ -912,8 +912,8 @@ def validate_graph(graph: dict) -> list[dict]:
     for _src, _sp, dst, port in flat.live:
         live_into.setdefault(dst, set()).add(port)
     dead_into: dict[str, dict[str, str]] = {}
-    for dst, port, via in flat.dead:
-        dead_into.setdefault(dst, {}).setdefault(port, via)
+    for dst, port, stop in flat.dead:
+        dead_into.setdefault(dst, {}).setdefault(port, stop)
     has_trigger = False
     for n in graph.get("nodes", []):
         # a bypassed node never runs, so it cannot break the graph: skip every
