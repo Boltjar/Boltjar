@@ -23,6 +23,13 @@ assembles this turn's text, so no reader gets the previous turn's.
 A trigger input fires its node, so every one must be wired:
 server.validate_graph keeps a graph with an unwired one from turning On.
 
+A run started by one outside call (a Webhook that waits for its Respond to
+Webhook) opens its first turn in a TurnScope. Every turn opened while one of
+its turns fires (a For-each item, a Sync, a Ctx.emit) belongs to the same
+scope, so a node knows which call it is answering (Ctx.origin), and a value a
+source emitted inside the scope wins over one emitted by a concurrent run: two
+calls in flight at once never read each other's body.
+
 Node execution surfaces (selected by Kind):
     VALUE / pulled data   def run(**inputs) -> dict        (or def value() -> dict)
     TRIGGER (source)      async def start(self, ctx)
@@ -35,6 +42,7 @@ Node execution surfaces (selected by Kind):
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import inspect
 import itertools
 from dataclasses import dataclass, field
@@ -44,6 +52,34 @@ from . import secrets as _secrets
 from .sdk import Kind, NodeFailure, NodeSpec, NODE_REGISTRY, types
 
 _TURN_CACHE_KEEP = 64  # bound the per-turn memo cache
+_TURN_SCOPE_KEEP = 4096  # bound the turn -> scope map (a scope outlives many turns)
+
+# the (runtime, turn) whose fire is running in this task, so a turn opened while
+# it runs (Ctx.emit, For-each, Sync) joins that turn's scope. A contextvar, so
+# each node's consumer task and every task it starts sees its own fire.
+_FIRING: "contextvars.ContextVar[Optional[tuple[Runtime, int]]]" = contextvars.ContextVar(
+    "boltjar_firing", default=None)
+_INHERIT = object()  # new_turn(): join the scope of the fire that opens the turn
+_NO_CARRY = object()
+
+
+class TurnScope:
+    """The turns of one run started by an outside call. `origin` is what the
+    starter attached (the held webhook call); `values` keeps the last value
+    each source emitted inside the scope, keyed (node, port), so a node firing
+    in the scope reads its own run's data rather than a concurrent run's.
+    Closed when the call is answered: its values are dropped and reads fall
+    back to each source's latest value."""
+    __slots__ = ("origin", "values", "closed")
+
+    def __init__(self, origin: Any) -> None:
+        self.origin = origin
+        self.values: dict[tuple[str, str], Any] = {}
+        self.closed = False
+
+    def close(self) -> None:
+        self.closed = True
+        self.values.clear()
 
 
 class Ctx:
@@ -94,6 +130,30 @@ class Ctx:
         Agenda trigger polling the `db` handle emitted by a wired Database node.
         Returns the input's latch (or None) when nothing is wired."""
         return self._rt._pull_input(self.node_id, port, self._rt.new_turn())
+
+    @property
+    def scope(self) -> "Optional[TurnScope]":
+        """The TurnScope of the turn this node is firing on, or None (a run no
+        outside call started, or no fire under way)."""
+        return self._rt.current_scope()
+
+    @property
+    def origin(self) -> Any:
+        """What the outside call that started this run attached to it (the
+        held webhook call a Respond to Webhook answers), or None."""
+        scope = self.scope
+        return scope.origin if scope is not None else None
+
+    def carry_scope(self, scope: "Optional[TurnScope]") -> None:
+        """For a node that `opens_turn`: the turn this fire opens belongs to
+        `scope` instead of the firing turn's. A Queue releasing work it
+        buffered earlier hands each item on in the scope it arrived in."""
+        self._carry = scope
+
+    def _take_carry(self) -> Any:
+        carry = getattr(self, "_carry", _NO_CARRY)
+        self._carry = _NO_CARRY
+        return carry
 
     def wired_input_ports(self) -> set[str]:
         """The set of input port names that actually have a wire into this node,
@@ -176,6 +236,8 @@ class Runtime:
         # The consumer loop sets it when a value arrives on the tool's `result`
         # trigger port (and SKIPS the Tool's own fire for that turn).
         self._tool_waiters: dict[str, asyncio.Future] = {}
+        # the TurnScope of each turn that has one (see TurnScope)
+        self._turn_scope: dict[int, TurnScope] = {}
 
     # --------------------------------------------------------------- build
     def build(self, graph: dict) -> None:
@@ -212,13 +274,36 @@ class Runtime:
             self.edges_into[(dst, dp)] = (src, sp)
 
     # --------------------------------------------------------------- turns
-    def new_turn(self) -> int:
+    def new_turn(self, scope: Any = _INHERIT) -> int:
+        """Open a turn. It joins the scope of the fire that opens it (none when
+        no fire of this runtime is under way), or `scope` when one is given
+        (open_scope for a new outside call, None for none)."""
         t = next(self._turn_seq)
         self._turn_cache[t] = {}
         if len(self._turn_cache) > _TURN_CACHE_KEEP:
             oldest = min(self._turn_cache)
             self._turn_cache.pop(oldest, None)
+        if scope is _INHERIT:
+            scope = self.current_scope()
+        if scope is not None:
+            self._turn_scope[t] = scope
+            if len(self._turn_scope) > _TURN_SCOPE_KEEP:
+                self._turn_scope.pop(next(iter(self._turn_scope)), None)
         return t
+
+    def open_scope(self, origin: Any) -> TurnScope:
+        """A new TurnScope for an outside call; pass it to new_turn."""
+        return TurnScope(origin)
+
+    def scope_of(self, turn: int) -> Optional[TurnScope]:
+        return self._turn_scope.get(turn)
+
+    def current_scope(self) -> Optional[TurnScope]:
+        """The scope of the turn whose fire is running in this task."""
+        firing = _FIRING.get()
+        if firing is None or firing[0] is not self:
+            return None
+        return self._turn_scope.get(firing[1])
 
     # --------------------------------------------------------------- run
     async def run(self) -> None:
@@ -283,6 +368,13 @@ class Runtime:
         # the LLM stays lit for the full duration of its model call). A source
         # (trigger) never fires, so it never sticks "running".
         self._notify({"kind": "node_status", "node": inst.id, "status": "running"})
+        token = _FIRING.set((self, turn))
+        try:
+            await self._fire_in_turn(inst, trig_port, payload, turn)
+        finally:
+            _FIRING.reset(token)
+
+    async def _fire_in_turn(self, inst: NodeInstance, trig_port: str, payload: Any, turn: int) -> None:
         inputs: dict[str, Any] = {}
         for name in self._all_inputs(inst.id):
             if name == trig_port:
@@ -311,7 +403,13 @@ class Runtime:
             # data output (item) is latched immediately by emit, so emitting it
             # BEFORE the `each` trigger (insertion order) means the body sees the
             # current item the moment it fires.
-            out_turn = self.new_turn() if inst.spec.opens_turn else turn
+            carry = inst.ctx._take_carry()
+            if not inst.spec.opens_turn:
+                out_turn = turn
+            elif carry is _NO_CARRY:
+                out_turn = self.new_turn()
+            else:
+                out_turn = self.new_turn(scope=carry)
             if inst.spec.pulled and not inst.spec.volatile:
                 # a fired DATA node's result is this turn's memoized value: a
                 # consumer it triggers pulls it in the same turn and reads exactly
@@ -414,7 +512,11 @@ class Runtime:
             # KeyError that would masquerade as a crash in the pulling node.
             return None
         if not inst.spec.pulled:
-            # source or fired node: use its latched last output
+            # source or fired node: the value it emitted in this run's scope (a
+            # concurrent run's never crosses over), else its latched last output
+            scope = self._turn_scope.get(turn)
+            if scope is not None and (node_id, port) in scope.values:
+                return scope.values[(node_id, port)]
             return inst.out_latch.get(port)
         cache = self._turn_cache.setdefault(turn, {})
         if not inst.spec.volatile and node_id in cache:
@@ -440,6 +542,9 @@ class Runtime:
     # --------------------------------------------------------------- emit
     def emit(self, node_id: str, port: str, value: Any, turn: int) -> None:
         self.nodes[node_id].out_latch[port] = value
+        scope = self._turn_scope.get(turn)
+        if scope is not None and not scope.closed:
+            scope.values[(node_id, port)] = value
         self._notify({"kind": "value", "node": node_id, "port": port, "value": _preview(value)})
         for dst, dst_port in self.edges_from.get((node_id, port), []):
             dst_inst = self.nodes[dst]

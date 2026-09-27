@@ -3182,14 +3182,19 @@ class Queue:
         # self-heal: free a lane that has been busy past the timeout (a missing ack).
         if self._busy and timeout > 0 and (time.monotonic() - self._busy_since) > timeout:
             self._busy = False
+        ctx = getattr(self, "_ctx", None)
         if fired == "ack":
             self._busy = False               # the lane is free again
         elif fired:
-            self._buf.append(ins.get(fired))  # a socket of `in` fired: buffer its payload
+            # a socket of `in` fired: buffer its payload with the run it came
+            # from (a held webhook call), so the job runs in that run when released
+            self._buf.append((ins.get(fired), ctx.scope if ctx is not None else None))
         # release the FIFO head only when the lane is free; opens_turn means the
         # released job runs on a fresh epoch (re-pulls / the LLM re-runs per item).
         if not self._busy and self._buf:
-            item = self._buf.pop(0)
+            item, scope = self._buf.pop(0)
+            if ctx is not None:
+                ctx.carry_scope(scope)
             self._busy = True
             self._busy_since = time.monotonic()
             return {"out": item, "count": len(self._buf)}
