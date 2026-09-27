@@ -521,11 +521,15 @@ def node_config(spec: NodeSpec, config: Optional[dict]) -> dict:
     an untouched node as `config: {}`. So a node must see that same default, never
     a fallback literal of its own. One merge, shared by the runtime (build) and
     validation (server.validate_graph), so both read what the editor shows. Keys
-    that are not widgets (`promoted`, `params`, a store's `db_key`) pass through."""
+    that are not widgets (`promoted`, `params`, a store's `db_key`) pass through.
+    A saved value is read as its widget's kind (`Widget.coerce`), so a graph
+    saved while a toggle was a text box runs "false" as off."""
     merged = dict(config or {})
     for w in spec.widgets:
         if merged.get(w.name) is None:
             merged[w.name] = w.default
+        else:
+            merged[w.name] = w.coerce(merged[w.name])
     return merged
 
 

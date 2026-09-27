@@ -23,6 +23,8 @@ the server can be reasoned about in isolation.
 from __future__ import annotations
 
 import enum
+import types as _pytypes
+import typing
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 
@@ -94,7 +96,7 @@ class Widget:
     one declaration drives the knob, the right-click menu, promotion, the
     secret/tag autocomplete, and the op-shaped reshape."""
     name: str = ""
-    kind: str = "text"       # text | number | bool | select | code | secret | color
+    kind: str = "text"       # text | number | bool | select | code | secret | color | model
     default: Any = None
     options: list[Any] = field(default_factory=list)
     label: str = ""
@@ -138,6 +140,31 @@ class Widget:
             "placeholder": self.placeholder, "options_from": self.options_from,
             "expand": self.expand,
         }
+
+    def coerce(self, value: Any) -> Any:
+        """The saved `value` as this widget's kind reads it, so a node runs what
+        the editor shows. A graph saved while a knob was still a text box holds
+        strings ("false", "3"); a bool reads "false" as off (never the truthy
+        string) and a number reads "3" as 3. Anything else passes through."""
+        if self.kind == "bool":
+            if isinstance(value, str):
+                return value.strip().lower() in _TRUE_WORDS
+            return bool(value)
+        if self.kind == "number" and isinstance(value, str):
+            text = value.strip()
+            if not text:
+                return 0  # the number knob shows a blank as 0
+            for parse in (int, float):
+                try:
+                    return parse(text)
+                except ValueError:
+                    pass
+        return value
+
+
+# the strings a bool knob reads as on (mirrors the editor's knobBool); every
+# other string reads as off.
+_TRUE_WORDS = frozenset({"true", "1", "yes", "on"})
 
 
 def select(options: list[Any], default: Any = None) -> Widget:
@@ -308,6 +335,48 @@ class NodeSpec:
 NODE_REGISTRY: dict[str, NodeSpec] = {}
 
 _ANNOTATION_WIDGET = {str: "text", int: "number", float: "number", bool: "bool", dict: "code"}
+# the same types by name, for an annotation that stays a string (a module with
+# `from __future__ import annotations` whose hints cannot all be resolved).
+_ANNOTATION_NAMES = {t.__name__: t for t in _ANNOTATION_WIDGET}
+
+
+def _type_hints(cls: type) -> dict[str, Any]:
+    """The class's annotations resolved to real types where possible. Under
+    `from __future__ import annotations` every annotation is a string; resolving
+    them all can fail on one bad name, and then the raw strings are used."""
+    try:
+        return typing.get_type_hints(cls)
+    except Exception:
+        return dict(getattr(cls, "__annotations__", {}))
+
+
+def _annotation_type(ann: Any) -> Any:
+    """The plain type a bare knob annotation stands for: `Optional[int]` and
+    `int | None` read as int, `dict[str, Any]` as dict, the string "bool" as
+    bool. None when it names no widget type."""
+    if isinstance(ann, str):
+        parts = [p.strip() for p in ann.split("|") if p.strip() != "None"]
+        name = parts[0] if len(parts) == 1 else ""
+        if name.startswith(("Optional[", "typing.Optional[")) and name.endswith("]"):
+            name = name[name.index("[") + 1:-1].strip()
+        name = name.split("[", 1)[0].rsplit(".", 1)[-1]
+        return _ANNOTATION_NAMES.get(name)
+    origin = typing.get_origin(ann)
+    if origin is typing.Union or origin is _pytypes.UnionType:
+        args = [a for a in typing.get_args(ann) if a is not type(None)]
+        return _annotation_type(args[0]) if len(args) == 1 else None
+    if origin is not None:
+        ann = origin
+    return ann if isinstance(ann, type) and ann in _ANNOTATION_WIDGET else None
+
+
+def _inferred_widget(attr: str, ann: Any, default: Any) -> Widget:
+    """The widget a bare annotated knob (`seconds: float = 2.0`) declares: its
+    kind from the annotation, whole-number steps for an int."""
+    kind_type = _annotation_type(ann)
+    return Widget(name=attr, kind=_ANNOTATION_WIDGET.get(kind_type, "text"),
+                  default=default, label=attr.replace("_", " ").title(),
+                  step=1 if kind_type is int else None)
 
 
 def node(*, id: str, name: str, kind: Kind, category: str,
@@ -325,6 +394,7 @@ def node(*, id: str, name: str, kind: Kind, category: str,
         widgets: list[Widget] = []
         seen: set[str] = set()
 
+        hints = _type_hints(cls)
         for attr, ann in getattr(cls, "__annotations__", {}).items():
             if attr in ("inputs", "outputs"):
                 continue
@@ -334,8 +404,7 @@ def node(*, id: str, name: str, kind: Kind, category: str,
                 w.name = w.name or attr
                 w.label = w.label or attr.replace("_", " ").title()
             else:
-                w = Widget(name=attr, kind=_ANNOTATION_WIDGET.get(ann, "text"),
-                           default=default, label=attr.replace("_", " ").title())
+                w = _inferred_widget(attr, hints.get(attr, ann), default)
             widgets.append(w)
             seen.add(attr)
 
