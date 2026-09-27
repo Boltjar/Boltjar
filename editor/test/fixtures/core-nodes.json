@@ -563,7 +563,7 @@
   "kind": "trigger",
   "category": "Triggers",
   "summary": "Send a microphone clip into the live graph while you hold to talk. Emits the audio and a trigger, the way Chat Input emits text. Feed the audio into an STT node to transcribe it.",
-  "icon": "mic-circle-outline",
+  "icon": "recording-outline",
   "subline": "",
   "inputs": [],
   "widgets": [
@@ -1091,7 +1091,7 @@
   "kind": "transform",
   "category": "Data",
   "summary": "Split text into a list of sentences (each ends on . ! ? ... or a new line). Feed it through For-each to send an LLM reply to TTS or Avatar one sentence at a time, so speech starts sooner.",
-  "icon": "chatbox-outline",
+  "icon": "reorder-four-outline",
   "subline": "",
   "inputs": [
    {
@@ -1343,7 +1343,7 @@
   "kind": "transform",
   "category": "Data",
   "summary": "Parse JSON text into a structured value. A parse error comes back as data ({\"error\": ...}).",
-  "icon": "code-download-outline",
+  "icon": "download-outline",
   "subline": "",
   "inputs": [
    {
@@ -1359,7 +1359,7 @@
   "kind": "transform",
   "category": "Data",
   "summary": "Turn a value into JSON text, indented two spaces.",
-  "icon": "code-working-outline",
+  "icon": "share-outline",
   "subline": "",
   "inputs": [
    {

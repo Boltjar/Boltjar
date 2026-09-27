@@ -79,6 +79,26 @@ def test_no_two_core_nodes_share_an_icon():
     assert shared == {}, f"icons declared by more than one core node: {shared}"
 
 
+# Two icons of one Ionicons family (the first word of the name) are one glyph
+# with a small mark added: at library size Parse's code-download and
+# Stringify's code-working were the same brackets, and Audio Input's
+# mic-circle was STT's mic. The two pairs below predate this check and are the
+# only ones kept; a new node picks a glyph of its own family.
+_KNOWN_FAMILY_PAIRS = {
+    "document": {"core.data.template", "core.file.read"},
+    "git": {"core.logic.condition", "core.flow.sync"},
+}
+
+
+def test_no_two_core_nodes_draw_the_same_glyph_family():
+    families: dict[str, set[str]] = {}
+    for d in _core_looks():
+        families.setdefault(d["icon"].split("-")[0], set()).add(d["id"])
+    shared = {f: ids for f, ids in families.items()
+              if len(ids) > 1 and ids != _KNOWN_FAMILY_PAIRS.get(f)}
+    assert shared == {}, f"core nodes whose icons are one glyph family: {shared}"
+
+
 def test_a_node_without_a_declaration_serves_empty_strings():
     @node(id="test.look.plain", name="Plain", kind=Kind.TRANSFORM, category="Data")
     class Plain:

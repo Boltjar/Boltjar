@@ -819,7 +819,7 @@ class ChatInput:
       summary="Send a microphone clip into the live graph while you hold to talk. Emits the "
               "audio and a trigger, the way Chat Input emits text. Feed the audio into an "
               "STT node to transcribe it.",
-      icon="mic-circle-outline")
+      icon="recording-outline")
 class AudioInput:
     placeholder: str = "Hold to talk..."
     outputs = [Port("trigger", "event"), Port("audio", "audio"), Port("lang", "lang", optional=True)]
@@ -1500,7 +1500,7 @@ _SENTENCE_RE = re.compile(r".+?(?:[.!?…]+(?:[\"')\]]+)?|\n+|$)", re.DOTALL)
       pulled=True, summary="Split text into a list of sentences (each ends on . ! ? ... or "
                            "a new line). Feed it through For-each to send an LLM reply to "
                            "TTS or Avatar one sentence at a time, so speech starts sooner.",
-      icon="chatbox-outline")
+      icon="reorder-four-outline")
 class Sentences:
     inputs = [Port("text", "text")]
     outputs = [Port("out", "list")]
@@ -1998,7 +1998,7 @@ import json as _json
 @node(id="core.data.parse", name="Parse", kind=Kind.TRANSFORM, category="Data",
       pulled=True, summary="Parse JSON text into a structured value. A parse "
                            "error comes back as data ({\"error\": ...}).",
-      icon="code-download-outline")
+      icon="download-outline")
 class Parse:
     inputs = [Port("text", "text")]
     outputs = [Port("json", "json")]
@@ -2014,7 +2014,7 @@ class Parse:
 
 @node(id="core.data.stringify", name="Stringify", kind=Kind.TRANSFORM, category="Data",
       pulled=True, summary="Turn a value into JSON text, indented two spaces.",
-      icon="code-working-outline")
+      icon="share-outline")
 class Stringify:
     inputs = [Port("json", "json")]
     outputs = [Port("text", "text")]
