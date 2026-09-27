@@ -16,7 +16,7 @@ import re
 from simpleeval import SimpleEval, DEFAULT_FUNCTIONS
 
 from boltjar.sdk import node, Kind, NodeFailure, Port, Widget, code, select, slider, tmpl
-from boltjar import models
+from boltjar import media, models
 from boltjar.secrets import resolve_secrets
 
 _log = logging.getLogger(__name__)
@@ -2734,14 +2734,16 @@ class Http:
 
 # ============================================================ outputs (sinks)
 @node(id="core.output.log", name="Log", kind=Kind.OUTPUT, category="Inspect",
-      summary="Write the incoming value to the console/status feed.")
+      summary="Write the incoming value to the editor console and the server terminal.")
 class Log:
     label: str = "log"
     inputs = [Port("in", "any", trigger=True)]
     outputs = [Port("trigger", "event")]
 
     def deliver(self, value, ctx, inputs=None):
-        ctx.log(f"{self.label}: {value}")
+        # the editor gets the value whole; the terminal gets one readable line
+        # (a clip or an image as its type, size and length, long text cut).
+        ctx.log(f"{self.label}: {value}", echo=f"{self.label}: {media.summarize(value)}")
         return {"trigger": True}
 
 
