@@ -106,12 +106,28 @@ def test_the_three_states(monkeypatch, tmp_path):
     assert ollama.status(running=True)["state"] == "running"  # answers, from anywhere
 
 
-def test_a_remote_base_url_is_not_started_here(monkeypatch, tmp_path):
-    monkeypatch.setattr(ollama, "find", lambda *a, **k: tmp_path / "ollama.exe")
-    monkeypatch.setenv("OLLAMA_BASE_URL", "http://gpu-box.lan:11434")
+@pytest.mark.parametrize("installed_here", [True, False])
+def test_a_remote_base_url_that_does_not_answer_is_not_answering(monkeypatch, tmp_path,
+                                                                  installed_here):
+    """Whether Ollama is installed on this computer says nothing about the
+    machine OLLAMA_BASE_URL names: never "not installed", never started here."""
+    monkeypatch.setattr(ollama, "find",
+                        lambda *a, **k: (tmp_path / "ollama.exe") if installed_here else None)
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://192.168.1.50:11434")
     shown = ollama.status(running=False)
-    assert shown["state"] == "stopped" and shown["startable"] is False
-    assert "another machine" in shown["reason"]
+    assert shown["state"] == "unreachable" and shown["startable"] is False
+    assert shown["reason"] == ("not answering at http://192.168.1.50:11434 (OLLAMA_BASE_URL): "
+                               "start Ollama on that machine")
+    assert ollama.status(running=True)["state"] == "running"
+
+
+def test_start_leaves_a_remote_base_url_alone(fake_ollama, monkeypatch):
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://192.168.1.50:11434")
+    with local_client() as client:
+        r = client.post("/api/connections/ollama/start")
+    assert r.status_code == 409
+    assert r.json()["state"] == "unreachable" and "192.168.1.50" in r.json()["error"]
+    assert FakeProc.started == []
 
 
 @pytest.mark.parametrize("running, installed, state", [

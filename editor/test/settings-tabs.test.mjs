@@ -90,6 +90,17 @@ check("the General tab locks each row the server lists", /!mayChange\(info, row\
 check("the Start Ollama button waits for a browser on Boltjar's computer",
   /disabled=\{starting \|\| !local\.editable\}/.test(panel), true);
 
+// ---- the Ollama card's states
+check("an Ollama at another machine's address that does not answer is its own state",
+  /unreachable: "NOT ANSWERING"/.test(panel) && /ollamaState === "unreachable" && info\.local \?/.test(panel),
+  true);
+check("that state shows why, never the download link",
+  /ollamaState === "unreachable" && info\.local \? \([\s\S]*?\{info\.local\.reason\}[\s\S]*?\) : \(/.test(panel)
+    && !/ollamaState === "unreachable"[\s\S]{0,400}ollama\.com\/download/.test(panel),
+  true);
+check("the stops-it-on-exit line shows only for an Ollama Boltjar can start",
+  /\{local\.startable && \(\s*<div className="prov-add-key-footer">/.test(panel), true);
+
 if (failures) {
   console.error(`\n${failures} settings tab check(s) failed`);
   process.exit(1);

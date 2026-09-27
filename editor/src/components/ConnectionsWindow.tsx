@@ -24,14 +24,15 @@ import { GeneralSettings } from "./GeneralSettings";
 
 // ── API shapes ──────────────────────────────────────────────────────────────
 
-/** Ollama on this computer (GET /api/connections, its entry's `local`). */
+/** Ollama on this computer (GET /api/connections, its entry's `local`).
+ *  "unreachable": OLLAMA_BASE_URL names another machine, which does not answer. */
 interface OllamaLocal {
-  state: "running" | "stopped" | "not_installed";
+  state: "running" | "unreachable" | "stopped" | "not_installed";
   /** where it is installed (~ for the home folder), null when it is not */
   path: string | null;
   /** it can be started from here (installed, stopped, on this computer) */
   startable: boolean;
-  /** why it cannot, when it is installed but cannot */
+  /** why nothing answers, when it is unreachable */
   reason: string | null;
   /** this Boltjar started it, and stops it when it exits */
   started_here: boolean;
@@ -476,11 +477,13 @@ function OllamaStart({ local, onStarted }: OllamaStartProps) {
       {local.startable && !local.editable && (
         <div className="prov-add-key-hint">start it on the computer Boltjar runs on</div>
       )}
-      <div className="prov-add-key-footer">
-        <span className="prov-add-key-hint">
-          Boltjar stops it again when it exits. Its output goes to {local.log}.
-        </span>
-      </div>
+      {local.startable && (
+        <div className="prov-add-key-footer">
+          <span className="prov-add-key-hint">
+            Boltjar stops it again when it exits. Its output goes to {local.log}.
+          </span>
+        </div>
+      )}
       {error && <div className="insp-problem">{error}</div>}
     </div>
   );
@@ -488,6 +491,7 @@ function OllamaStart({ local, onStarted }: OllamaStartProps) {
 
 const OLLAMA_STATUS: Record<OllamaLocal["state"], string> = {
   running: "CONNECTED",
+  unreachable: "NOT ANSWERING",
   stopped: "NOT RUNNING",
   not_installed: "NOT INSTALLED",
 };
@@ -662,6 +666,13 @@ function ProviderCard({ info, onRefetch }: ProviderCardProps) {
           ) : ollamaState === "stopped" && info.local ? (
             // installed here, not running: start it
             <OllamaStart local={info.local} onStarted={onRefetch} />
+          ) : ollamaState === "unreachable" && info.local ? (
+            // OLLAMA_BASE_URL is another machine that does not answer: nothing
+            // to install or start here
+            <div className="prov-ollama-note">
+              <Icon name="cloud-offline-outline" />
+              <span>{info.local.reason}</span>
+            </div>
           ) : (
             // Ollama not installed: the official download page
             <div className="prov-ollama-note">

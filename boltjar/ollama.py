@@ -5,10 +5,12 @@ starting it.
 Ollama is a separate program. Boltjar finds it (on PATH, then where its
 installer puts it: %LOCALAPPDATA%\\Programs\\Ollama\\ollama.exe on Windows,
 /Applications/Ollama.app/Contents/Resources/ollama on macOS; Linux installs it
-on PATH) and reports one of three states:
+on PATH) and reports one of four states:
 
   - running:        it answers on its base URL (OLLAMA_BASE_URL, the address
                     model discovery asks), wherever it was started from
+  - unreachable:    OLLAMA_BASE_URL names another machine and nothing answers
+                    there; what is installed here does not matter then
   - stopped:        it is installed here but does not answer
   - not_installed:  neither
 
@@ -45,6 +47,7 @@ LOG_PATH = ROOT / "user" / "logs" / "ollama.log"
 DOWNLOAD_URL = "https://ollama.com/download"
 
 RUNNING, STOPPED, NOT_INSTALLED = "running", "stopped", "not_installed"
+UNREACHABLE = "unreachable"
 
 # How long a start waits for Ollama to answer, and how often it asks.
 START_WAIT = 20.0  # seconds
@@ -110,20 +113,26 @@ def started_here() -> bool:
     return _started is not None and _started.poll() is None
 
 
+def _elsewhere() -> str:
+    return f"not answering at {base_url()} (OLLAMA_BASE_URL): start Ollama on that machine"
+
+
 def status(running: bool) -> dict:
-    """The state the Connections card shows. `running`: it answers on its base
-    URL now (the caller has just asked). Paths are shown with ~ for the home
-    folder."""
+    """The state the Ollama card shows (Settings, AI Providers). `running`: it
+    answers on its base URL now (the caller has just asked). Paths are shown
+    with ~ for the home folder."""
     exe = find()
-    state = RUNNING if running else STOPPED if exe is not None else NOT_INSTALLED
-    reason = None
-    if state == STOPPED and not is_local():
-        reason = f"OLLAMA_BASE_URL is {base_url()}, another machine: start Ollama there"
+    if running:
+        state = RUNNING
+    elif not is_local():
+        state = UNREACHABLE
+    else:
+        state = STOPPED if exe is not None else NOT_INSTALLED
     return {
         "state": state,
         "path": shown_path(exe) if exe is not None else None,
-        "startable": state == STOPPED and reason is None,
-        "reason": reason,
+        "startable": state == STOPPED,
+        "reason": _elsewhere() if state == UNREACHABLE else None,
         "started_here": started_here(),
         "log": _repo_path(LOG_PATH),
         "download": DOWNLOAD_URL,
@@ -204,13 +213,12 @@ async def start(wait: float = START_WAIT) -> dict:
     global _started
     if await answers():
         return {"ok": True, "state": RUNNING, "started": False, "error": None}
+    if not is_local():
+        return {"ok": False, "state": UNREACHABLE, "started": False, "error": _elsewhere()}
     exe = find()
     if exe is None:
         return {"ok": False, "state": NOT_INSTALLED, "started": False,
                 "error": f"Ollama is not installed: get it at {DOWNLOAD_URL}"}
-    if not is_local():
-        return {"ok": False, "state": STOPPED, "started": False,
-                "error": f"OLLAMA_BASE_URL is {base_url()}, another machine: start Ollama there"}
     async with _lock():
         started = False
         if not started_here():
