@@ -16,3 +16,14 @@ export function declaredOption(options: readonly unknown[], text: string): unkno
   }
   return text;
 }
+
+/** The on/off state a bool knob shows. A graph saved while the knob was still a
+ *  text box can hold "false" or "0"; those read as off, never as a truthy
+ *  string. Only "true", "1", "yes" and "on" read as on (the runtime's
+ *  Widget.coerce reads a saved value the same way). An unset value shows the
+ *  declared default. */
+export function knobBool(value: unknown, fallback?: unknown): boolean {
+  const v = value ?? fallback;
+  if (typeof v === "string") return ["true", "1", "yes", "on"].includes(v.trim().toLowerCase());
+  return Boolean(v);
+}

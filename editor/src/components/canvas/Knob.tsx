@@ -9,7 +9,7 @@
 import { useState, type CSSProperties, type MouseEvent } from "react";
 import { createPortal } from "react-dom";
 import { useDraft } from "../../lib/useDraft";
-import { declaredOption } from "../../lib/knobOptions";
+import { declaredOption, knobBool } from "../../lib/knobOptions";
 import { Icon } from "../../lib/icons";
 import { ContextMenu, type MenuItem } from "../ContextMenu";
 import { Select, type SelectOption } from "./Select";
@@ -56,9 +56,10 @@ export function Knob(props: KnobProps) {
     : null;
 
   if (kind === "bool") {
+    const on = knobBool(value, props.default);
     return (
       <div className="knob bool" onContextMenu={openMenu}>
-        <button type="button" className={`knob-toggle nodrag ${value ? "on" : ""}`} onClick={() => onChange(!value)}>
+        <button type="button" className={`knob-toggle nodrag ${on ? "on" : ""}`} onClick={() => onChange(!on)}>
           <span className="knob-lbl">{label}</span>
           <span className="kt-track"><span className="kt-knob" /></span>
         </button>
