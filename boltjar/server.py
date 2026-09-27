@@ -289,18 +289,28 @@ def _tap(event: dict) -> None:
 async def shutdown_all() -> int:
     """Stop every running graph (services and stores close cleanly) and end
     every live connection, the editors' /ws and the /stream media clients, so
-    the server exits on one Ctrl+C. Safe to call twice. Returns how many graphs
-    were running."""
-    stopped = 0
-    for hub in list(HUBS.values()):
-        if hub.runtime is not None:
-            try:
-                await hub.power_off()
-                stopped += 1
-            except Exception:
-                _log.exception("could not stop graph %s cleanly", hub.slug)
-        hub.close_connections()
+    the server exits on one Ctrl+C. The graphs stop side by side: one whose
+    stop hangs holds up none of the others. Safe to call twice. Returns how
+    many graphs were stopped."""
+    stopped = await asyncio.gather(*(_stop_for_exit(hub) for hub in list(HUBS.values())))
+    return sum(stopped)
+
+
+async def _stop_for_exit(hub: Hub) -> bool:
+    stopped = False
+    if hub.runtime is not None:
+        try:
+            await hub.power_off()
+            stopped = True
+        except Exception:
+            _log.exception("could not stop graph %s cleanly", hub.slug)
+    hub.close_connections()
     return stopped
+
+
+def running_graphs() -> list[str]:
+    """The slugs of the graphs running now, one that is mid-stop included."""
+    return [hub.slug for hub in HUBS.values() if hub.runtime is not None]
 
 
 @contextlib.asynccontextmanager

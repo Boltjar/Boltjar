@@ -71,6 +71,30 @@ def test_shutdown_ends_the_media_streams(hubs):
     asyncio.run(scenario())
 
 
+def test_a_graph_whose_stop_hangs_holds_up_none_of_the_others(hubs):
+    async def scenario():
+        stuck, fine = server.get_hub("sd-stuck"), server.get_hub("sd-fine")
+        for hub in (stuck, fine):
+            assert await hub.power_on(MANUAL_LOG) is None
+        assert server.running_graphs() == ["sd-stuck", "sd-fine"]
+
+        async def never_stops():
+            await asyncio.Event().wait()
+
+        stuck.power_off = never_stops  # first in line, and it never returns
+        shutdown = asyncio.ensure_future(server.shutdown_all())
+        for _ in range(100):
+            if fine.runtime is None:
+                break
+            await asyncio.sleep(0.01)
+        assert fine.runtime is None
+        assert server.running_graphs() == ["sd-stuck"]
+        shutdown.cancel()
+        await stuck.runtime.stop()
+
+    asyncio.run(scenario())
+
+
 def test_leaving_the_app_lifespan_stops_the_graphs(hubs):
     with local_client() as client:
         client.post("/api/runtime/sd-life/power", json={"action": "on", "graph": MANUAL_LOG})
