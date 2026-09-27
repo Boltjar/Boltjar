@@ -1352,6 +1352,12 @@ export default function App() {
           <div className="about-modal">
             <img className="about-logo" src={logoUrl} alt="Boltjar" draggable={false} />
             <p className="about-version">{version ? `Version ${version.version}` : "Version unknown"}</p>
+            <p className="about-credit">Designed by DKLRD</p>
+            <p className="about-builtwith">
+              Canvas built with{" "}
+              <a href="https://reactflow.dev" target="_blank" rel="noreferrer">React Flow</a>
+              {" "}· MIT licence · © 2019-2025 webkid GmbH
+            </p>
           </div>
         </NodeModal>
       )}

@@ -420,15 +420,14 @@ button{font-family:inherit;}
 .canvas .react-flow__minimap-mask{fill:rgba(7,10,15,0.6);}
 .canvas .react-flow__minimap svg{border-radius:var(--radius-sm);}
 
-/* React Flow credit: bottom-left on the minimap's 16px inset, so it lines up
+/* The canvas credit: bottom-left on the minimap's 16px inset, so it lines up
    with the minimap and zoom cluster on the other side and overlaps neither.
-   Ghost ink until hovered. */
-.canvas .react-flow__attribution{
-  margin:0; left:var(--space-4); bottom:var(--space-4); padding:0; background:transparent;
+   Ghost ink. (React Flow is credited in Help > About with its licence.) */
+.canvas .canvas-credit{
+  position:absolute; left:var(--space-4); bottom:var(--space-4); z-index:5; pointer-events:none;
   font-family:var(--font-mono); font-size:var(--fs-micro); letter-spacing:var(--tr-mono); line-height:1;
+  color:var(--ink-ghost); user-select:none;
 }
-.canvas .react-flow__attribution a{color:var(--ink-ghost); transition:color var(--dur-1) var(--ease-out);}
-.canvas .react-flow__attribution a:hover{color:var(--ink-dim);}
 
 /* ============================================================================
    RIGHT: INSPECTOR
@@ -2506,6 +2505,10 @@ button{font-family:inherit;}
 .about-modal{ display:flex; flex-direction:column; align-items:center; gap:var(--space-3); padding:var(--space-5) 0 var(--space-4); }
 .about-logo{ display:block; height:40px; width:auto; }
 .about-version{ margin:0; font-family:var(--font-mono); font-size:var(--fs-xs); color:var(--ink-dim); letter-spacing:var(--tr-mono); }
+.about-credit{ margin:0; font-size:var(--fs-sm); color:var(--ink); }
+.about-builtwith{ margin:var(--space-2) 0 0; font-family:var(--font-mono); font-size:var(--fs-micro); color:var(--ink-dim); letter-spacing:var(--tr-mono); text-align:center; }
+.about-builtwith a{ color:var(--ink-dim); text-decoration:underline; text-underline-offset:2px; }
+.about-builtwith a:hover{ color:var(--ink); }
 
 /* "Clear data": a proper danger button in a footer below the tables, with a
    warning on the left that the action cannot be undone. */

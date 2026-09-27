@@ -201,7 +201,7 @@ export function Canvas(props: CanvasProps) {
     if (!canvas || !hint || !zoom) return;
     const place = () => {
       const box = canvas.getBoundingClientRect();
-      const credit = canvas.querySelector(".react-flow__attribution")?.getBoundingClientRect();
+      const credit = canvas.querySelector(".canvas-credit")?.getBoundingClientRect();
       const tokens = getComputedStyle(canvas);
       setHintX(panHintCenter({
         width: box.width,
@@ -453,9 +453,9 @@ export function Canvas(props: CanvasProps) {
           onOpenPalette();
         }}
         defaultEdgeOptions={{ type: "typed" }}
-        // the React Flow credit stays visible, bottom-left: the minimap and the
-        // zoom cluster own the bottom-right corner.
-        attributionPosition="bottom-left"
+        // React Flow is credited in Help > About with its licence; the canvas
+        // corner carries the Boltjar credit instead (.canvas-credit below).
+        proOptions={{ hideAttribution: true }}
         // App owns Delete/Backspace (App.requestDelete) so store-node deletes get
         // the confirm. Disabling RF's built-in delete avoids it wiping nodes first.
         deleteKeyCode={null}
@@ -532,6 +532,8 @@ export function Canvas(props: CanvasProps) {
           empty canvas · drag a node from the library or press {mod("K")}
         </div>
       )}
+
+      <div className="canvas-credit">Designed by DKLRD</div>
 
       <div
         ref={hintRef}
