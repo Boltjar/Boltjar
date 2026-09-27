@@ -1,17 +1,18 @@
 // ============================================================================
 // TypedEdge: a typed bezier wire. Coloured by the SOURCE
 // port's data type. Layers: a dark under-stroke (machined channel), the main
-// type-coloured stroke, an accent selection glow, and a flow-pulse overlay that
-// animates when THIS wire carries a value (a `carry` event names it, see
-// lib/wirePulse), never because its source has other wires that did.
+// type-coloured stroke, an accent selection glow, and the comets: each time
+// THIS wire carries a value (a `carry` event names it, see lib/wirePulse), a
+// comet slides from the source port to the target port, never because its
+// source has other wires that did.
 // ============================================================================
-import { memo, useEffect, useRef, useState, type CSSProperties } from "react";
+import { memo, useEffect, useRef, type CSSProperties } from "react";
 import { getBezierPath, type EdgeProps } from "@xyflow/react";
 import type { WFEdgeData } from "../../lib/graphAdapter";
 import { typeColorVar } from "../../lib/types";
 import { useEditor } from "../../lib/editorContext";
 import { liveGatePasses } from "../../lib/liveClassify";
-import { onWirePulse } from "../../lib/wirePulse";
+import { mountComets, onWirePulse } from "../../lib/wirePulse";
 
 function TypedEdgeImpl({
   id,
@@ -47,25 +48,26 @@ function TypedEdgeImpl({
   const ed = data as WFEdgeData | undefined;
   const color = typeColorVar(wl ? wl.type : ed?.type);
 
-  // a clean ~1s flow pulse, fired ONLY when this wire carries a value; it then
-  // clears itself, so the wire never animates perpetually and a pan never
-  // resets it mid-stroke. While power is on, only a wire in the live set may
-  // pulse: a draft wire drawn onto a still-live source must NOT appear to carry
-  // live data.
+  // a comet per carry on THIS wire, launched straight into the DOM (no React
+  // render per carry); it lands and clears itself, so an idle wire shows its
+  // normal look. While power is on, only a wire in the live set may pulse: a
+  // draft wire drawn onto a still-live source must NOT appear to carry live data.
   const mayPulse = useRef(false);
   mayPulse.current = liveGatePasses(power, liveEdges.has(id));
-  const [active, setActive] = useState(false);
+  const mainRef = useRef<SVGPathElement>(null);
+  const cometsRef = useRef<SVGGElement>(null);
+  const colorRef = useRef(color);
+  colorRef.current = color;
   useEffect(() => {
-    let t = 0;
+    const host = cometsRef.current;
+    if (!host) return;
+    const comets = mountComets(host, () => ({ path: mainRef.current, color: colorRef.current }));
     const off = onWirePulse(id, () => {
-      if (!mayPulse.current) return;
-      setActive(true);
-      window.clearTimeout(t);
-      t = window.setTimeout(() => setActive(false), 1000);
+      if (mayPulse.current) comets.fire();
     });
     return () => {
       off();
-      window.clearTimeout(t);
+      comets.dispose();
     };
   }, [id]);
 
@@ -74,17 +76,13 @@ function TypedEdgeImpl({
       <path className="wf-edge-under" d={path} />
       {selected && <path className="wf-edge-glow" d={path} />}
       <path
+        ref={mainRef}
         className="wf-edge-main"
         d={path}
         style={{ stroke: color } as CSSProperties}
       />
-      {active && (
-        <path
-          className="wf-edge-flow"
-          d={path}
-          style={{ stroke: `color-mix(in srgb, ${color} 70%, white)` } as CSSProperties}
-        />
-      )}
+      {/* the comets' layer: filled only by mountComets, never by React */}
+      <g ref={cometsRef} className="wf-edge-comets" />
       {/* invisible wide hit-path so the edge is easy to select */}
       <path
         d={path}

@@ -397,7 +397,8 @@ button{font-family:inherit;}
 .canvas .react-flow__edge .wf-edge-main{stroke-width:2.25; stroke-linecap:round; fill:none; opacity:1;}
 .canvas .react-flow__edge.selected .wf-edge-main{stroke-width:3;}
 .canvas .react-flow__edge.selected .wf-edge-glow{stroke:var(--accent-glow); stroke-width:7; fill:none; opacity:1;}
-.canvas .react-flow__edge .wf-edge-flow{stroke-width:2.4; fill:none; stroke-dasharray:7 21; animation:flow 1.1s linear infinite;}
+/* a carry's comet (lib/wirePulse mountComets draws and animates its layers) */
+.canvas .react-flow__edge .wf-edge-comets{pointer-events:none;}
 .canvas .react-flow__connectionline .react-flow__connection-path,
 .canvas .react-flow__connection-path{stroke:var(--connecting-color, var(--accent)); stroke-width:2; stroke-dasharray:6 6; opacity:0.95;}
 
@@ -1188,7 +1189,6 @@ button{font-family:inherit;}
 
 @keyframes rise{from{opacity:0; transform:translateX(-50%) translateY(8px);} to{opacity:1; transform:translateX(-50%) translateY(0);}}
 @keyframes scrimfade{from{opacity:0;} to{opacity:1;}}
-@keyframes flow{to{stroke-dashoffset:-28;}}
 @keyframes spin{to{transform:rotate(360deg);}}
 @keyframes fadeup{from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);}}
 @keyframes slideup{from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:translateY(0);}}
@@ -1197,7 +1197,6 @@ button{font-family:inherit;}
 
 @media (prefers-reduced-motion: reduce){
   *{animation-duration:0.001ms !important; animation-iteration-count:1 !important; transition-duration:var(--dur-1) !important;}
-  .wf-edge-flow{animation:none !important; stroke-dasharray:none;}
 }
 
 /* ============================================================================
