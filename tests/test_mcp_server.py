@@ -70,6 +70,14 @@ def test_list_models_returns_catalog():
     assert "models" in out
 
 
+def test_get_version_reports_the_backend_version():
+    import boltjar
+
+    out = run(mcp_server.get_version())
+    assert out["version"] == boltjar.__version__
+    assert set(out) == {"version", "python", "platform"}
+
+
 def test_graph_crud_roundtrip(monkeypatch, tmp_path):
     monkeypatch.setattr(srv, "GRAPHS_DIR", tmp_path)
     monkeypatch.setattr(srv, "AUTOSAVE_DIR", tmp_path / "auto")

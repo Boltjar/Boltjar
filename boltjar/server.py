@@ -28,6 +28,7 @@ import contextlib
 import datetime
 import json
 import pathlib
+import platform
 import re
 import sqlite3
 
@@ -54,7 +55,7 @@ from boltjar.file_store import FileStore
 from boltjar.kv_store import KvStore
 from boltjar.vector_store import VectorStore
 from boltjar.graph_format import GraphFormatError, migrate
-from boltjar import models
+from boltjar import __version__, models
 from boltjar import packs as _packs
 import boltjar.secrets as _secrets
 
@@ -254,7 +255,7 @@ async def _lifespan(_app: FastAPI):
     yield
 
 
-app = FastAPI(title="Boltjar", lifespan=_lifespan)
+app = FastAPI(title="Boltjar", version=__version__, lifespan=_lifespan)
 
 
 # --------------------------------------------------------------- edge validation
@@ -516,6 +517,14 @@ def validate_graph(graph: dict) -> list[dict]:
     # disabled node is already handled and its edges are skipped.
     problems.extend(_edge_problems(graph))
     return problems
+
+
+@app.get("/api/version")
+def api_version() -> dict:
+    """What is running: the Boltjar version (boltjar.__version__, the one source
+    of it), the Python version and the platform, as a bug report needs them."""
+    return {"version": __version__, "python": platform.python_version(),
+            "platform": platform.platform()}
 
 
 @app.get("/api/object_info")

@@ -89,6 +89,13 @@ def _unwrap(r: httpx.Response) -> dict:
 
 # ---- catalog / schema -------------------------------------------------------
 
+@mcp.tool()
+async def get_version() -> dict:
+    """The backend's Boltjar version, Python version and platform: {"version",
+    "python", "platform"}. Quote it when reporting a bug."""
+    return await _get("/api/version")
+
+
 def _condense_catalog(object_info: dict) -> list[dict]:
     """Shrink /api/object_info to the shape an author needs: per node its id,
     title, category, summary, ports (name/type/direction) and knobs
