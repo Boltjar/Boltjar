@@ -85,6 +85,7 @@ def test_the_help_explains_no_resume(capsys):
     shown = " ".join(capsys.readouterr().out.split())
     assert "--no-resume" in shown
     assert "graphs that were On" in shown
+    assert "for this launch only" in shown and "the next launch" in shown
 
 
 # ---------------------------------------------------------------- the bind policy

@@ -67,9 +67,9 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--allow-remote", action="store_true",
                        help="allow a --host that other machines can reach")
     serve.add_argument("--no-resume", action="store_true",
-                       help="leave Off, for this launch, the graphs that were On when Boltjar "
-                            "last stopped (with Resume workflows after launch on in Settings, "
-                            "they are powered back On)")
+                       help="leave Off, for this launch only, the graphs that were On when "
+                            "Boltjar last stopped (with Resume workflows after launch on in "
+                            "Settings, the next launch powers them back On)")
 
     run = commands.add_parser("run", help="run a graph headless and print its live events",
                               description="Run one graph without the editor and print every live event.")

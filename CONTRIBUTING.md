@@ -39,7 +39,7 @@ npm run build --prefix editor
 
 `requirements-dev.txt` installs everything in `requirements.txt` plus pytest. The commands on this page assume the venv is active. If PowerShell refuses to run `Activate.ps1`, call the venv's Python directly instead: `.\.venv\Scripts\python.exe -m ...`.
 
-Start the server. It opens the editor at http://127.0.0.1:8770 (`--no-browser` skips that, `--verbose` prints every request and full tracebacks, `--no-resume` leaves Off the graphs that were On when it last stopped):
+Start the server. It opens the editor at http://127.0.0.1:8770 (`--no-browser` skips that, `--verbose` prints every request and full tracebacks, `--no-resume` leaves Off, for that launch only, the graphs that were On when it last stopped):
 
 ```
 python -m boltjar serve

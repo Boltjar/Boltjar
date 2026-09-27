@@ -41,7 +41,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/).
 - Outputs: Chat shows the conversation, Preview shows a wire's value live, Log writes to the console.
 - A Connections window for provider keys and local Ollama models (list, pull, delete).
 - A Settings panel behind the gear, opening on its General tab, with AI Providers and Secrets beside it. General holds the startup options, each off until you turn it on: Launch with system, Start Ollama with Boltjar and Resume workflows after launch.
-- Resume workflows after launch: the graphs On when Boltjar stops come back On at the next launch, as they ran, one at a time and through validation. One that fails stays Off, and the terminal and the editor say why. Turning a graph Off by hand is the only thing that drops it; `--no-resume` skips resuming for one launch.
+- Resume workflows after launch: the graphs On when Boltjar stops come back On at the next launch, as they ran, one at a time and through validation. One that fails stays Off, the terminal and the editor say why, and the next launch tries it again. `--no-resume` leaves them Off for one launch and keeps them for the next.
 - Launch with system: one entry in your own account starts Boltjar at login without opening the browser (the Windows Startup folder, a macOS LaunchAgent, an XDG autostart entry on Linux). Only a browser on the same computer can turn it on or off.
 - The Ollama card tells an installed but stopped Ollama from a missing one and starts it with Start Ollama (its output goes to `user/logs/ollama.log`). On exit, Boltjar stops only an Ollama it started.
 - A secrets store. Node settings reference a secret as a `{{secret.NAME}}` token.

@@ -13,7 +13,7 @@ this process with the console's quiet log setup, opens the browser once the
 server reports ready (when a screen is in front of whoever started it, see
 browser_can_open), then runs the launch steps in the background (start Ollama,
 refresh the local model lists, resume the graphs that were On: see
-boltjar.server.launch_sequence; --no-resume skips the last for one launch), and
+boltjar.server.launch_sequence; --no-resume skips the last for this launch only), and
 on Ctrl+C stops every graph and ends every live connection BEFORE uvicorn waits
 on them, so one press exits.
 
@@ -356,7 +356,7 @@ def make_server(config, shutdown_app: Callable[[], Awaitable[int]],
 def serve(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT, open_browser: bool = True,
           verbose: bool = False, allow_remote: bool = False, resume: bool = True) -> int:
     """Run Boltjar until Ctrl+C. Returns the process exit code. `resume` False
-    (--no-resume) leaves Off, for this launch, the graphs that were On."""
+    (--no-resume) leaves Off, for this launch only, the graphs that were On."""
     console.prepare_streams()
     out = console.Console()
     logging.config.dictConfig(console.log_config(verbose))

@@ -256,6 +256,7 @@ class Hub:
                 _tap({"kind": "invalid", "problems": problems, "slug": self.slug})
             return problems
         async with self._lock:
+            was_on = self.runtime is not None
             await self._stop()
             runtime = Runtime(observer=self.broadcast, stream_observer=self.publish_stream)
             try:
@@ -272,6 +273,9 @@ class Hub:
                 if resuming:
                     error["resume"] = True
                     LAUNCH_NOTICES[self.slug] = dict(error)
+                elif was_on:
+                    # a Restart that left it Off: it is not On at the next exit
+                    _forget_resume(self.slug)
                 self.broadcast(error)
                 return None
             self.graph = graph  # the now-running graph (the live set source of truth)
@@ -336,6 +340,14 @@ def _forget_resume(slug: str) -> None:
         _log.warning("could not drop %s from the graphs a launch resumes: %s", slug, exc)
 
 
+def _carry_resume(slug: str) -> None:
+    """A graph the launch could not resume: kept to be tried at the next one."""
+    try:
+        _resume.carry([slug])
+    except OSError as exc:
+        _log.warning("could not keep %s for the next launch: %s", slug, exc)
+
+
 def get_hub(slug: str) -> Hub:
     """Return the Hub for this slug, lazily creating one on first use.
 
@@ -385,9 +397,11 @@ async def _stop_for_exit(hub: Hub) -> bool:
 
 # ---- After a launch ---------------------------------------------------------
 # `python -m boltjar serve` starts these once its Ready line is out, so none of
-# them holds up the boot: (1) start Ollama when "Start Ollama with Boltjar" is
-# on, (2) refresh the local providers' model lists, so validation sees the
-# installed models, (3) power back On the graphs that were On, when "Resume
+# them holds up the boot. First it settles what the last run left in the resume
+# record (dropped with Resume off, kept for the next launch with --no-resume),
+# then: (1) start Ollama when "Start Ollama with Boltjar" is on, (2) refresh the
+# local providers' model lists, so validation sees the installed models, (3)
+# power back On the graphs that were On when the last run ended, when "Resume
 # workflows after launch" is on. Each step's failure is reported and the next
 # one runs anyway.
 
@@ -431,6 +445,7 @@ async def launch_sequence(resume: bool = True) -> None:
         _launch_log.warning("could not read the settings, so nothing starts on its own: %s", exc,
                             extra={"tone": "warn"})
         prefs = dict(_settings.DEFAULTS)
+    _settle_record(prefs["resume_workflows"], resume)
     if prefs["start_ollama"]:
         try:
             tone, text = await _ollama.launch_start()
@@ -439,12 +454,25 @@ async def launch_sequence(resume: bool = True) -> None:
         _launch_log.log(logging.WARNING if tone == "warn" else logging.INFO, text,
                         extra={"tone": tone})
     await refresh_local_models()
-    if not prefs["resume_workflows"]:
-        return
-    if not resume:
-        GRAPH_LINES.note("--no-resume: the graphs that were On stay Off for this launch")
-        return
-    await resume_graphs()
+    if prefs["resume_workflows"] and resume:
+        await resume_graphs()
+
+
+def _settle_record(resume_on: bool, resume: bool) -> None:
+    """What the last run left On, before anything else of this launch: with
+    Resume off it is dropped (those graphs are Off in this run, and one turned
+    On again records itself); with --no-resume it is kept for the next launch;
+    else step (3) resumes it."""
+    try:
+        if not resume_on:
+            _resume.drop_earlier()
+        elif not resume:
+            kept = _resume.carry()
+            GRAPH_LINES.note(
+                f"--no-resume: {', '.join(kept)} stay Off for this launch, and come back at the next"
+                if kept else "--no-resume: no graph was On when Boltjar last stopped")
+    except OSError as exc:
+        _launch_log.warning("could not read the graphs that were On: %s", exc, extra={"tone": "warn"})
 
 
 async def refresh_local_models() -> None:
@@ -464,14 +492,14 @@ async def refresh_local_models() -> None:
 
 async def resume_graphs() -> tuple[list[str], list[str]]:
     """Power back On, one at a time and through the normal validation, every
-    graph recorded as On, from the JSON it ran. One that fails stays Off and
-    stays recorded (no person turned it Off), with one terminal line and the
-    problems kept for the editor; one whose graph file is gone is dropped.
-    Returns (resumed, not resumed) slugs."""
+    graph the last run left On, from the JSON it ran. One that fails stays Off
+    and stays recorded for the next launch (no person turned it Off), with one
+    terminal line and the problems kept for the editor; one whose graph file is
+    gone is dropped. Returns (resumed, not resumed) slugs."""
     resumed: list[str] = []
     failed: list[str] = []
     try:
-        entries = _resume.recorded()
+        entries = _resume.earlier()
     except OSError as exc:
         GRAPH_LINES.note(f"could not read the graphs that were On, so none is resumed: {exc}", "warn")
         return resumed, failed
@@ -493,6 +521,7 @@ async def resume_graphs() -> tuple[list[str], list[str]]:
             resumed.append(slug)
             continue
         failed.append(slug)
+        _carry_resume(slug)
         if problems:
             GRAPH_LINES.not_resumed(slug, problems[0])
         # a graph that failed to build printed its own line (its `error` event)

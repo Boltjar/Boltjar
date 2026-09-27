@@ -40,6 +40,7 @@ def fresh(monkeypatch, tmp_path):
     """This test's own Hubs, resume record, settings and saved graphs."""
     monkeypatch.setattr(server, "HUBS", {})
     monkeypatch.setattr(server, "LAUNCH_NOTICES", {})
+    monkeypatch.setattr(resume, "LAUNCH", resume.LAUNCH)  # new_launch() is undone after the test
     monkeypatch.setattr(resume, "PATH", tmp_path / "data" / "resume.json")
     monkeypatch.setattr(settings, "PATH", tmp_path / "data" / "settings.json")
     graphs = tmp_path / "graphs"
@@ -59,9 +60,27 @@ def power(client, slug: str, action: str, graph: dict | None = None) -> dict:
 
 
 def restart_server(monkeypatch) -> None:
-    """A new server process: no Hubs, no notices; the files on disk stay."""
+    """A new server process: no Hubs, no notices, a new launch; the files on
+    disk stay."""
     monkeypatch.setattr(server, "HUBS", {})
     monkeypatch.setattr(server, "LAUNCH_NOTICES", {})
+    resume.new_launch()
+
+
+def left_on(monkeypatch, *graphs: tuple[str, dict]) -> None:
+    """The last run ended with these graphs On: recorded, then a new launch."""
+    for slug, graph in graphs:
+        resume.record(slug, graph)
+    restart_server(monkeypatch)
+
+
+@pytest.fixture
+def no_local_providers(monkeypatch):
+    monkeypatch.setattr(model_discovery, "local_providers", lambda: [])
+
+
+def running() -> list[str]:
+    return sorted(slug for slug, hub in server.HUBS.items() if hub.runtime is not None)
 
 
 # ---------------------------------------------------------------- the record
@@ -212,7 +231,7 @@ def test_a_graph_that_fails_to_resume_stays_off_and_recorded_and_says_why(fresh,
 
 def test_a_graph_that_fails_to_build_stays_off_and_recorded(fresh, monkeypatch, caplog):
     save(fresh, "chat", MANUAL_LOG)
-    resume.record("chat", MANUAL_LOG)
+    left_on(monkeypatch, ("chat", MANUAL_LOG))
 
     def refuses(self, graph):
         raise RuntimeError("the store is locked")
@@ -232,7 +251,7 @@ def test_a_graph_that_fails_to_build_stays_off_and_recorded(fresh, monkeypatch, 
 
 def test_the_notice_goes_once_the_graph_turns_on(fresh, monkeypatch):
     save(fresh, "broken", MANUAL_LOG)
-    resume.record("broken", NO_TRIGGER)
+    left_on(monkeypatch, ("broken", NO_TRIGGER))
     with local_client() as client:
         client.portal.call(server.resume_graphs)
         assert "broken" in server.LAUNCH_NOTICES
@@ -243,8 +262,8 @@ def test_the_notice_goes_once_the_graph_turns_on(fresh, monkeypatch):
         power(client, "broken", "off")
 
 
-def test_a_graph_whose_file_is_gone_is_dropped_with_one_dim_line(fresh, caplog):
-    resume.record("deleted", MANUAL_LOG)
+def test_a_graph_whose_file_is_gone_is_dropped_with_one_dim_line(fresh, monkeypatch, caplog):
+    left_on(monkeypatch, ("deleted", MANUAL_LOG))
     with caplog.at_level(logging.INFO, logger="boltjar.graph"):
         with local_client() as client:
             assert client.portal.call(server.resume_graphs) == ([], [])
@@ -344,7 +363,7 @@ def test_the_local_refresh_is_bounded(fresh, monkeypatch):
 
 def test_an_exit_mid_launch_resumes_nothing(fresh, monkeypatch):
     save(fresh, "chat", MANUAL_LOG)
-    resume.record("chat", MANUAL_LOG)
+    left_on(monkeypatch, ("chat", MANUAL_LOG))
     settings.update({"start_ollama": True, "resume_workflows": True})
 
     async def slow_ollama():
@@ -453,7 +472,7 @@ def test_a_launch_that_cannot_read_the_record_resumes_nothing_and_says_so(fresh,
     import pathlib
 
     save(fresh, "chat", MANUAL_LOG)
-    resume.record("chat", MANUAL_LOG)
+    left_on(monkeypatch, ("chat", MANUAL_LOG))
     before = resume.PATH.read_bytes()
     with caplog.at_level(logging.INFO, logger="boltjar.graph"):
         with local_client() as client:
@@ -463,3 +482,109 @@ def test_a_launch_that_cannot_read_the_record_resumes_nothing_and_says_so(fresh,
             assert "chat" not in server.HUBS or server.HUBS["chat"].runtime is None
     assert any("could not read the graphs that were On" in r.getMessage() for r in caplog.records)
     assert resume.PATH.read_bytes() == before  # tried again at the next launch
+
+
+# ---------------------------------------------------------------- On at the last exit
+def test_only_the_graphs_on_at_the_last_exit_come_back(fresh, monkeypatch, no_local_providers):
+    save(fresh, "old", MANUAL_LOG)
+    save(fresh, "today", MANUAL_LOG)
+    # launch 1, Resume off (the default): "old" is On when Boltjar stops
+    with local_client() as client:
+        client.portal.call(server.launch_sequence)
+        power(client, "old", "on", MANUAL_LOG)
+    restart_server(monkeypatch)
+    # launch 2, still off: "old" stays Off all along, "today" is On at the exit,
+    # and the person turns Resume on before stopping Boltjar
+    with local_client() as client:
+        client.portal.call(server.launch_sequence)
+        power(client, "today", "on", MANUAL_LOG)
+        settings.update({"resume_workflows": True})
+    restart_server(monkeypatch)
+    with local_client() as client:
+        client.portal.call(server.launch_sequence)
+        on = running()
+        for slug in on:
+            power(client, slug, "off")
+    assert on == ["today"]
+
+
+def test_a_launch_with_resume_off_drops_what_the_last_run_left(fresh, monkeypatch, no_local_providers):
+    save(fresh, "digest", MANUAL_LOG)
+    with local_client() as client:
+        power(client, "digest", "on", MANUAL_LOG)
+    restart_server(monkeypatch)
+    with local_client() as client:
+        # a graph turned On before the launch steps run is this run's own
+        power(client, "chat", "on", MANUAL_LOG)
+        client.portal.call(server.launch_sequence)
+        assert resume.slugs() == ["chat"]  # digest was Off in this run
+        power(client, "chat", "off")
+
+
+def test_a_restart_that_leaves_the_graph_off_forgets_it(fresh, monkeypatch, no_local_providers):
+    save(fresh, "chat", MANUAL_LOG)
+    settings.update({"resume_workflows": True})
+    real_build = server.Runtime.build
+
+    def build(self, graph):
+        if any(n["id"] == "lg2" for n in graph["nodes"]):
+            raise RuntimeError("the store is locked")
+        return real_build(self, graph)
+
+    monkeypatch.setattr(server.Runtime, "build", build)
+    with local_client() as client:
+        power(client, "chat", "on", MANUAL_LOG)
+        # the new build fails after the old runtime stopped: nothing runs now
+        assert power(client, "chat", "restart", MANUAL_LOG_DRAFT)["power"] == "off"
+        assert resume.slugs() == []
+    restart_server(monkeypatch)
+    with local_client() as client:
+        client.portal.call(server.launch_sequence)
+        assert running() == []
+
+
+def test_a_restart_refused_by_validation_keeps_the_old_graph_on_and_recorded(fresh):
+    with local_client() as client:
+        power(client, "chat", "on", MANUAL_LOG)
+        assert power(client, "chat", "restart", NO_TRIGGER)["problems"]
+        assert running() == ["chat"]
+        assert dict(resume.recorded())["chat"] == migrate(copy.deepcopy(MANUAL_LOG))
+        power(client, "chat", "off")
+
+
+def test_no_resume_keeps_the_graphs_for_the_next_launch(fresh, monkeypatch, no_local_providers):
+    save(fresh, "chat", MANUAL_LOG)
+    settings.update({"resume_workflows": True})
+    with local_client() as client:
+        power(client, "chat", "on", MANUAL_LOG)
+    restart_server(monkeypatch)
+    with local_client() as client:
+        client.portal.call(server.launch_sequence, False)  # --no-resume
+        assert running() == []
+    restart_server(monkeypatch)
+    with local_client() as client:
+        client.portal.call(server.launch_sequence)
+        assert running() == ["chat"]
+        power(client, "chat", "off")
+
+
+def test_a_graph_that_failed_to_resume_is_tried_again_at_the_next_launch(fresh, monkeypatch,
+                                                                        no_local_providers):
+    save(fresh, "chat", MANUAL_LOG)
+    settings.update({"resume_workflows": True})
+    left_on(monkeypatch, ("chat", MANUAL_LOG))
+    real_build = server.Runtime.build
+
+    def refuses(self, graph):
+        raise RuntimeError("the store is locked")
+
+    with local_client() as client:
+        monkeypatch.setattr(server.Runtime, "build", refuses)
+        client.portal.call(server.launch_sequence)
+        assert running() == []
+    restart_server(monkeypatch)
+    monkeypatch.setattr(server.Runtime, "build", real_build)
+    with local_client() as client:
+        client.portal.call(server.launch_sequence)
+        assert running() == ["chat"]
+        power(client, "chat", "off")

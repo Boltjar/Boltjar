@@ -1,17 +1,26 @@
 """
-boltjar.resume: which graphs are On, kept across a restart of Boltjar.
+boltjar.resume: the graphs On when Boltjar last stopped, for the next launch.
 
 The server records a graph here the moment it turns On (the exact graph JSON it
-runs, a draft included), keeps it through a Restart, and removes it only when a
-person turns it Off. Stopping the server (Ctrl+C, closing the window) is not an
-Off: the record stays as it was, so the next launch knows what was running.
-When "Resume workflows after launch" is on, that launch powers each recorded
-graph back On from the JSON recorded here (boltjar.server.resume_graphs).
+runs, a draft included) and keeps it through a Restart. It drops it when a
+person turns it Off, and when a Restart leaves it Off (the new build failed
+after the old runtime stopped). Stopping the server (Ctrl+C, closing the
+window, the computer shutting down) is not an Off: the record stays as it was,
+so it names the graphs that were On at that moment.
+
+Every entry is stamped with the launch that wrote it. What an earlier launch
+left is the graphs On when it ended, and this launch settles it
+(boltjar.server.launch_sequence): with "Resume workflows after launch" on, each
+is powered back On from the JSON recorded here, and one that cannot be stays
+recorded, stamped anew, to be tried again at the next launch; with --no-resume
+they are all kept for the next launch; with the setting off they are dropped,
+since they are Off in this run (a graph turned On again records itself).
 
 The record lives in user/data/resume.json, rewritten whole through a temporary
 file (atomic) on every change, in the order the graphs turned On:
 
-    {"version": 1, "graphs": {"chat": {"since": "2026-09-27T09:00:00Z", "graph": {...}}}}
+    {"version": 1, "graphs": {"chat": {"since": "2026-09-27T09:00:00Z",
+                                       "launch": "<id>", "graph": {...}}}}
 """
 from __future__ import annotations
 
@@ -21,6 +30,7 @@ import logging
 import os
 import pathlib
 import tempfile
+import uuid
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 # Module-level so the test suite can point it at a tmp dir.
@@ -29,7 +39,18 @@ VERSION = 1
 
 _log = logging.getLogger(__name__)
 
+# This run of Boltjar: the stamp on every entry it writes. An entry stamped
+# otherwise was left by an earlier launch.
+LAUNCH = uuid.uuid4().hex
 
+
+def new_launch() -> None:
+    """Start a new run, as a new server process does (the test suite's restart)."""
+    global LAUNCH
+    LAUNCH = uuid.uuid4().hex
+
+
+# ---------------------------------------------------------------- the file
 def _read(*, for_write: bool = False) -> dict[str, dict]:
     """The recorded graphs; {} when there is no record yet. A file that cannot
     be read (a sharing violation, no permission) raises OSError, so nothing is
@@ -71,18 +92,25 @@ def _now() -> str:
         "+00:00", "Z")
 
 
+def _earlier(entry: dict) -> bool:
+    """The entry was left by an earlier launch (one from before stamps counts)."""
+    return entry.get("launch") != LAUNCH
+
+
+# ---------------------------------------------------------------- changes
 def record(slug: str, graph: dict) -> None:
-    """`slug` is On, running `graph`. A graph already recorded keeps its place
-    in the order and its `since`; its JSON becomes the new one (a Restart)."""
+    """`slug` is On in this run, running `graph`. A graph already recorded
+    keeps its place in the order and its `since`; its JSON becomes the new one
+    (a Restart)."""
     graphs = _read(for_write=True)
     since = graphs.get(slug, {}).get("since") or _now()
-    graphs[slug] = {"since": since, "graph": graph}
+    graphs[slug] = {"since": since, "launch": LAUNCH, "graph": graph}
     _write(graphs)
 
 
 def forget(slug: str) -> bool:
-    """A person turned `slug` Off, or its graph is gone: drop it. False when it
-    was not recorded (nothing is written then)."""
+    """`slug` is not to come back: drop it. False when it was not recorded
+    (nothing is written then)."""
     graphs = _read(for_write=True)
     if slug not in graphs:
         return False
@@ -91,8 +119,42 @@ def forget(slug: str) -> bool:
     return True
 
 
+def _settle(slugs: list[str] | None, keep: bool) -> list[str]:
+    graphs = _read(for_write=True)
+    found = [slug for slug, entry in graphs.items()
+             if _earlier(entry) and (slugs is None or slug in slugs)]
+    for slug in found:
+        if keep:
+            graphs[slug]["launch"] = LAUNCH
+        else:
+            del graphs[slug]
+    if found:
+        _write(graphs)
+    return found
+
+
+def carry(slugs: list[str] | None = None) -> list[str]:
+    """Keep for the next launch what an earlier launch left (only `slugs` of
+    it, when given): stamped with this launch, its JSON unchanged. Returns the
+    slugs carried."""
+    return _settle(slugs, keep=True)
+
+
+def drop_earlier() -> list[str]:
+    """Drop what an earlier launch left; what this run recorded stays. Returns
+    the slugs dropped."""
+    return _settle(None, keep=False)
+
+
+# ---------------------------------------------------------------- reading
+def earlier() -> list[tuple[str, dict]]:
+    """(slug, graph JSON) for every graph an earlier launch left On, in the
+    order they turned On: what this launch resumes."""
+    return [(slug, entry["graph"]) for slug, entry in _read().items() if _earlier(entry)]
+
+
 def recorded() -> list[tuple[str, dict]]:
-    """(slug, graph JSON) for every graph that was On, in the order they turned On."""
+    """(slug, graph JSON) for every graph recorded, in the order they turned On."""
     return [(slug, entry["graph"]) for slug, entry in _read().items()]
 
 
