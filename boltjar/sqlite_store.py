@@ -69,15 +69,22 @@ def _affinity(coltype: str | None) -> str:
     return "NUMERIC"
 
 
-def _declared_type(coltype: str | None) -> str:
-    """The allow-listed type a declared column is created with: the schema
-    editor's names (int, bool, real...) map as `_safe_coltype` maps them, and a
-    type read back from a live table (DATETIME, VARCHAR(20)) keeps the affinity
-    SQLite gave it. No type at all is TEXT, as in `create_table`."""
+def _column_kind(coltype: str | None) -> str:
+    """The kind of column a type stands for here: a name the schema editor
+    offers (int, bool, real...) maps as `_safe_coltype` maps it, and any other
+    type (DATETIME, VARCHAR(20), a BOOLEAN made by SQL) reads by the affinity
+    SQLite gives it. A declared type and a live one are both read this way, so a
+    live schema never conflicts with a declaration taken from it. No type at all
+    reads as BLOB, the affinity SQLite gives an untyped column."""
     raw = (coltype or "").strip()
-    if not raw:
-        return "TEXT"
     return _affinity(_COLTYPES.get(raw.lower(), raw))
+
+
+def _declared_type(coltype: str | None) -> str:
+    """The allow-listed type a declared column is created with: its
+    `_column_kind`, or TEXT when it has no type, as in `create_table`."""
+    raw = (coltype or "").strip()
+    return _column_kind(raw) if raw else "TEXT"
 
 
 def _authorize(action: int, arg1, arg2, db_name, trigger) -> int:
@@ -185,8 +192,8 @@ class SqliteStore:
         column. It only ever adds. A table or column that exists stays as it is
         (never dropped, retyped or emptied), and names match the way SQLite
         matches them, ignoring case. What cannot be made to match is reported in
-        `conflicts`: a column whose live type has another affinity than the
-        declared one, a primary key column missing from a table that exists
+        `conflicts`: a column whose live type is another kind than the declared
+        one (`_column_kind`), a primary key column missing from a table that exists
         (SQLite cannot add one), or a name SQLite refuses. Returns
         {created, added, conflicts, schema}."""
         created: list[str] = []
@@ -226,7 +233,7 @@ class SqliteStore:
                         col, declared = c["name"], str(c["type"] or "").strip()
                         if col.lower() in existing:
                             have = existing[col.lower()]
-                            if declared and _affinity(have) != _declared_type(declared):
+                            if declared and _column_kind(have) != _column_kind(declared):
                                 conflicts.append(
                                     f"{table}.{col} is declared {declared.lower()} but the "
                                     f"database holds it as {(have or 'untyped').lower()}"

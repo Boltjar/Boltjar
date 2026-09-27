@@ -198,14 +198,17 @@ def test_ensure_schema_matches_names_ignoring_case(store):
 
 
 def test_ensure_schema_reads_types_by_affinity(store):
-    store.execute("k", "CREATE TABLE t (a VARCHAR(20), b DATETIME, c BOOLEAN, d)")
+    store.execute("k", "CREATE TABLE t (a VARCHAR(20), b DATETIME, c BOOLEAN, d, e, f REAL)")
     declared = [{"name": "t", "columns": [
         {"name": "a", "type": "text"}, {"name": "b", "type": "DATETIME"},
         {"name": "c", "type": "bool"}, {"name": "d", "type": ""},
+        {"name": "e", "type": "blob"}, {"name": "f", "type": "int"},
     ]}]
     out = store.ensure_schema("k", declared)
-    # VARCHAR is text; DATETIME matches itself; an untyped declaration never conflicts.
-    assert out["conflicts"] == ["t.c is declared bool but the database holds it as boolean"]
+    # VARCHAR is text; DATETIME matches itself; BOOLEAN and bool are the same
+    # column; an untyped declaration never conflicts, and an untyped column is a
+    # blob, as SQLite reads it. Only a real column declared int is another kind.
+    assert out["conflicts"] == ["t.f is declared int but the database holds it as real"]
 
 
 def test_ensure_schema_reports_a_primary_key_it_cannot_add(store):
@@ -221,8 +224,10 @@ def test_ensure_schema_reports_a_primary_key_it_cannot_add(store):
 
 def test_ensure_schema_round_trips_a_live_schema(store, tmp_path):
     store.execute("k", "CREATE TABLE notes (id INTEGER PRIMARY KEY AUTOINCREMENT, "
-                       "body TEXT, score REAL, seen DATETIME, raw BLOB)")
+                       "body TEXT, score REAL, seen DATETIME, raw BLOB, done BOOLEAN, due BOOL)")
     snapshot = [{"name": t["name"], "columns": t["columns"]} for t in store.schema("k")]
+    # a live schema never conflicts with a declaration taken from it
+    assert store.ensure_schema("k", snapshot)["conflicts"] == []
     fresh = SqliteStore(root=tmp_path / "other")
     try:
         out = fresh.ensure_schema("k", snapshot)
@@ -232,6 +237,7 @@ def test_ensure_schema_round_trips_a_live_schema(store, tmp_path):
         assert [(c["name"], c["type"], c["pk"]) for c in cols] == [
             ("id", "INTEGER", True), ("body", "TEXT", False), ("score", "REAL", False),
             ("seen", "NUMERIC", False), ("raw", "BLOB", False),
+            ("done", "INTEGER", False), ("due", "INTEGER", False),
         ]
     finally:
         fresh.close()
