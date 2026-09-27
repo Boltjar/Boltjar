@@ -55,7 +55,6 @@ CORE_WIDGET_KINDS = {
     "core.logic.condition": {"expression": "code"},
     "core.net.http": {"method": "select", "url": "text", "headers": "code", "query": "code",
                       "body": "code", "response_type": "select"},
-    "core.output.avatar": {"channel": "text"},
     "core.output.chat": {},
     "core.output.log": {"label": "text"},
     "core.output.preview": {},

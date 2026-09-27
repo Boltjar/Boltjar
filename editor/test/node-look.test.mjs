@@ -152,7 +152,6 @@ const SUBLINE_BEFORE = [
   ["core.flow.wait", {}, "flow"],
   ["core.flow.queue", {}, "flow"],
   ["core.output.chat", {}, "inspect"],
-  ["core.output.avatar", {}, "output"],
 ];
 
 const BODY_BEFORE = [
@@ -219,7 +218,6 @@ const BODY_BEFORE = [
   ["core.flow.wait", {}, []],
   ["core.flow.queue", {}, []],
   ["core.output.chat", {}, []],
-  ["core.output.avatar", {}, []],
 ];
 
 // ---- every core node declares an icon the editor ships, and draws it

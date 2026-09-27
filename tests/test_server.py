@@ -119,6 +119,32 @@ def test_graph_save_and_load(monkeypatch, tmp_path) -> None:
     assert (tmp_path / "graphs" / "rt_probe.json").exists()
 
 
+def test_a_saved_graph_with_the_removed_avatar_node_fails_validation(monkeypatch, tmp_path) -> None:
+    # the Avatar node is gone: a graph saved while it existed still loads, and
+    # validation names it as an unknown node type instead of crashing.
+    monkeypatch.setattr(server, "GRAPHS_DIR", tmp_path / "graphs")
+    monkeypatch.setattr(server, "AUTOSAVE_DIR", tmp_path / "autosave")
+    graph = {"name": "old_avatar", "nodes": [
+        {"id": "m", "type": "core.trigger.manual", "config": {}},
+        {"id": "txt", "type": "core.value.text", "config": {"text": "hi"}},
+        {"id": "av", "type": "core.output.avatar", "config": {"channel": "avatar"}},
+    ], "edges": [
+        {"src": "m", "src_port": "trigger", "dst": "av", "dst_port": "trigger"},
+        {"src": "txt", "src_port": "out", "dst": "av", "dst_port": "text"},
+    ]}
+    assert client.put("/api/graphs/old_avatar", json=graph).json()["ok"]
+    loaded = client.get("/api/graphs/old_avatar").json()
+    assert [n["type"] for n in loaded["nodes"]][-1] == "core.output.avatar"
+    problems = client.post("/api/validate", json=loaded).json()["problems"]
+    assert problems == [{"node": "av", "kind": "unknown",
+                         "message": "unknown node type core.output.avatar"}]
+    try:
+        r = client.post("/api/runtime/old_avatar/power", json={"action": "on"}).json()
+        assert r["power"] == "off" and r["problems"] == problems
+    finally:
+        HUBS.pop("old_avatar", None)
+
+
 def test_db_endpoints_reject_empty_key() -> None:
     # An empty/whitespace db key must be refused at the API boundary with a clean
     # 400 (via _need inside _db), never reaching SQL. %20 decodes to a space.

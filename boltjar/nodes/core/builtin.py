@@ -202,10 +202,10 @@ class Audio:
         return {"out": _media_value(self.src, "Audio", _AUDIO_MIME, "audio/wav")}
 
 
-# ---- inline expression tags -> mood / display text (the avatar mood signal) ----
+# ---- inline expression tags -> mood / display text ----
 # A single signal (an inline [bracket] tag the LLM writes) drives both the voice
-# expression and the avatar face, so mood/action are COMPOSITION (this node), not
-# a hardcoded per-model argument. Maps are editable JSON with neutral defaults.
+# expression and whatever shows the mood, so mood/action are COMPOSITION (this
+# node), not a hardcoded per-model argument. Maps are editable JSON with neutral defaults.
 _TAG_RE = re.compile(r"\[([A-Za-z][A-Za-z\s]*?)\]")
 _TAG_EMOJI = {
     "laughing": "😂", "chuckling": "😄", "sobbing": "😭", "crying loudly": "😭",
@@ -224,7 +224,7 @@ _DEFAULT_MOODS = (
 )
 _DEFAULT_ACTIONS = '{"wave":"wave","nod":"nod","dance":"dance","point":"point","think":"think"}'
 # tag -> priority (higher wins when several mood tags appear), so the strongest
-# expression drives the avatar face, not just the first one in text order. Also
+# expression sets the mood, not just the first one in text order. Also
 # caps which emoji survive when too many appear.
 _DEFAULT_PRIORITY = (
     '{"laughing":9,"sobbing":9,"crying loudly":9,"sighing":8,"chuckling":7,'
@@ -1261,7 +1261,7 @@ class STT:
     inputs = [Port("trigger", "event", trigger=True),
               Port("audio", "audio")]
     # `lang` carries the ASR-detected language (en/pt/...), so the voice path can
-    # mirror the speaker's language into TTS/Avatar without the client pre-tagging it.
+    # mirror the speaker's language into TTS without the client pre-tagging it.
     outputs = [Port("text", "text"), Port("lang", "lang", optional=True), Port("trigger", "event")]
 
     async def run(self, audio=None, **kw):
@@ -1487,7 +1487,7 @@ _SENTENCE_RE = re.compile(r".+?(?:[.!?…]+(?:[\"')\]]+)?|\n+|$)", re.DOTALL)
 @node(id="core.data.sentences", name="Sentences", kind=Kind.TRANSFORM, category="Data",
       pulled=True, summary="Split text into a list of sentences (each ends on . ! ? ... or "
                            "a new line). Feed it through For-each to send an LLM reply to "
-                           "TTS or Avatar one sentence at a time, so speech starts sooner.",
+                           "TTS one sentence at a time, so speech starts sooner.",
       icon="reorder-four-outline")
 class Sentences:
     inputs = [Port("text", "text")]
@@ -3219,56 +3219,6 @@ class ChatOutput:
         # the editor renders the conversation from the wired streams, committing a
         # turn when its side's trigger fires. The sink just lights up; no output.
         return {}
-
-
-@node(id="core.output.avatar", name="Avatar", kind=Kind.OUTPUT, category="Output",
-      summary="Stream one avatar chunk per fire (text, audio, mood, action and lang) to an "
-              "avatar client, such as a VRM renderer, listening on /stream. For one chunk "
-              "per sentence, fire it once per sentence (a For-each over Sentences). Wire "
-              "the separate ports or one combined `utterance` JSON; the separate ports win. "
-              "Lip-sync stays on the client.",
-      icon="happy-outline")
-class Avatar:
-    channel: Widget = Widget(kind="text", default="avatar", label="stream channel")
-    inputs = [Port("trigger", "event", trigger=True),
-              Port("text", "text", optional=True),
-              Port("audio", "audio", optional=True),
-              Port("mood", "mood", optional=True),
-              Port("action", "action", optional=True),
-              Port("lang", "lang", optional=True),
-              # wire a truthy value here on the LAST chunk of a turn (e.g. For-each's
-              # after_last) so the client knows the utterance ended.
-              Port("done", "bool", optional=True),
-              Port("utterance", "utterance", optional=True)]
-    # passthrough trigger so an avatar frame can sequence/pace the next node
-    # (e.g. release a Queue's next job after the sentence is committed).
-    outputs = [Port("trigger", "event")]
-
-    def deliver(self, value, ctx, inputs=None):
-        ins = inputs or {}
-        cfg = getattr(self, "_node_cfg", {}) or {}
-        channel = str(cfg.get("channel") or "avatar")
-        # a combined `utterance` json supplies defaults; the separate ports win.
-        u = ins.get("utterance")
-        base = dict(u) if isinstance(u, dict) else {}
-
-        def pick(name):
-            v = ins.get(name)
-            return v if v is not None else base.get(name)
-
-        chunk = {
-            "text": pick("text"),
-            "audio": pick("audio"),
-            "mood": pick("mood"),
-            "action": pick("action"),
-            "lang": pick("lang"),
-            "is_chunk_start": True,
-            "is_chunk_final": True,
-            "done": bool(pick("done")),
-        }
-        ctx.publish(channel, chunk)
-        ctx.log(f"-> avatar: {str(chunk.get('text') or '')[:60]}")
-        return {"trigger": True}
 
 
 # ============================================================ helpers

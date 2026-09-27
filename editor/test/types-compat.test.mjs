@@ -43,7 +43,6 @@ check("tool -> tool-call is directional (rejected)", typesCompatible("tool", "to
 check("event -> tool rejected", typesCompatible("event", "tool"), false);
 // Other declared backend subtypes the editor now mirrors.
 check("lang -> text", typesCompatible("lang", "text"), true);
-check("utterance -> message", typesCompatible("utterance", "message"), true);
 check("vectors -> db", typesCompatible("vectors", "db"), true);
 // List.out (list) must drop onto a json input (Format List / DB rows); directional.
 check("list -> json accepted", typesCompatible("list", "json"), true);

@@ -43,7 +43,7 @@ const REGISTRY = [
   node("core.ai.tts", "TTS", "AI", "Text to speech. Picks a model from any connected TTS provider the same way the LLM picks its model."),
   node("core.ai.embed", "Embed", "AI", "Encode text into an embedding vector. Picks an embed model (Ollama bge-m3 by default) the way the LLM picks its model. Fires on its trigger and emits the vector + a trigger to sequence the next node."),
   node("core.ai.rerank", "Rerank", "AI", "A cross-encoder precision pass: score each candidate against the query and keep the best. Picks a rerank model (an HTTP service at the `url` knob)."),
-  node("core.data.sentences", "Sentences", "Data", "Split text into a list of sentences (ends on . ! ? ... or a newline). Feed through For-each to stream the LLM reply one sentence at a time into TTS / Avatar (low-latency streaming)."),
+  node("core.data.sentences", "Sentences", "Data", "Split text into a list of sentences (each ends on . ! ? ... or a new line). Feed it through For-each to send an LLM reply to TTS one sentence at a time, so speech starts sooner."),
   node("core.store.vectors", "Vector Store", "Store", "An embedded vector store (sqlite + cosine). Emits a handle the Vectors node indexes into and searches."),
   node("core.vectors", "Vectors", "Store", "Index and search an embedded vector store. The operation knob reshapes the knobs, inputs and outputs."),
   node("core.store.database", "Database", "Store", "An embedded SQLite database. Emits a db connection other nodes use."),

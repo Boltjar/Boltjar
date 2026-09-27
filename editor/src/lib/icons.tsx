@@ -134,7 +134,6 @@ import {
   IoKeyOutline,
   IoPlanetOutline,
   IoCompassOutline,
-  IoHappyOutline,
 } from "react-icons/io5";
 import type { ComponentType } from "react";
 
@@ -206,7 +205,6 @@ const REGISTRY: Record<string, IconCmp> = {
   "key-outline": IoKeyOutline,
   "planet-outline": IoPlanetOutline,
   "compass-outline": IoCompassOutline,
-  "happy-outline": IoHappyOutline,
   // actions
   play: IoPlay,
   pause: IoPause,

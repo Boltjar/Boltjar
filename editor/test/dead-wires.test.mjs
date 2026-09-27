@@ -186,6 +186,19 @@ const unknownEdges = [edge("preview", "out", "mystery", "whatever"), edge("myste
 check("a wire into or out of a node of unknown type survives",
   kept(heal(unknown, unknownEdges)), unknownEdges.map(wireOf));
 
+// a graph saved while the Avatar node still existed loads against the served core
+// definitions: its node is unknown there, so nothing throws and its wires stay for
+// the server's validation to name ("unknown node type").
+const served = new Map(JSON.parse(readFileSync(resolve(here, "fixtures/core-nodes.json"), "utf8"))
+  .map((d) => [d.id, d]));
+check("the served definitions have no Avatar node", served.has("core.output.avatar"), false);
+const oldAvatar = [node("m", "core.trigger.manual"), node("txt", "core.value.text"),
+  node("av", "core.output.avatar", { channel: "avatar" })];
+const oldAvatarEdges = [edge("m", "trigger", "av", "trigger"), edge("txt", "out", "av", "text")];
+const oldHealed = healDeadWires({ name: "t", nodes: oldAvatar, edges: oldAvatarEdges }, served, loaded);
+check("an old Avatar graph loads with its wires kept", kept(oldHealed), oldAvatarEdges.map(wireOf));
+check("an old Avatar graph reports no removed wire", notices(oldHealed), []);
+
 // ---- 5. ports and nodes that are really gone
 const orphans = [...wireless, node("wout2", "core.flow.wireless_out", { channel: "2" }),
   node("clock", "core.value.text"), node("preview2", "core.output.preview"), node("preview3", "core.output.preview")];

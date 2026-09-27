@@ -63,7 +63,6 @@ const NUMERIC = new Set(["number", "int", "float"]);
  */
 const SUBTYPE_OF: Record<string, string> = {
   "tool-call": "tool",
-  utterance: "message",
   lang: "text",
   vectors: "db",
   // a list IS json-shaped: List.out (`list`) feeds any `json` input (For-each's

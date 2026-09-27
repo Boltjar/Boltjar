@@ -330,9 +330,6 @@ _CORE_TYPES = [
     ("tool-result", "#41a6b5", None),
     ("mood", "#e0af68", None),
     ("action", "#9ece6a", None),
-    # one streamable avatar unit (text + audio + mood + action + lang). Subtype of
-    # message so it flows into message-shaped consumers.
-    ("utterance", "#7aa2f7", "message"),
     # a language tag (en / pt / ...). Subtype of text so it wires into any text input.
     ("lang", "#b4f9f8", "text"),
     ("schedule", "#b4f9f8", None),
