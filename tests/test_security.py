@@ -145,7 +145,7 @@ def test_websocket_from_the_editor_connects(client, origin, host):
 
 # ---------------------------------------------------------------- token
 
-@pytest.mark.parametrize("path", ["/api/graphs", "/api/secrets", "/api/runtime/x/state", "/stream/x/c"])
+@pytest.mark.parametrize("path", ["/api/graphs", "/api/secrets", "/api/runtime/x/state"])
 def test_protected_reads_need_the_token(anon, path):
     r = anon.get(path)
     assert r.status_code == 401

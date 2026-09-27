@@ -404,7 +404,7 @@ def test_the_launch_starts_after_the_ready_line_with_the_flag(monkeypatch, capsy
 
     class Server:
         graphs_stopped = 0
-        connections_closed = (0, 0)
+        connections_closed = 0
 
         def __init__(self, on_ready):
             self.on_ready = on_ready

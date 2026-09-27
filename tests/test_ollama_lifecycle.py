@@ -318,7 +318,7 @@ def test_the_serve_command_stops_ollama_however_the_server_returns(fake_ollama, 
 
     class Server:
         graphs_stopped = 0
-        connections_closed = (0, 0)
+        connections_closed = 0
 
         def __init__(self, on_ready):
             self.on_ready = on_ready

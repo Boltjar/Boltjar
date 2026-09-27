@@ -1,6 +1,6 @@
 """One Ctrl+C stops the server: every running graph stops cleanly and every
-live connection (the editor websockets, the media streams) ends, so nothing is
-left for the server to wait on."""
+live connection (the editor websockets) ends, so nothing is left for the
+server to wait on."""
 from __future__ import annotations
 
 import asyncio
@@ -47,32 +47,12 @@ def test_shutdown_closes_the_editor_websockets(hubs):
     with local_client() as client:
         with client.websocket_connect("/ws?slug=sd-ws") as ws:
             assert ws.receive_json()["kind"] == "status"
-            assert server.open_connections() == (1, 0)
+            assert server.open_connections() == 1
             client.portal.call(server.shutdown_all)
             with pytest.raises(WebSocketDisconnect) as closed:
                 for _ in range(10):
                     ws.receive_json()
             assert closed.value.code == 1001  # going away
-
-
-def test_shutdown_ends_the_media_streams(hubs):
-    async def scenario():
-        hub = server.get_hub("sd-stream")
-        response = await server.avatar_stream("sd-stream", "avatar")
-        body = response.body_iterator
-        first = asyncio.ensure_future(body.__anext__())
-        await asyncio.sleep(0)
-        hub.publish_stream("avatar", {"text": "hi"})
-        assert (await first).startswith("data: ")
-        assert server.open_connections() == (0, 1)
-        waiting = asyncio.ensure_future(body.__anext__())
-        await asyncio.sleep(0)
-        await server.shutdown_all()
-        with pytest.raises(StopAsyncIteration):
-            await asyncio.wait_for(waiting, 1)
-        assert "avatar" not in hub.stream_subscribers
-
-    asyncio.run(scenario())
 
 
 def test_a_graph_whose_stop_hangs_holds_up_none_of_the_others(hubs):

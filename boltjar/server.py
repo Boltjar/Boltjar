@@ -95,10 +95,8 @@ EXAMPLES_DIR = ROOT / "examples"
 AUTOSAVE_DIR = USER_DIR / "autosave"
 AUTOSAVE_MAX = 50
 DATA_DIR = USER_DIR / "data"
-# Resource bounds for the avatar media-out stream + the audio POST (localhost
-# robustness, so a looping client cannot grow memory or buffer an absurd blob).
-STREAM_MAX_CHANNELS = 256
-STREAM_MAX_SUBS_PER_CHANNEL = 64
+# Resource bounds for the audio and webhook POSTs (localhost robustness, so a
+# looping client cannot buffer an absurd blob).
 AUDIO_POST_MAX_BYTES = 25 * 1024 * 1024  # 25 MB; a mic clip is well under this
 HOOK_POST_MAX_BYTES = 10 * 1024 * 1024  # 10 MB; a webhook payload is well under this
 EDITOR_DIST = ROOT / "editor" / "dist"
@@ -149,9 +147,6 @@ class Hub:
         # power is on, not yet Saved & Restarted) is never mistaken for live.
         self.graph: dict | None = None
         self.subscribers: set[asyncio.Queue] = set()
-        # media-out stream subscribers, keyed by channel (the avatar SSE). Distinct
-        # from `subscribers` (the editor value/log/status websocket fan-out).
-        self.stream_subscribers: dict[str, set[asyncio.Queue]] = {}
         # most recent `value` event per (node, port), for replay on reconnect.
         self.latest: dict[tuple[str, str], dict] = {}
         # serialises power ops so two concurrent "on" actions can't orphan a runtime.
@@ -176,14 +171,11 @@ class Hub:
         _tap(event)
 
     def close_connections(self) -> None:
-        """End every live connection on this Hub: each editor websocket and each
-        media stream gets a `None` sentinel, and its pump closes it. A stream
-        never ends by itself, and the server waits for open connections before
-        it can exit, so shutdown calls this after stopping the graph."""
-        queues = list(self.subscribers)
-        for channel in list(self.stream_subscribers.values()):
-            queues.extend(channel)
-        for q in queues:
+        """End every live connection on this Hub: each editor websocket gets a
+        `None` sentinel, and its pump closes it. The server waits for open
+        connections before it can exit, so shutdown calls this after stopping
+        the graph."""
+        for q in list(self.subscribers):
             try:
                 if q.full():
                     q.get_nowait()  # a stalled client: drop its oldest event for the sentinel
@@ -212,15 +204,6 @@ class Hub:
             else []
         )
         return {"kind": "live_graph", "nodes": nodes, "edges": edges}
-
-    def publish_stream(self, channel: str, chunk: dict) -> None:
-        """Fan one media chunk to every subscriber of `channel` (the avatar SSE).
-        Drop-on-full like broadcast(): a slow client never stalls the runtime."""
-        for q in list(self.stream_subscribers.get(channel, ())):
-            try:
-                q.put_nowait(chunk)
-            except Exception:
-                pass
 
     @property
     def busy(self) -> bool:
@@ -319,7 +302,7 @@ class Hub:
         """Under the lock: stop what runs, build and run `graph`. Returns None,
         or the `error` event when it could not start (nothing runs then)."""
         await self._stop()
-        runtime = Runtime(observer=self.broadcast, stream_observer=self.publish_stream)
+        runtime = Runtime(observer=self.broadcast)
         try:
             runtime.build(graph)
             # reachable before run() so an "off" arriving mid-start can still stop it.
@@ -435,8 +418,8 @@ def _tap(event: dict) -> None:
 
 async def shutdown_all() -> int:
     """Stop every running graph (services and stores close cleanly) and end
-    every live connection, the editors' /ws and the /stream media clients, so
-    the server exits on one Ctrl+C. The graphs stop side by side: one whose
+    every live connection (the editors' /ws), so the server exits on one
+    Ctrl+C. The graphs stop side by side: one whose
     stop hangs holds up none of the others. An exit is not an Off: the graphs
     stay recorded as On for the next launch. The Ollama this process started,
     if any, stops alongside them, in a task of its own: an exit that stops
@@ -611,12 +594,10 @@ def running_graphs() -> list[str]:
     return [hub.slug for hub in HUBS.values() if hub.runtime is not None]
 
 
-def open_connections() -> tuple[int, int]:
-    """(editor websockets, media streams) open now, across every graph: what
-    shutdown_all() is about to close."""
-    editors = sum(len(hub.subscribers) for hub in HUBS.values())
-    streams = sum(len(subs) for hub in HUBS.values() for subs in hub.stream_subscribers.values())
-    return editors, streams
+def open_connections() -> int:
+    """The editor websockets open now, across every graph: what shutdown_all()
+    is about to close."""
+    return sum(len(hub.subscribers) for hub in HUBS.values())
 
 
 @contextlib.asynccontextmanager
@@ -1034,8 +1015,8 @@ def api_version() -> dict:
 @app.get("/api/session")
 def session() -> dict:
     """The editor calls this once at boot. To a browser on this machine,
-    LocalGuard answers it with the session cookie that every later /api, /ws,
-    /stream and /audio call carries (GET / sets it too, but under the Vite dev
+    LocalGuard answers it with the session cookie that every later /api, /ws
+    and /audio call carries (GET / sets it too, but under the Vite dev
     server the page comes from Vite). Any other browser got the cookie from the
     /?token=<token> link, and a request without it is refused."""
     return {"ok": True}
@@ -1924,44 +1905,6 @@ async def runtime_ws(websocket: WebSocket, slug: str = "_default") -> None:
         if not hub.subscribers and hub.runtime is None and not hub.busy \
                 and HUBS.get(hub.slug) is hub:
             del HUBS[hub.slug]
-
-
-@app.get("/stream/{slug}/{channel}")
-async def avatar_stream(slug: str, channel: str):
-    """Server-sent events of avatar chunks on a channel. The Avatar node publishes
-    one chunk per fire ({text, audio, mood, action, lang, ...}); an avatar client
-    (any engine) subscribes here and renders it, doing its own lip-sync. The ONE
-    media-out stream, distinct from the editor's /ws value broadcast. 404 if not
-    running."""
-    hub = HUBS.get(slug)
-    if hub is None:
-        return JSONResponse({"error": "graph not running"}, status_code=404)
-    # bound resource use (localhost robustness, mirrors the /ws subscriber model): a
-    # looping/misbehaving client cannot grow memory without limit via many channels
-    # or many subscribers per channel.
-    if channel not in hub.stream_subscribers and len(hub.stream_subscribers) >= STREAM_MAX_CHANNELS:
-        return JSONResponse({"error": "too many stream channels"}, status_code=429)
-    chan = hub.stream_subscribers.setdefault(channel, set())
-    if len(chan) >= STREAM_MAX_SUBS_PER_CHANNEL:
-        return JSONResponse({"error": "too many subscribers on this channel"}, status_code=429)
-    q: asyncio.Queue = asyncio.Queue(maxsize=256)
-    chan.add(q)
-
-    async def gen():
-        try:
-            while True:
-                chunk = await q.get()
-                if chunk is None:  # the server is shutting down (Hub.close_connections)
-                    return
-                yield f"data: {json.dumps(chunk)}\n\n"
-        finally:
-            subs = hub.stream_subscribers.get(channel)
-            if subs is not None:
-                subs.discard(q)
-                if not subs:
-                    hub.stream_subscribers.pop(channel, None)
-
-    return StreamingResponse(gen(), media_type="text/event-stream")
 
 
 @app.post("/audio/{slug}/{node}")

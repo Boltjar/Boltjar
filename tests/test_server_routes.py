@@ -1,14 +1,11 @@
-"""The new HTTP routes: POST /audio, GET /stream and POST /hook (404 + the resource caps)."""
+"""The HTTP routes: POST /audio and POST /hook (404 + the resource caps)."""
 from __future__ import annotations
 
 from local_client import local_client
 
 import boltjar.nodes.core  # noqa: F401  registers the nodes
 import boltjar.server as server
-from boltjar.server import (
-    get_hub, HUBS, STREAM_MAX_CHANNELS, STREAM_MAX_SUBS_PER_CHANNEL,
-    AUDIO_POST_MAX_BYTES,
-)
+from boltjar.server import get_hub, HUBS, AUDIO_POST_MAX_BYTES
 
 client = local_client()
 
@@ -92,21 +89,6 @@ def test_hook_413_on_oversized_body(monkeypatch):
         finally:
             live.post("/api/runtime/hook-big/power", json={"action": "off"})
             HUBS.pop("hook-big", None)
-
-
-def test_stream_404_and_caps():
-    assert client.get("/stream/nope-slug/avatar").status_code == 404
-    hub = get_hub("stream-test")
-    try:
-        # fill the channel cap; a NEW channel beyond it is refused.
-        for i in range(STREAM_MAX_CHANNELS):
-            hub.stream_subscribers[f"ch{i}"] = set()
-        assert client.get("/stream/stream-test/brand-new").status_code == 429
-        # fill one channel's subscriber cap; another subscriber is refused.
-        hub.stream_subscribers["ch0"] = {object() for _ in range(STREAM_MAX_SUBS_PER_CHANNEL)}
-        assert client.get("/stream/stream-test/ch0").status_code == 429
-    finally:
-        HUBS.pop("stream-test", None)
 
 
 def test_store_info_paths_are_relative_to_the_repo(tmp_path, monkeypatch):

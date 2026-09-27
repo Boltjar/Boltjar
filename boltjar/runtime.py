@@ -95,13 +95,6 @@ class Ctx:
         Returns the input's latch (or None) when nothing is wired."""
         return self._rt._pull_input(self.node_id, port, self._rt.new_turn())
 
-    def publish(self, channel: str, chunk: dict) -> None:
-        """Stream one chunk to a media channel (the Avatar SSE). Forwarded to the
-        runtime's stream_observer; a no-op in a headless run with none wired."""
-        obs = getattr(self._rt, "_stream_observer", None)
-        if obs is not None:
-            obs(channel, chunk)
-
     def wired_input_ports(self) -> set[str]:
         """The set of input port names that actually have a wire into this node,
         read from the live edge set. Sync uses this to count its wired `in_*`
@@ -169,18 +162,13 @@ class NodeInstance:
 class Runtime:
     """Runs one graph. `observer` receives live events (values, logs, errors)."""
 
-    def __init__(self, observer: Optional[Callable[[dict], None]] = None,
-                 stream_observer: Optional[Callable[[str, dict], None]] = None) -> None:
+    def __init__(self, observer: Optional[Callable[[dict], None]] = None) -> None:
         self.nodes: dict[str, NodeInstance] = {}
         self.edges_from: dict[tuple[str, str], list[tuple[str, str]]] = {}
         self.edges_into: dict[tuple[str, str], tuple[str, str]] = {}
         self.alive = False
         self._tasks: list[asyncio.Task] = []
         self._observer = observer
-        # a media-out stream sink (avatar SSE): the Avatar node calls Ctx.publish,
-        # which forwards (channel, chunk) here. Distinct from `observer` (the editor
-        # value/log/status broadcast). Kept optional so headless runs work.
-        self._stream_observer = stream_observer
         self._turn_seq = itertools.count(1)
         self._turn_cache: "dict[int, dict[str, dict]]" = {}
         # Tool call request/response bridge: when an LLM awaits a tool's result

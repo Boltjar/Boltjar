@@ -12,7 +12,7 @@ listens on `127.0.0.1` by default, and every request has to pass three checks:
   from a page served at the address the request was sent to (same host name
   and port), or from a client that is not a browser. A page another local
   server serves on its own port is refused.
-- **Token**: `/api`, `/ws`, `/stream` and `/audio` need the per-install token
+- **Token**: `/api`, `/ws` and `/audio` need the per-install token
   in `user/data/token`, created on first start. A browser holds it as an
   `HttpOnly`, `SameSite=Strict` cookie. Other local clients (the MCP server, your
   own scripts) send `Authorization: Bearer <token>`. To rotate it, stop the

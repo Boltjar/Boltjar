@@ -14,8 +14,8 @@ applied by one ASGI middleware (`LocalGuard`) to HTTP and WebSocket alike:
             another local server serves on its own port is refused; a request
             with no Origin is a non-browser client and passes.
   - Token:  a random per-install token (user/data/token) is required on /api,
-            /ws, /stream and /audio, from a cookie (the editor) or a Bearer
-            header (any other local client, e.g. the MCP server).
+            /ws and /audio, from a cookie (the editor) or a Bearer header (any
+            other local client, e.g. the MCP server).
 
 GET / and GET /api/session hand the cookie out, but only to a browser on this
 machine talking to the server directly: a loopback peer, a loopback Host, no
@@ -200,7 +200,7 @@ def _is_hook(path: str) -> bool:
 
 
 def _needs_token(path: str) -> bool:
-    return any(path == p or path.startswith(p + "/") for p in ("/api", "/ws", "/stream", "/audio"))
+    return any(path == p or path.startswith(p + "/") for p in ("/api", "/ws", "/audio"))
 
 
 def session_cookie(secure: bool = False) -> str:
