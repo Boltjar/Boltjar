@@ -105,6 +105,9 @@ _SCREEN = threading.RLock()
 _live_spinner: "_Spinner | None" = None
 # Where the open side-accent block is: the next bar takes its colour from here.
 _block_line = 0
+# The UTC offset the log times were last said to be in: the Graphs rule names it
+# (times_note), then each change. None until the rule is drawn.
+_zone_shown: str | None = None
 
 
 # ---------------------------------------------------------------- capabilities
@@ -290,10 +293,23 @@ def bar_position(line: int) -> float:
     return 0.15 + 0.2 * (step if step <= 4 else 8 - step)
 
 
-def local_zone() -> str:
-    """The machine's current UTC offset as `UTC+10:00`, the zone the log times use."""
-    offset = datetime.datetime.now().astimezone().strftime("%z") or "+0000"
+def local_zone(when: float | None = None) -> str:
+    """The machine's UTC offset at `when` (a time.time() value, now by default)
+    as `UTC+10:00`, the zone the log times use."""
+    moment = (datetime.datetime.now(datetime.timezone.utc) if when is None
+              else datetime.datetime.fromtimestamp(when, datetime.timezone.utc))
+    offset = moment.astimezone().strftime("%z") or "+0000"
     return f"UTC{offset[:3]}:{offset[3:]}"
+
+
+def times_note() -> str:
+    """`times in UTC+10:00`, the note on the rule the log lines follow. The
+    offset is remembered, so the first line stamped after it changes (daylight
+    saving starts or ends while the server runs) says `times now in ...`."""
+    global _zone_shown
+    with _SCREEN:
+        _zone_shown = local_zone()
+        return f"times in {_zone_shown}"
 
 
 # ---------------------------------------------------------------- painting
@@ -655,7 +671,20 @@ class LogFormatter(logging.Formatter):
         if record.exc_info and record.exc_info[1] is not None:
             lines = self._exception(lines, record.exc_info)
         with _SCREEN:
+            lines = self._zone_change(record) + lines
             return "\n".join(next_bar(s) + line for line in lines)
+
+    def _zone_change(self, record: logging.LogRecord) -> list[str]:
+        """A dim `times now in UTC+11:00` line when `record` is stamped in
+        another offset than the one last shown (call under _SCREEN)."""
+        global _zone_shown
+        if _zone_shown is None:
+            return []
+        zone = local_zone(record.created)
+        if zone == _zone_shown:
+            return []
+        _zone_shown = zone
+        return [self.style(f"times now in {zone}", dim=True)]
 
     def _graph_line(self, record: logging.LogRecord, head: str) -> list[str]:
         """`chat        On   17 nodes`: the graph bold, the event, the detail (dim

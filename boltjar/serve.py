@@ -402,7 +402,7 @@ def _serve(out: console.Console, host: str, port: int, open_browser: bool,
 
     def ready() -> None:
         out.ready(url, note)
-        out.section("Graphs", f"times in {console.local_zone()}")
+        out.section("Graphs", console.times_note())
         if opens:
             threading.Thread(target=webbrowser.open, args=(url,), daemon=True).start()
 

@@ -374,6 +374,12 @@ def plain_formatter(verbose: bool = False) -> LogFormatter:
     return fmt
 
 
+@pytest.fixture(autouse=True)
+def no_zone_shown(monkeypatch):
+    """No Graphs rule has named a zone yet, and none a test names outlives it."""
+    monkeypatch.setattr(console, "_zone_shown", None)
+
+
 def test_log_line_is_bar_time_glyph_message():
     bar, stamp, glyph, rest = LINE.match(plain_formatter().format(record("ready", tone="ok"))).groups()
     assert (bar, glyph, rest) == ("▌", "✓", "ready")
@@ -513,6 +519,35 @@ def test_log_config_is_quiet_unless_verbose():
 def test_local_zone_names_the_offset():
     zone = console.local_zone()
     assert zone.startswith("UTC") and zone[3] in "+-" and zone[6] == ":"
+    assert console.local_zone(time.time()) == zone
+
+
+def test_a_zone_change_while_running_prints_the_new_zone_once(monkeypatch):
+    # daylight saving starts at t=2: the stamps move an hour, and the rule's
+    # note would be wrong from then on without a line that says so
+    def zone(when=None):
+        return "UTC+11:00" if (when or 0) >= 2 else "UTC+10:00"
+
+    def stamp(when):
+        return time.strftime("%H:%M:%S", time.localtime(when))
+
+    monkeypatch.setattr(console, "local_zone", zone)
+    fmt = plain_formatter()
+    early = record("before the rule")
+    early.created = 5
+    assert "times now" not in fmt.format(early)  # no rule has named a zone yet
+    assert console.times_note() == "times in UTC+10:00"
+    lines = []
+    for created in (1, 2, 3):
+        rec = record(f"at {created}")
+        rec.created = created
+        lines += fmt.format(rec).splitlines()
+    assert lines == [
+        f"▌ {stamp(1)}  ℹ at 1",
+        "▌ times now in UTC+11:00",
+        f"▌ {stamp(2)}  ℹ at 2",
+        f"▌ {stamp(3)}  ℹ at 3",
+    ]
 
 
 # ---------------------------------------------------------------- graph lines

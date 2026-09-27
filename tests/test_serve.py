@@ -25,6 +25,7 @@ def boot(monkeypatch):
     monkeypatch.setattr(console, "prepare_streams", lambda: None)
     monkeypatch.setattr(console, "detect", lambda stream=None, **kw: console.Caps(unicode=True))
     monkeypatch.setattr(console, "terminal_width", lambda stream=None: 80)
+    monkeypatch.setattr(console, "_zone_shown", None)  # the Graphs rule sets it
     return serve.serve
 
 
