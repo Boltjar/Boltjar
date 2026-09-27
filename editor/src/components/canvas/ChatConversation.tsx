@@ -47,8 +47,8 @@ export function ChatConversation({ nodeId, inboundSources, valueHistory, power }
     const histOf = (wire: InboundWire | undefined) => (usable(wire) ? (valueHistory[`${wire!.src}:${wire!.srcPort}`] ?? []) : []);
     // each side commits a turn when its TRIGGER fires, taking the data value
     // current at that moment (the latest data point at/just before the trigger).
-    // With no trigger wired the side falls back to its raw value stream, so a
-    // simple tap still shows every value.
+    // Before its trigger is wired (the graph cannot turn On until it is) the
+    // side shows every value on its data wire.
     const collect = (dataWire: InboundWire | undefined, trigWire: InboundWire | undefined, side: Side) => {
       const data = histOf(dataWire);
       if (trigWire) {
