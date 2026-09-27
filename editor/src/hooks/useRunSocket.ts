@@ -15,6 +15,8 @@
 // The socket connects ON MOUNT and reconnects with a capped backoff, so the
 // editor immediately reflects the backend's live status after a browser refresh
 // (power persistence: the runtime lives in the server, not in this connection).
+// The connection itself (one current socket, the backoff, the queued payload)
+// is lib/runConnection.
 // ============================================================================
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Graph, Problem, RunEvent } from "../types/protocol";
@@ -22,6 +24,7 @@ import { liveEdgeKey, type Power } from "../lib/liveClassify";
 import { consoleText } from "../lib/mediaSummary";
 import { resumeNoticeAfter } from "../lib/resumeNotice";
 import { pulseWires } from "../lib/wirePulse";
+import { RunConnection } from "../lib/runConnection";
 
 export type NodeRunStatus = "idle" | "running" | "ok" | "warn" | "error";
 export type { Power };
@@ -99,15 +102,10 @@ function nowStamp(): string {
 }
 
 export function useRunSocket(slug: string = "_default"): RunSocketState {
-  const wsRef = useRef<WebSocket | null>(null);
-  const slugRef = useRef(slug);
+  const connRef = useRef<RunConnection | null>(null);
   const lineId = useRef(0);
   const chatId = useRef(0);
-  const pending = useRef<object | null>(null);
   const eventTimes = useRef<number[]>([]);
-  const reconnectTimer = useRef<number | null>(null);
-  const reconnectDelay = useRef(0);
-  const closedByUs = useRef(false);
   // map a Chat Input node -> the output node whose value is its reply (heuristic:
   // we surface every "deliver"/reply value globally, but tie replies to chats by
   // recency since the runtime has one chat turn at a time).
@@ -244,62 +242,37 @@ export function useRunSocket(slug: string = "_default"): RunSocketState {
     [pushLine],
   );
 
-  const send = useCallback((payload: object) => {
-    const ws = wsRef.current;
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify(payload));
-      return true;
-    }
-    return false;
-  }, []);
+  // the one connection, made once; its handlers read the latest callbacks
+  // through a ref, so the connection never has to be rebuilt when they change.
+  const handlersRef = useRef({ handleEvent, pushLine });
+  handlersRef.current = { handleEvent, pushLine };
+  if (connRef.current === null) {
+    connRef.current = new RunConnection(
+      {
+        open: (url) => new WebSocket(url),
+        setTimer: (fn, ms) => window.setTimeout(fn, ms),
+        clearTimer: (id) => window.clearTimeout(id),
+      },
+      {
+        onOpen: () => setConnected(true),
+        // Do NOT force power off: the runtime lives in the server and may still be
+        // live. Keep the last known power; the `status` replayed on reconnect sets it.
+        onClose: () => setConnected(false),
+        onError: () =>
+          handlersRef.current.pushLine({ ts: nowStamp(), level: "bad", message: "socket error: is the backend running on :8770?" }),
+        onMessage: (data) => {
+          try {
+            handlersRef.current.handleEvent(JSON.parse(String(data)) as RunEvent);
+          } catch {
+            /* ignore malformed frame */
+          }
+        },
+      },
+    );
+  }
+  const conn = connRef.current;
 
-  const ensureSocket = useCallback((): WebSocket => {
-    const existing = wsRef.current;
-    if (existing && (existing.readyState === WebSocket.OPEN || existing.readyState === WebSocket.CONNECTING)) {
-      return existing;
-    }
-    closedByUs.current = false;
-    if (reconnectTimer.current !== null) {
-      window.clearTimeout(reconnectTimer.current);
-      reconnectTimer.current = null;
-    }
-    const proto = window.location.protocol === "https:" ? "wss" : "ws";
-    const ws = new WebSocket(`${proto}://${window.location.host}/ws?slug=${encodeURIComponent(slugRef.current)}`);
-    wsRef.current = ws;
-    ws.onopen = () => {
-      setConnected(true);
-      reconnectDelay.current = 0; // reset backoff on a healthy connection
-      if (pending.current) {
-        ws.send(JSON.stringify(pending.current));
-        pending.current = null;
-      }
-    };
-    ws.onclose = () => {
-      setConnected(false);
-      wsRef.current = null;
-      // Do NOT force power off: the runtime lives in the server and may still be
-      // live. Keep the last known power and reconnect; the next `status` message
-      // (replayed on connect) sets the true power. Unless we closed on purpose.
-      if (closedByUs.current) return;
-      const delay = reconnectDelay.current === 0 ? 500 : Math.min(reconnectDelay.current * 2, 4000);
-      reconnectDelay.current = delay;
-      reconnectTimer.current = window.setTimeout(() => {
-        reconnectTimer.current = null;
-        ensureSocket();
-      }, delay);
-    };
-    ws.onerror = () => {
-      pushLine({ ts: nowStamp(), level: "bad", message: "socket error: is the backend running on :8770?" });
-    };
-    ws.onmessage = (e) => {
-      try {
-        handleEvent(JSON.parse(e.data) as RunEvent);
-      } catch {
-        /* ignore malformed frame */
-      }
-    };
-    return ws;
-  }, [handleEvent, pushLine]);
+  const send = useCallback((payload: object) => conn.send(payload), [conn]);
 
   const on = useCallback(
     (graph: Graph) => {
@@ -311,21 +284,18 @@ export function useRunSocket(slug: string = "_default"): RunSocketState {
       setLiveNodes(new Set());
       setLiveEdges(new Set());
       setProblems([]);
-      const payload = { action: "on", graph };
-      const ws = ensureSocket();
-      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(payload));
-      else pending.current = payload;
+      conn.sendOrQueue({ action: "on", graph });
     },
-    [ensureSocket],
+    [conn],
   );
 
   const off = useCallback(() => {
-    pending.current = null;
+    conn.clearPending();
     send({ action: "off" });
     setPower("off");
     setLiveNodes(new Set());
     setLiveEdges(new Set());
-  }, [send]);
+  }, [conn, send]);
 
   const restart = useCallback(
     (graph: Graph) => {
@@ -335,12 +305,9 @@ export function useRunSocket(slug: string = "_default"): RunSocketState {
       setLiveNodes(new Set());
       setLiveEdges(new Set());
       setProblems([]);
-      const payload = { action: "restart", graph };
-      const ws = ensureSocket();
-      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(payload));
-      else pending.current = payload;
+      conn.sendOrQueue({ action: "restart", graph });
     },
-    [ensureSocket],
+    [conn],
   );
 
   const chat = useCallback(
@@ -396,18 +363,6 @@ export function useRunSocket(slug: string = "_default"): RunSocketState {
   // backend replays its status + recent values to a fresh subscriber, so a
   // browser refresh OR a tab switch immediately reflects truth.
   useEffect(() => {
-    slugRef.current = slug;
-    // tear down the prior socket (if any) before opening one for the new slug.
-    closedByUs.current = true;
-    if (reconnectTimer.current !== null) {
-      window.clearTimeout(reconnectTimer.current);
-      reconnectTimer.current = null;
-    }
-    const prior = wsRef.current;
-    wsRef.current = null;
-    if (prior && prior.readyState !== WebSocket.CLOSED) {
-      try { prior.close(); } catch { /* ignore */ }
-    }
     // reset live-state that belonged to the previous slug (the new Hub will
     // replay its own status + values immediately on subscribe).
     setNodeStatus({});
@@ -418,19 +373,11 @@ export function useRunSocket(slug: string = "_default"): RunSocketState {
     setProblems([]);
     setResumeNotice(false);
     setPower("off");
-    // open a fresh socket for the new slug
-    closedByUs.current = false;
-    ensureSocket();
-    return () => {
-      closedByUs.current = true;
-      if (reconnectTimer.current !== null) {
-        window.clearTimeout(reconnectTimer.current);
-        reconnectTimer.current = null;
-      }
-      wsRef.current?.close();
-      wsRef.current = null;
-    };
-  }, [slug, ensureSocket]);
+    // one socket, for the new slug: connect() drops the prior one for good.
+    const proto = window.location.protocol === "https:" ? "wss" : "ws";
+    conn.connect(`${proto}://${window.location.host}/ws?slug=${encodeURIComponent(slug)}`);
+    return () => conn.close();
+  }, [slug, conn]);
 
   return {
     connected,
