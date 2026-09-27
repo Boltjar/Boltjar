@@ -45,6 +45,7 @@ def test_shutdown_closes_the_editor_websockets(hubs):
     with local_client() as client:
         with client.websocket_connect("/ws?slug=sd-ws") as ws:
             assert ws.receive_json()["kind"] == "status"
+            assert server.open_connections() == (1, 0)
             client.portal.call(server.shutdown_all)
             with pytest.raises(WebSocketDisconnect) as closed:
                 for _ in range(10):
@@ -61,6 +62,7 @@ def test_shutdown_ends_the_media_streams(hubs):
         await asyncio.sleep(0)
         hub.publish_stream("avatar", {"text": "hi"})
         assert (await first).startswith("data: ")
+        assert server.open_connections() == (0, 1)
         waiting = asyncio.ensure_future(body.__anext__())
         await asyncio.sleep(0)
         await server.shutdown_all()

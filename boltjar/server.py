@@ -313,6 +313,14 @@ def running_graphs() -> list[str]:
     return [hub.slug for hub in HUBS.values() if hub.runtime is not None]
 
 
+def open_connections() -> tuple[int, int]:
+    """(editor websockets, media streams) open now, across every graph: what
+    shutdown_all() is about to close."""
+    editors = sum(len(hub.subscribers) for hub in HUBS.values())
+    streams = sum(len(subs) for hub in HUBS.values() for subs in hub.stream_subscribers.values())
+    return editors, streams
+
+
 @contextlib.asynccontextmanager
 async def _lifespan(_app: FastAPI):
     # the user's secrets load when the server starts, not when the registry is

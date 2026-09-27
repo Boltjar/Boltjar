@@ -299,7 +299,8 @@ def test_the_server_ends_the_apps_connections_before_uvicorn_waits_on_them(monke
     monkeypatch.setattr(uvicorn.Server, "startup", uvicorn_startup)
     server = serve.make_server(uvicorn.Config(app=None), shutdown_app,
                                on_ready=lambda: order.append("ready"),
-                               on_stop=lambda: order.append("stopping"))
+                               on_stop=lambda: order.append("stopping"),
+                               connections=lambda: (2, 1))
     server.servers = [Listener()]
 
     asyncio.run(server.startup())
@@ -307,6 +308,7 @@ def test_the_server_ends_the_apps_connections_before_uvicorn_waits_on_them(monke
     assert order == ["ready", "stopping", "stop accepting", "graphs stopped, streams ended",
                      "uvicorn waits for connections"]
     assert server.graphs_stopped == 2
+    assert server.connections_closed == (2, 1)  # counted before the stop closed them
 
 
 def _stuck_server(monkeypatch, seconds: float):
@@ -441,6 +443,7 @@ def test_a_boot_over_ssh_leaves_the_browser_closed(boot, monkeypatch):
 
     class Server:
         graphs_stopped = 0
+        connections_closed = (0, 0)
 
         def __init__(self, on_ready):
             self.on_ready = on_ready
@@ -469,6 +472,7 @@ def test_a_boot_over_ssh_leaves_the_browser_closed(boot, monkeypatch):
 class ReadyServer:
     """Stands in for uvicorn: reports ready at once, then returns as after a Ctrl+C."""
     graphs_stopped = 0
+    connections_closed = (0, 0)
 
     def __init__(self, on_ready, on_stop=None):
         self.on_ready = on_ready
@@ -524,6 +528,7 @@ def test_ctrl_c_prints_the_shutdown_steps_and_bye(boot, monkeypatch, capsys):
 
     class StoppedServer(ReadyServer):
         graphs_stopped = 1
+        connections_closed = (2, 1)
 
         def run(self, sockets=None):
             self.on_ready()
@@ -536,6 +541,7 @@ def test_ctrl_c_prints_the_shutdown_steps_and_bye(boot, monkeypatch, capsys):
     assert lines[shutdown].startswith("── Shutdown ─")
     assert lines[shutdown + 1:] == [
         "▌ ▶ stopping 1 graph",
+        "▌ ✓ closed 2 editor connections and 1 media stream",
         "▌ bye",
     ]
 

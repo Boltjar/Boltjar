@@ -277,16 +277,19 @@ def browser_can_open(platform: str | None = None, env: Mapping[str, str] | None 
 
 def make_server(config, shutdown_app: Callable[[], Awaitable[int]],
                 on_ready: Callable[[], None], on_stop: Callable[[], None],
-                running: Callable[[], list[str]] = list):
+                running: Callable[[], list[str]] = list,
+                connections: Callable[[], tuple[int, int]] = lambda: (0, 0)):
     """uvicorn's Server with Boltjar's start and stop around it: `on_ready` once
     the app has started and the socket is listening; on shutdown, stop taking
     connections, then `shutdown_app()` (stop the graphs, end the streams), then
     uvicorn's own shutdown, which waits for connections that are now closing.
-    `running()` names the graphs still running, for a stop that runs late."""
+    `running()` names the graphs still running, for a stop that runs late;
+    `connections()` counts the (editor, stream) connections the stop closes."""
     import uvicorn
 
     class BoltjarServer(uvicorn.Server):
         graphs_stopped = 0
+        connections_closed = (0, 0)
 
         async def startup(self, sockets=None) -> None:
             await super().startup(sockets=sockets)
@@ -308,6 +311,7 @@ def make_server(config, shutdown_app: Callable[[], Awaitable[int]],
             node whose close hangs) must not hold the exit. Graphs still
             stopping by then are named and left behind."""
             before = len(running())
+            self.connections_closed = connections()
             task = asyncio.ensure_future(shutdown_app())
             loop = asyncio.get_running_loop()
             deadline = loop.time() + GRACEFUL_SECONDS
@@ -414,7 +418,7 @@ def _serve(out: console.Console, host: str, port: int, open_browser: bool,
         timeout_graceful_shutdown=GRACEFUL_SECONDS,
     )
     server = make_server(config, app_module.shutdown_all, on_ready=ready, on_stop=stopping,
-                         running=app_module.running_graphs)
+                         running=app_module.running_graphs, connections=app_module.open_connections)
     try:
         server.run(sockets=[sock])
     except KeyboardInterrupt:
@@ -426,6 +430,11 @@ def _serve(out: console.Console, host: str, port: int, open_browser: bool,
     finally:
         sock.close()
     # each graph's own Off line (the graph lines) says it stopped
+    editors, streams = server.connections_closed
+    if editors or streams:
+        closed = [_count(editors, "editor connection")] if editors else []
+        closed += [_count(streams, "media stream")] if streams else []
+        out.line("ok", "closed " + " and ".join(closed))
     out.goodbye()
     return 0
 
