@@ -10,6 +10,7 @@ import type { WFNode } from "../lib/graphAdapter";
 import { Icon, hasIcon } from "../lib/icons";
 import { libraryGroup, nodeIcon } from "../lib/kinds";
 import { capabilityHint } from "../lib/nodeMeta";
+import { rankNodes } from "../lib/nodeSearch";
 import { PALETTE_GROUPS, inGroupOrder, type PaletteGroup } from "../lib/paletteGroups";
 import { typesCompatible } from "../lib/types";
 
@@ -73,10 +74,8 @@ export function CommandPalette(props: CommandPaletteProps) {
         typeFilter.direction === "input" ? p.type : typeFilter.type,
       ));
     };
-    const addRows: Row[] = defs
-      .filter(compatibleByFilter)
-      .filter((d) => match(`${d.name} ${d.id} ${d.category} ${d.summary}`))
-      .slice(0, typeFilter ? 24 : 8)
+    // best match first (lib/nodeSearch), cut to the row limit only after ranking
+    const addRows: Row[] = rankNodes(defs.filter(compatibleByFilter), q, typeFilter ? 24 : 8)
       .map((d) => ({
         key: `add:${d.id}`,
         group: "Add node",
@@ -183,7 +182,11 @@ export function CommandPalette(props: CommandPaletteProps) {
             type="text"
             placeholder={typeFilter ? `search ${typeFilter.type}-compatible nodes…` : "search nodes, actions, go to…"}
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              // a new query puts Enter on its best match again
+              setActive(0);
+            }}
             onKeyDown={onKeyDown}
             spellCheck={false}
           />
