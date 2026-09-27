@@ -53,7 +53,7 @@ except Exception:
 
 from fastapi import Body
 
-from boltjar.sdk import registry_definitions, types, NODE_REGISTRY, Kind
+from boltjar.sdk import registry_definitions, types, NODE_REGISTRY, Kind, NodeSpec, Widget
 from boltjar.nodes.core.builtin import ensure_declared_schemas
 from boltjar.runtime import Runtime, flatten_graph, node_config
 from boltjar.sqlite_store import SqliteStore
@@ -849,11 +849,12 @@ def _widget_in_use(node_id: str, cfg: dict, widget, edges_in: set) -> bool:
     return not (widget.name in (cfg.get("promoted") or []) and (node_id, widget.name) in edges_in)
 
 
-def _model_refs(graph: dict) -> list[tuple[str, str, str]]:
-    """(node id, model id, family) for every model picker that reaches a node:
-    enabled nodes only, and not a picker promoted to an input a wire feeds."""
+def _model_pickers(graph: dict) -> list[tuple[str, NodeSpec, Widget, str]]:
+    """(node id, node spec, model widget, picked model id) for every model picker
+    that reaches a node: enabled nodes only, and not a picker promoted to an
+    input a wire feeds. The model id is "" when none is picked."""
     edges_in = {(e["dst"], e["dst_port"]) for e in graph.get("edges", [])}
-    refs = []
+    pickers = []
     for n in graph.get("nodes", []):
         spec = NODE_REGISTRY.get(n["type"])
         if n.get("disabled") or spec is None:
@@ -861,8 +862,14 @@ def _model_refs(graph: dict) -> list[tuple[str, str, str]]:
         cfg = node_config(spec, n.get("config"))
         for w in spec.widgets:
             if w.kind == "model" and _widget_in_use(n["id"], cfg, w, edges_in):
-                refs.append((n["id"], str(cfg.get(w.name) or ""), w.model_kind or "llm"))
-    return refs
+                pickers.append((n["id"], spec, w, str(cfg.get(w.name) or "")))
+    return pickers
+
+
+def _model_refs(graph: dict) -> list[tuple[str, str, str]]:
+    """(node id, model id, family) for every model picker that reaches a node."""
+    return [(node_id, model_id, w.model_kind or "llm")
+            for node_id, _spec, w, model_id in _model_pickers(graph)]
 
 
 async def validate_graph_now(graph: dict) -> list[dict]:
@@ -991,6 +998,14 @@ def validate_graph(graph: dict) -> list[dict]:
             problems.append({"node": n["id"], "kind": "missing-secret",
                              "message": f"secret {name} is not defined: "
                                         "add it in Settings, Secrets"})
+    # a model node with no model picked never runs one on its own (a model can
+    # cost money): it waits for the person to pick one, except where nothing
+    # picked is a free choice of its own (the LLM's offline mock).
+    for node_id, spec, w, model_id in _model_pickers(graph):
+        if not model_id and not w.optional:
+            what = "a model" if w.label in ("", "Model") else f"a {w.label.lower()}"
+            problems.append({"node": node_id, "kind": "no-model",
+                             "message": f"pick {what} for {spec.name}"})
     # a model picker whose model vanished (no manifest names it and no provider
     # lists it any more), or that holds another family's model: name it and the
     # closest available one before On, instead of a mock reply or a failed call.

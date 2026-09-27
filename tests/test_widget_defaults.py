@@ -145,34 +145,41 @@ def test_validation_names_a_fresh_tool_as_the_runtime_does() -> None:
 
 # --------------------------------------------------------------- model nodes
 
-def _shown_model(node_type: str) -> str:
-    """The model the editor's picker shows with nothing picked: the declared default."""
-    return next(w.default for w in NODE_REGISTRY[node_type].widgets if w.name == "model")
+# A model can cost money, so a model node never runs one nobody picked: the
+# picker starts empty, and the node refuses to run until a model is picked.
+
+@pytest.mark.parametrize("config", [{}, {"model": ""}], ids=["unsaved", "cleared"])
+def test_a_fresh_embed_runs_no_model(monkeypatch, config) -> None:
+    called = []
+
+    async def fake_embed(manifest, text):
+        called.append(manifest)
+        return [1.0]
+    monkeypatch.setattr(builtin, "_embed_model", fake_embed)
+    with pytest.raises(RuntimeError, match="EMBED: no model picked"):
+        asyncio.run(_built("core.ai.embed", config).run(text="hi"))
+    assert called == []
 
 
 @pytest.mark.parametrize("config", [{}, {"model": ""}], ids=["unsaved", "cleared"])
-def test_a_fresh_embed_runs_the_model_its_picker_shows(monkeypatch, config) -> None:
+def test_a_fresh_rerank_runs_no_model(monkeypatch, config) -> None:
+    called = []
+
+    async def fake_rerank(manifest, query, docs, endpoint):
+        called.append(manifest)
+        return [1.0 for _ in docs]
+    monkeypatch.setattr(builtin, "_rerank_model", fake_rerank)
+    with pytest.raises(RuntimeError, match="RERANK: no model picked"):
+        asyncio.run(_built("core.ai.rerank", config).run(query="q", candidates=[{"text": "a"}]))
+    assert called == []
+
+
+def test_a_picked_embed_runs_the_model_picked(monkeypatch) -> None:
     seen = {}
 
     async def fake_embed(manifest, text):
-        seen["id"] = manifest.id if manifest else None
+        seen["id"] = manifest.id
         return [1.0]
     monkeypatch.setattr(builtin, "_embed_model", fake_embed)
-    asyncio.run(_built("core.ai.embed", config).run(text="hi"))
-    shown = _shown_model("core.ai.embed")
-    assert seen["id"] == shown
-    assert models.get(shown).kind == "embed"
-
-
-@pytest.mark.parametrize("config", [{}, {"model": ""}], ids=["unsaved", "cleared"])
-def test_a_fresh_rerank_runs_the_model_its_picker_shows(monkeypatch, config) -> None:
-    seen = {}
-
-    async def fake_rerank(manifest, query, docs, endpoint):
-        seen["id"] = manifest.id if manifest else None
-        return [1.0 for _ in docs]
-    monkeypatch.setattr(builtin, "_rerank_model", fake_rerank)
-    asyncio.run(_built("core.ai.rerank", config).run(query="q", candidates=[{"text": "a"}]))
-    shown = _shown_model("core.ai.rerank")
-    assert seen["id"] == shown
-    assert models.get(shown).kind == "rerank"
+    asyncio.run(_built("core.ai.embed", {"model": "ollama/bge-m3"}).run(text="hi"))
+    assert seen["id"] == "ollama/bge-m3" and models.get("ollama/bge-m3").kind == "embed"

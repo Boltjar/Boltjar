@@ -22,10 +22,11 @@ function preview(value: unknown, max = 22): string {
  */
 export function headerSubline(def: NodeDef, config: Record<string, unknown>): string {
   if (def.subline) return renderSubline(def, config);
-  // a model node that declares no subline (any pack's): the model it runs,
-  // the picked one, else its model widget's declared default.
+  // a model node that declares no subline (any pack's): the model picked in
+  // it. A model picker never holds a model nobody picked (a model can cost
+  // money), so an empty one reads as none picked.
   const modelWidget = modelWidgetOf(def);
-  if (modelWidget) return modelSubline(String(config[modelWidget.name] || modelWidget.default || ""));
+  if (modelWidget) return modelSubline(String(config[modelWidget.name] || ""));
   return def.category.toLowerCase();
 }
 
@@ -49,13 +50,13 @@ export function renderSubline(def: NodeDef, config: Record<string, unknown>): st
       const colon = f.indexOf(":");
       const filter = colon < 0 ? f : f.slice(0, colon);
       const arg = colon < 0 ? undefined : f.slice(colon + 1);
-      value = applyFilter(def, filter, arg, value, fallback);
+      value = applyFilter(def, filter, arg, value);
     }
     return value === null || value === undefined ? "" : String(value);
   });
 }
 
-function applyFilter(def: NodeDef, filter: string, arg: string | undefined, value: unknown, fallback: unknown): unknown {
+function applyFilter(def: NodeDef, filter: string, arg: string | undefined, value: unknown): unknown {
   switch (filter) {
     case "clip":
       return preview(value, Number(arg) || 22);
@@ -64,8 +65,8 @@ function applyFilter(def: NodeDef, filter: string, arg: string | undefined, valu
     case "bool":
       return value ? "true" : "false";
     case "model":
-      // an empty pick reads as the model the node runs by default
-      return modelSubline(String(value || fallback || ""));
+      // an empty pick reads as none picked: no node picks a model on its own
+      return modelSubline(String(value || ""));
     case "tags": {
       const n = templateTags(def, String(value ?? "")).length;
       return `${n} tag${n === 1 ? "" : "s"}`;
@@ -80,7 +81,9 @@ export function sublineFields(def: NodeDef): string[] {
   return [...(def.subline ?? "").matchAll(PLACEHOLDER)].map((m) => m[1]);
 }
 
-/** A model id as a subline: `xai/tts` -> `xai · tts`, a bare id -> `model · id`. */
+/** A model id as a subline: `xai/tts` -> `xai · tts`, a bare id -> `model · id`,
+ *  nothing picked -> `model · none picked`, the one wording every model node
+ *  (LLM, TTS, STT, Embed, Rerank, a pack's) shows with no model picked. */
 export function modelSubline(id: string): string {
   if (!id) return "model · none picked";
   // split at the FIRST slash only: an endpoint model id keeps its own slashes

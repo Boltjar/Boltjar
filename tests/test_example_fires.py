@@ -2,37 +2,46 @@
 
 Each example is turned On the way the editor does it (a Hub validates the
 graph, then runs it), driven by its trigger, and every live event is counted.
-One chat send means one LLM run, one reply, one row per side of the chat
-history and one TTS call; one Manual fire means one LLM run and one log line.
-A Preview is fired by its value and by its trigger, so it runs twice a turn and
-still passes on exactly one value and one trigger: the chat example once spoke
-every reply twice because a Preview relayed both.
+One chat send means one LLM run, one reply and one row per side of the chat
+history; one Manual fire means one LLM run and one log line. A Preview is fired
+by its value and by its trigger, so it runs twice a turn and still passes on
+exactly one value and one trigger: the chat example once spoke every reply
+twice because a Preview relayed both.
 
-Offline: the LLM runs the mock, the TTS vendor is faked at the HTTP boundary
-and the chat history lives in a temp SQLite store."""
+The chat example picks no model (a model can cost money): its LLM runs the
+offline mock and its TTS and Audio Preview ship bypassed, so it runs as shipped,
+text only, with nothing connected. The voice path is counted too, with the TTS
+and Audio Preview enabled and a fake voice model picked, as a person would pick
+a real one. The chat history lives in a temp SQLite store."""
 import asyncio
 import collections
 import json
 import pathlib
 
-import httpx
 import pytest
 
+import boltjar.nodes.core.builtin as builtin
 import boltjar.server as server
+from boltjar import models
 from boltjar.sqlite_store import SqliteStore
 
 SHIPPED = pathlib.Path(__file__).resolve().parent.parent / "examples"
 
-# what one chat send runs in examples/chat.json: node -> fires. A Preview fires
-# on its value and on its trigger, every other node once.
+# what one chat send runs in examples/chat.json as shipped: node -> fires. A
+# Preview fires on its value and on its trigger, every other node once. The
+# bypassed TTS and Audio Preview never run.
 CHAT_FIRES = {
     "Chat History": 1, "Chat Append (User)": 1, "Prompt Template": 1, "Context": 2,
-    "LLM": 1, "Response Preview": 2, "TTS": 1, "Audio Preview": 2,
-    "Chat Append (Assistant)": 1,
+    "LLM": 1, "Response Preview": 2, "Chat Append (Assistant)": 1,
 }
 # the console lines one chat send writes: each Preview shows its value once.
-CHAT_LOGS = {"Context": 1, "Response Preview": 1, "Audio Preview": 1}
-CHAT_PREVIEWS = sorted(CHAT_LOGS)
+CHAT_LOGS = {"Context": 1, "Response Preview": 1}
+# with its voice enabled: the TTS once, the Audio Preview on its value and trigger.
+VOICE_FIRES = {**CHAT_FIRES, "TTS": 1, "Audio Preview": 2}
+VOICE_LOGS = {**CHAT_LOGS, "Audio Preview": 1}
+# a voice model nothing ships, picked the way a person picks one in the TTS.
+FAKE_VOICE = models.ModelManifest(id="acme/voice", provider="acme", model="v1", label="Acme Voice",
+                                  kind="tts", inputs=["text"], outputs=["audio"])
 
 
 class Watch:
@@ -90,56 +99,93 @@ def test_every_example_has_a_count_test():
         "a new example needs its own fire counts here"
 
 
-def test_chat_one_send_runs_each_node_once(tmp_path, monkeypatch, vendor_http):
-    store = SqliteStore(root=tmp_path)
-    monkeypatch.setattr(server, "STORE", store)
-    monkeypatch.setenv("XAI_API_KEY", "test-xai-key")  # the TTS call is faked below
-    vendor_http.reply = lambda r: httpx.Response(200, content=b"ID3mp3")
-    graph = _example("chat")
-    for n in graph["nodes"]:
-        if n["type"] == "core.ai.llm":
-            n["config"]["model"] = "mock/echo"  # offline: no real model is called
+def _chat_turns(graph: dict, store: SqliteStore, last: str) -> tuple[Watch, list[dict]]:
+    """Turn the chat graph On through a Hub, send two messages and record what
+    ran after each; `last` is the node whose trigger ends a turn."""
     db_key = next(n["config"]["db_key"] for n in graph["nodes"]
                   if n["type"] == "core.store.database")
+    bypassed = {n["id"] for n in graph["nodes"] if n.get("disabled")}
     triggers = sorted({(e["src"], e["src_port"]) for e in graph["edges"]
-                       if e["src_port"] == "trigger" and e["src"] != "chat"})
+                       if e["src_port"] == "trigger" and e["src"] != "chat"
+                       and e["src"] not in bypassed})
+    previews = sorted(n["id"] for n in graph["nodes"]
+                      if n["type"] == "core.output.preview" and n["id"] not in bypassed)
     hub = server.Hub()
     watch = Watch(hub)
     turns: list[dict] = []
+
+    def done(ev: list[dict], node: str, n: int) -> bool:
+        return len([e for e in ev if e["kind"] == "value" and e["node"] == node
+                    and e["port"] == "trigger"]) >= n
 
     async def drive() -> None:
         assert await hub.power_on(graph) is None, "the chat example turns On"
         for n, text in enumerate(("hi", "again"), start=1):
             hub.send_chat("chat", text)
-            await watch.until(lambda ev, n=n: (
-                len([e for e in ev if e["kind"] == "value" and e["node"] == "Audio Preview"
-                     and e["port"] == "trigger"]) >= n
-                and len([e for e in ev if e["kind"] == "value"
-                         and e["node"] == "Chat Append (Assistant)" and e["port"] == "trigger"]) >= n))
+            await watch.until(lambda ev, n=n: done(ev, last, n)
+                              and done(ev, "Chat Append (Assistant)", n))
             turns.append({
                 "fires": watch.fires(),
                 "logs": watch.logs(),
                 "replies": len(watch.emits("LLM", "response")),
-                "passed": {pv: len(watch.emits(pv, "out")) for pv in CHAT_PREVIEWS},
+                "passed": {pv: len(watch.emits(pv, "out")) for pv in previews},
                 "relayed": {f"{src}.{port}": len(watch.emits(src, port)) for src, port in triggers},
                 "rows": [r["sender"] for r in store.query(
                     db_key, "SELECT sender FROM chat_history ORDER BY id")],
-                "tts": len(vendor_http.requests),
             })
         await hub.power_off()
 
     asyncio.run(drive())
-    assert not watch.trouble(), watch.trouble()
+    return watch, turns
+
+
+def _check_turns(turns: list[dict], fires: dict, logs: dict) -> None:
     for n, turn in enumerate(turns, start=1):
-        assert turn["fires"] == _times(CHAT_FIRES, n), f"after send {n}"
-        assert turn["logs"] == _times(CHAT_LOGS, n), f"after send {n}"
+        assert turn["fires"] == _times(fires, n), f"after send {n}"
+        assert turn["logs"] == _times(logs, n), f"after send {n}"
         assert turn["replies"] == n, "one LLM reply per send"
-        assert turn["passed"] == {pv: n for pv in CHAT_PREVIEWS}, "each Preview passes one value per send"
+        assert turn["passed"] == {pv: n for pv in logs}, "each Preview passes one value per send"
         assert turn["relayed"] == {k: n for k in turn["relayed"]}, \
             f"every trigger in the graph fires once per send, after send {n}"
         assert turn["rows"] == ["User", "Assistant"] * n, "one row per side per send"
-        assert turn["tts"] == n, "one TTS call per send"
-    assert [str(r.url) for r in vendor_http.requests] == ["https://api.x.ai/v1/tts"] * 2
+
+
+def test_chat_one_send_runs_each_node_once(tmp_path, monkeypatch, vendor_http):
+    # as shipped, with nothing connected: text only, and no provider is called.
+    store = SqliteStore(root=tmp_path)
+    monkeypatch.setattr(server, "STORE", store)
+    watch, turns = _chat_turns(_example("chat"), store, last="Response Preview")
+    assert not watch.trouble(), watch.trouble()
+    _check_turns(turns, CHAT_FIRES, CHAT_LOGS)
+    assert all(r.startswith("[mock]") for r in watch.emits("LLM", "response")), \
+        "the LLM with no model picked answers with the offline mock"
+    assert vendor_http.requests == [], "nothing picked, so no provider is called"
+
+
+def test_chat_with_its_voice_picked_speaks_each_reply_once(tmp_path, monkeypatch, vendor_http):
+    # a person enables the TTS and its Audio Preview and picks a voice model.
+    store = SqliteStore(root=tmp_path)
+    monkeypatch.setattr(server, "STORE", store)
+    monkeypatch.setitem(models.MODELS, FAKE_VOICE.id, FAKE_VOICE)
+    spoken: list[str] = []
+
+    async def speak(text, params, manifest, lang):
+        spoken.append(text)
+        return "data:audio/mpeg;base64,SUQz"
+    monkeypatch.setitem(builtin._TTS_PROVIDERS, FAKE_VOICE.provider, speak)
+    graph = _example("chat")
+    for n in graph["nodes"]:
+        if n["id"] in ("TTS", "Audio Preview"):
+            n.pop("disabled")
+        if n["id"] == "TTS":
+            n["config"] = {"model": FAKE_VOICE.id}
+    watch, turns = _chat_turns(graph, store, last="Audio Preview")
+    assert not watch.trouble(), watch.trouble()
+    _check_turns(turns, VOICE_FIRES, VOICE_LOGS)
+    assert len(spoken) == 2 and spoken == watch.emits("LLM", "response"), \
+        "one TTS call per send, speaking the reply"
+    assert watch.emits("Audio Preview", "out") == ["data:audio/mpeg;base64,SUQz"] * 2
+    assert vendor_http.requests == [], "the picked model is the only voice that runs"
 
 
 @pytest.mark.parametrize("fires", [1, 3])

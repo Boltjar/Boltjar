@@ -21,6 +21,7 @@ interface ProblemsPanelProps {
 const KIND_LABEL: Record<string, string> = {
   "missing-input": "missing input",
   "missing-secret": "missing secret",
+  "no-model": "no model",
   "type-mismatch": "type mismatch",
   "no-trigger": "no trigger",
   unknown: "unknown node",

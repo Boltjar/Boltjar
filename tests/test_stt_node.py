@@ -39,8 +39,7 @@ def test_stt_uses_the_unified_model_picker():
 
 
 def test_stt_routes_clip_through_fish(monkeypatch):
-    # with no model picked, run() transcribes through Fish ASR (the widget
-    # default); empty audio emits nothing without a network call.
+    # with Fish ASR picked, run() transcribes through it.
     import boltjar.nodes.core.builtin as b
     captured = {}
 
@@ -49,7 +48,7 @@ def test_stt_routes_clip_through_fish(monkeypatch):
         return "the quick brown fox", "en"  # _fish_stt returns (text, lang)
 
     monkeypatch.setattr(b, "_fish_stt", fake_stt)
-    inst = _stt()
+    inst = _stt({"model": "fish/asr"})
     out = asyncio.run(inst.run(audio="data:audio/wav;base64,AAAA"))
     assert out["text"] == "the quick brown fox"
     assert out["lang"] == "en"             # detected language flows out
@@ -104,10 +103,12 @@ def test_stt_dispatches_by_manifest_provider(vendor_http, keys, model_id, url):
     assert out["text"] == "ok"
 
 
-def test_stt_without_a_model_uses_the_widget_default_fish(vendor_http, keys):
-    vendor_http.reply = lambda r: httpx.Response(200, json={"text": "ok", "language": "en"})
-    asyncio.run(_stt({}).run(audio=CLIP))
-    assert str(vendor_http.last.url) == "https://api.fish.audio/v1/asr"
+@pytest.mark.parametrize("config", [{}, {"model": ""}], ids=["unsaved", "cleared"])
+def test_stt_without_a_model_calls_no_provider(vendor_http, keys, config):
+    # a model can cost money: with none picked the node never picks one itself.
+    with pytest.raises(RuntimeError, match="STT: no model picked"):
+        asyncio.run(_stt(config).run(audio=CLIP))
+    assert vendor_http.requests == []
 
 
 def test_stt_unknown_model_raises_and_names_it(vendor_http, keys):

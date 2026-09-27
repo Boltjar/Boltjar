@@ -142,10 +142,12 @@ def test_tts_dispatches_by_manifest_provider(vendor_http, keys, model_id, params
     assert out["audio"].startswith("data:audio/")
 
 
-def test_tts_without_a_model_uses_the_widget_default_xai(vendor_http, keys):
-    vendor_http.reply = lambda r: httpx.Response(200, content=b"clip")
-    asyncio.run(_tts({}).run(text="hi"))
-    assert str(vendor_http.last.url) == "https://api.x.ai/v1/tts"
+@pytest.mark.parametrize("config", [{}, {"model": ""}], ids=["unsaved", "cleared"])
+def test_tts_without_a_model_calls_no_provider(vendor_http, keys, config):
+    # a model can cost money: with none picked the node never picks one itself.
+    with pytest.raises(RuntimeError, match="TTS: no model picked"):
+        asyncio.run(_tts(config).run(text="hi"))
+    assert vendor_http.requests == []
 
 
 def test_tts_unknown_model_raises_and_names_it(vendor_http, keys):

@@ -1053,19 +1053,16 @@ def _node_log(obj, message: str) -> None:
         _log.warning(message)
 
 
-def _widget_default(obj, name: str):
-    """The default a node DECLARES on its widget `name` (the single source, so
-    run() never repeats it as a literal)."""
-    spec = getattr(type(obj), "_spec", None)
-    return next((w.default for w in (spec.widgets if spec else []) if w.name == name), None)
-
-
 def _node_model(obj, kind: str):
-    """The manifest a TTS, STT or Rerank node calls: config.model, else the model
-    widget's declared default. An unknown id, or a manifest of another kind (an LLM
-    picked on a TTS node), raises and names it: no fallback to some other model."""
+    """The manifest a TTS, STT, Embed or Rerank node calls: the model picked in
+    config.model, never one the node chose (a model can cost money). None picked,
+    an unknown id, or a manifest of another kind (an LLM picked on a TTS node)
+    raises and names it: no fallback to some other model. Validation already keeps
+    a graph with such a node Off; this is the same refusal at run time."""
     cfg = getattr(obj, "_node_cfg", None) or {}
-    model_id = cfg.get("model") or _widget_default(obj, "model")
+    model_id = cfg.get("model")
+    if not model_id:
+        raise RuntimeError(f"{kind.upper()}: no model picked; pick one in its model picker")
     manifest = models.get(model_id) if isinstance(model_id, str) else None
     if manifest is None:
         raise RuntimeError(f"{kind.upper()}: unknown model {model_id!r} "
@@ -1126,8 +1123,8 @@ def _model_params(obj, manifest, wired: dict) -> dict:
               "failure fires `error` (with the message) instead of a reply.",
       icon="sparkles-outline", subline="{model|model}")
 class LLM:
-    # empty runs the offline mock; "auto" picks a runnable model at run time.
-    model: Widget = model("llm", auto=True)
+    # nothing picked runs the offline mock (free, no provider is called).
+    model: Widget = model("llm", optional=True)
     inputs = [Port("trigger", "event", trigger=True),
               Port("prompt", "text"),
               Port("tools", "tool", growable=True, optional=True)]
@@ -1264,8 +1261,8 @@ class ToolArgs:
       icon="mic-outline", subline="{model|model}")
 class STT:
     # The same rich model picker the LLM uses (kind=model); filtered to kind=stt
-    # manifests by the editor. With nothing picked the node uses this default.
-    model: Widget = model("stt", "fish/asr")
+    # manifests by the editor. With nothing picked the graph does not turn On.
+    model: Widget = model("stt")
     # fires on a dedicated `trigger` (like the LLM); `audio` is pulled data.
     inputs = [Port("trigger", "event", trigger=True),
               Port("audio", "audio")]
@@ -1295,8 +1292,8 @@ class TTS:
     # The same rich model picker the LLM uses (kind=model); filtered to kind=tts.
     # Per-model params (voice, speed, ...) come from the selected manifest and
     # render as ordinary knobs below, like the LLM's temperature/top_p. With
-    # nothing picked the node uses this default.
-    model: Widget = model("tts", "xai/tts")
+    # nothing picked the graph does not turn On.
+    model: Widget = model("tts")
     # fires on a dedicated `trigger` (like the LLM); `text` is pulled data. `lang`
     # wires straight from the STT `lang` output (or an Audio Input's).
     inputs = [Port("trigger", "event", trigger=True),
@@ -1404,21 +1401,19 @@ async def _rerank_model(manifest, query: str, docs: list, endpoint: str) -> list
 
 
 @node(id="core.ai.embed", name="Embed", kind=Kind.TRANSFORM, category="AI",
-      summary="Turn text into an embedding vector. Picks an embed model (Ollama bge-m3 by "
-              "default) the way the LLM picks its model. Fires on its trigger and emits the "
-              "vector and a trigger for the next node.",
+      summary="Turn text into an embedding vector with the embed model you pick, the way the "
+              "LLM picks its model. Fires on its trigger and emits the vector and a trigger "
+              "for the next node.",
       icon="finger-print-outline")
 class Embed:
-    # With nothing picked the node runs this declared default, so the picker shows
-    # the model that actually runs (the TTS/STT precedent).
-    model: Widget = model("embed", "ollama/bge-m3")
+    # With nothing picked the graph does not turn On (the TTS/STT precedent).
+    model: Widget = model("embed")
     inputs = [Port("trigger", "event", trigger=True),
               Port("text", "text")]
     outputs = [Port("embedding", "embedding"), Port("trigger", "event")]
 
     async def run(self, text=None, **_):
-        cfg = getattr(self, "_node_cfg", {}) or {}
-        manifest = models.get(cfg.get("model") or _widget_default(self, "model"))
+        manifest = _node_model(self, "embed")
         vec = await _embed_model(manifest, "" if text is None else str(text))
         return {"embedding": vec, "trigger": True}
 
@@ -1435,9 +1430,8 @@ class Rerank:
     # manifest's `endpoint` param, the one field the editor shows for it, and
     # `keep` (how many to return) is a param too; either can be converted to an
     # input. The doc text is the memory-set's `text` key. With nothing picked the
-    # node runs the declared default model, which the picker therefore shows
-    # (the TTS/STT precedent).
-    model: Widget = model("rerank", "rerank/bge-v2-m3")
+    # graph does not turn On (the TTS/STT precedent).
+    model: Widget = model("rerank")
     inputs = [Port("trigger", "event", trigger=True),
               Port("query", "text"),
               Port("candidates", "memory-set")]

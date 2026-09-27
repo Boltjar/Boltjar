@@ -107,14 +107,17 @@ const SUBLINE_BEFORE = [
   ["core.ai.llm", {"model":"gemma"}, "model · gemma"],
   ["core.ai.tool", {}, "ai"],
   ["core.ai.tool_args", {}, "ai"],
-  ["core.ai.stt", {}, "fish · asr"],
+  // no model node picks a model on its own: nothing picked reads the same on each
+  ["core.ai.stt", {}, "model · none picked"],
   ["core.ai.stt", {"model":"xai/stt"}, "xai · stt"],
-  ["core.ai.stt", {"model":""}, "fish · asr"],
-  ["core.ai.tts", {}, "xai · tts"],
+  ["core.ai.stt", {"model":""}, "model · none picked"],
+  ["core.ai.tts", {}, "model · none picked"],
   ["core.ai.tts", {"model":"fish/s2"}, "fish · s2"],
-  ["core.ai.tts", {"model":""}, "xai · tts"],
-  ["core.ai.embed", {}, "ollama · bge-m3"],  // a model node shows its model, declared or not
-  ["core.ai.rerank", {}, "rerank · bge-v2-m3"],
+  ["core.ai.tts", {"model":""}, "model · none picked"],
+  ["core.ai.embed", {}, "model · none picked"],  // a model node shows its model, declared or not
+  ["core.ai.embed", {"model":"ollama/bge-m3"}, "ollama · bge-m3"],
+  ["core.ai.rerank", {}, "model · none picked"],
+  ["core.ai.rerank", {"model":"rerank/bge-v2-m3"}, "rerank · bge-v2-m3"],
   ["core.data.chunk", {}, "data"],
   ["core.data.sentences", {}, "data"],
   ["core.store.vectors", {}, "store"],
@@ -258,8 +261,10 @@ check("or keeps a value", renderSubline(node("{t|or:none}", [W("t", "text", "")]
 check("bool reads truth", renderSubline(node("{b|bool}", [W("b", "bool", false)]), { b: 1 }), "true");
 check("model splits provider and model", renderSubline(node("{m|model}", [W("m", "model", "")]), { m: "xai/tts" }), "xai · tts");
 check("model with no provider", renderSubline(node("{m|model}", [W("m", "model", "")]), { m: "echo" }), "model · echo");
-check("an empty model reads as the default one",
-  renderSubline(node("{m|model}", [W("m", "model", "fish/asr")]), { m: "" }), "fish · asr");
+check("an empty model reads as none picked",
+  renderSubline(node("{m|model}", [W("m", "model", "")]), { m: "" }), "model · none picked");
+check("an unsaved model reads as none picked",
+  renderSubline(node("{m|model}", [W("m", "model", "")]), {}), "model · none picked");
 check("tags counts the {tags} of a template",
   renderSubline(node("{t|tags}", [W("t", "code", "")]), { t: "{a} {b} {a}" }), "2 tags");
 check("tags leaves out a name a declared port owns",

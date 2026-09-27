@@ -677,11 +677,9 @@ function llmParams(config: Record<string, unknown>): Record<string, unknown> {
 
 /** The model-driven node body (any node with a model widget): the same picker +
  *  per-model knob surface. The picker lists the runnable models of the family
- *  the widget declares, so a TTS node only lists TTS models. With nothing picked
- *  it shows the model the backend runs, the widget's declared default (TTS
- *  xai/tts, STT fish/asr); a node whose default is empty (the LLM) shows a picker
- *  only and its base ports. "auto" also keeps the base ports: the model it runs
- *  can change with what is installed. */
+ *  the widget declares, so a TTS node only lists TTS models. A model can cost
+ *  money, so no node picks one on its own: with nothing picked the picker says
+ *  "select a model" and the node shows its base ports only. */
 function LLMBody({
   config,
   widget,
@@ -697,7 +695,7 @@ function LLMBody({
 }) {
   const { models } = useEditor();
   const picked = config[widget.name];
-  const selectedId = (typeof picked === "string" && picked) || String(widget.default ?? "");
+  const selectedId = typeof picked === "string" ? picked : "";
   const manifest = models.get(selectedId);
   const promoted = llmPromoted(config);
 

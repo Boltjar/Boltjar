@@ -154,10 +154,14 @@ class Widget:
     expand: bool = False
     # a model picker (kind="model") lists the models of this family: llm, tts, stt,
     # embed or rerank (the manifest `kind`). Declared here so any pack node can
-    # carry a model picker; the editor never keys the family off a node id. Its
-    # `options` are the special values the picker offers above the model list
-    # ("auto" on the LLM: the runtime picks the model, see boltjar.model_discovery).
+    # carry a model picker; the editor never keys the family off a node id. A
+    # model picker never holds a model the person did not pick: it has no default
+    # and no special values (@node refuses either), because a model can cost money.
     model_kind: Optional[str] = None
+    # a model picker only: the node runs with no model picked (the LLM answers
+    # with the offline mock). Every other model node needs one before its graph
+    # turns On (validation names it).
+    optional: bool = False
 
     def as_dict(self) -> dict:
         return {
@@ -212,14 +216,23 @@ def select(options: list[Any], default: Any = None) -> Widget:
                   default=default if default is not None else (options[0] if options else None))
 
 
-def model(model_kind: str = "llm", default: str = "", *, auto: bool = False,
-          label: str = "Model") -> Widget:
+def model(model_kind: str = "llm", *legacy: Any, label: str = "Model",
+          optional: bool = False, **legacy_kw: Any) -> Widget:
     """A model picker listing the models of one family (llm, tts, stt, embed,
-    rerank). `default` is the model id the node runs with when nothing is picked.
-    `auto` offers the "auto" value, which the node must resolve itself at run time
-    (the LLM does, through boltjar.model_discovery.resolve_auto)."""
-    return Widget(kind="model", model_kind=model_kind, default=default,
-                  options=["auto"] if auto else [], label=label)
+    rerank). It starts with no model picked and the person picks one: a model can
+    cost money, so no node picks one on its own. `optional` lets the node run with
+    none picked (the LLM answers with the offline mock); without it, a graph with
+    this node turns On only once a model is picked.
+
+    There is no default model and no "auto". A pack still passing one (the old
+    `model("tts", "xai/tts")` or `auto=True`) gets it back on the widget only so
+    that @node can refuse the declaration and name the node."""
+    unknown = sorted(set(legacy_kw) - {"default", "auto"})
+    if unknown:
+        raise TypeError(f"model() got an unexpected keyword argument {unknown[0]!r}")
+    default = legacy[0] if legacy else legacy_kw.get("default", "")
+    return Widget(kind="model", model_kind=model_kind, label=label, optional=optional,
+                  default=default or "", options=["auto"] if legacy_kw.get("auto") else [])
 
 
 def slider(default: float, min: float, max: float, step: float = 0.1, label: str = "") -> Widget:
@@ -547,6 +560,16 @@ def node(*, id: str, name: str, kind: Kind, category: str,
                 raise ValueError(f"node {id!r}: trigger input {p.name!r} cannot be optional: "
                                  f"a trigger fires the node and must be wired "
                                  f"(drop optional=True)")
+
+        for w in widgets:
+            if w.kind == "model" and (w.default or w.options):
+                # checked here, like the optional trigger, so the pack loader's
+                # error names the node. A model costs money: only a person picks one.
+                what = (f"a default model {w.default!r}" if w.default
+                        else "the pick " + ", ".join(repr(o) for o in w.options))
+                raise ValueError(f"node {id!r}: model picker {w.name!r} declares {what}; "
+                                 f"a model node never picks a model on its own, so the "
+                                 f"picker starts empty and the person picks one (drop it)")
 
         spec = NodeSpec(id=id, name=name, kind=kind, category=category,
                         version=version, summary=summary, cls=cls,

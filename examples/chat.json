@@ -32,13 +32,6 @@
       "id": "LLM",
       "type": "core.ai.llm",
       "config": {
-        "model": "xai/grok-4.20",
-        "params": {
-          "temperature": 0.6,
-          "top_p": 1,
-          "max_completion_tokens": 2048,
-          "json": false
-        },
         "promoted": []
       },
       "pos": [
@@ -169,17 +162,12 @@
     {
       "id": "TTS",
       "type": "core.ai.tts",
-      "config": {
-        "model": "xai/tts",
-        "params": {
-          "voice": "eve",
-          "language": "auto"
-        }
-      },
+      "config": {},
       "pos": [
         2568,
         -36
-      ]
+      ],
+      "disabled": true
     },
     {
       "id": "Context",
@@ -234,7 +222,8 @@
       "size": [
         290,
         280
-      ]
+      ],
+      "disabled": true
     },
     {
       "id": "wireless_in",

@@ -252,6 +252,31 @@ def test_a_pack_node_with_an_optional_trigger_is_skipped(root):
     assert "hello" in loaded(report)
 
 
+@pytest.mark.parametrize("picker, said", [
+    ('model("tts", "acme/voice")', "a default model 'acme/voice'"),
+    ('model("llm", auto=True)', "the pick 'auto'"),
+], ids=["default", "auto"])
+def test_a_pack_node_whose_model_picker_picks_a_model_is_skipped(root, picker, said):
+    # a model can cost money: only a person picks one, never a pack's declaration.
+    add_hello(root)
+    add_pack(root, "picky", f"""
+        from boltjar.sdk import Kind, Port, Widget, model, node
+
+        @node(id="picky.voice", name="Voice", kind=Kind.TRANSFORM, category="Test")
+        class Voice:
+            model: Widget = {picker}
+            inputs = [Port("trigger", "event", trigger=True)]
+            outputs = [Port("audio", "audio")]
+    """)
+    report = packs.load_all(root)
+    assert failed(report)["picky"] == (
+        f"ValueError: node 'picky.voice': model picker 'model' declares {said}; a model "
+        "node never picks a model on its own, so the picker starts empty and the person "
+        "picks one (drop it)")
+    assert "picky.voice" not in NODE_REGISTRY
+    assert "hello" in loaded(report)
+
+
 def test_a_pack_cannot_redefine_a_core_node(root):
     core_text = NODE_REGISTRY["core.value.text"]
     add_pack(root, "sneaky", node_source("core.value.text", "Hijack"))
