@@ -11,6 +11,7 @@ import copy
 import json
 import pathlib
 import re
+import sys
 
 import pytest
 from fastapi.testclient import TestClient
@@ -182,6 +183,44 @@ def test_power_migrates_the_graph_and_refuses_a_newer_one():
         finally:
             server.HUBS.pop("fmt-new", None)
             server.HUBS.pop("fmt-old", None)
+
+
+# --------------------------------------------------------------- the headless runner
+
+def test_the_headless_runner_refuses_a_graph_from_a_newer_boltjar(tmp_path, monkeypatch):
+    import boltjar.__main__ as headless
+
+    def refuse(*args, **kwargs):
+        raise AssertionError("nothing loads for a graph that is refused")
+
+    path = tmp_path / "future.json"
+    path.write_text(json.dumps({**GRAPH, "format": CURRENT_FORMAT + 1}), encoding="utf-8")
+    monkeypatch.setattr(headless.packs, "load_all", refuse)
+    monkeypatch.setattr(headless.secrets, "ensure_loaded", refuse)
+    monkeypatch.setattr(sys, "argv", ["boltjar", str(path), "0"])
+    with pytest.raises(SystemExit) as stopped:
+        headless.main()
+    assert str(stopped.value.code).startswith(f"{path}: the graph was saved by a newer Boltjar")
+
+
+def test_the_headless_runner_runs_the_migrated_graph(tmp_path, monkeypatch):
+    import boltjar.__main__ as headless
+
+    built: list[dict] = []
+    real_build = headless.Runtime.build
+
+    def build(self, graph):
+        built.append(graph)
+        return real_build(self, graph)
+
+    path = tmp_path / "old.json"
+    path.write_text(json.dumps(GRAPH), encoding="utf-8")  # no `format`: saved before it existed
+    monkeypatch.setattr(headless.packs, "load_all", lambda: None)  # the core is already loaded
+    monkeypatch.setattr(headless.secrets, "ensure_loaded", lambda: None)
+    monkeypatch.setattr(headless.Runtime, "build", build)
+    monkeypatch.setattr(sys, "argv", ["boltjar", str(path), "0"])
+    headless.main()
+    assert [g["format"] for g in built] == [CURRENT_FORMAT]
 
 
 # --------------------------------------------------------------- shipped graphs + editor
