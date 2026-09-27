@@ -2,12 +2,12 @@
   "format": 2,
   "name": "demo",
   "nodes": [
-    { "id": "Fire",          "type": "core.trigger.manual", "config": {}, "pos": [0, -20] },
-    { "id": "System prompt", "type": "core.value.text",     "config": { "text": "You are a friendly, concise assistant." }, "pos": [0, 210], "size": [300, 160] },
-    { "id": "User message",  "type": "core.value.text",     "config": { "text": "Hi there, how are you today?" }, "pos": [0, 470], "size": [300, 160] },
-    { "id": "Prompt",        "type": "core.data.template",  "config": { "template": "{system_prompt}\n\nUser: {user_message}" }, "pos": [420, 170], "size": [320, 260] },
-    { "id": "LLM",           "type": "core.ai.llm",         "config": {}, "pos": [840, 110] },
-    { "id": "Log",           "type": "core.output.log",     "config": { "label": "assistant" }, "pos": [1260, 150] }
+    { "id": "Fire",          "type": "core.trigger.manual", "config": {}, "pos": [0, -24] },
+    { "id": "System prompt", "type": "core.value.text",     "config": { "text": "You are a friendly, concise assistant." }, "pos": [0, 168], "size": [300, 160] },
+    { "id": "User message",  "type": "core.value.text",     "config": { "text": "Hi there, how are you today?" }, "pos": [0, 432], "size": [300, 160] },
+    { "id": "Prompt",        "type": "core.data.template",  "config": { "template": "{system_prompt}\n\nUser: {user_message}" }, "pos": [396, 192], "size": [320, 260] },
+    { "id": "LLM",           "type": "core.ai.llm",         "config": {}, "pos": [816, 192] },
+    { "id": "Log",           "type": "core.output.log",     "config": { "label": "assistant" }, "pos": [1212, 192] }
   ],
   "edges": [
     { "src": "Fire",          "src_port": "trigger",  "dst": "Prompt", "dst_port": "trigger" },

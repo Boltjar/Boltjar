@@ -7,8 +7,8 @@
       "type": "core.trigger.chat",
       "config": {},
       "pos": [
-        -872,
-        -100
+        -888,
+        -108
       ]
     },
     {
@@ -18,8 +18,8 @@
         "template": "You are a helpful voice assistant talking with {username}.\n\n- Reply naturally in one short sentence.\n- No emojis (the reply is spoken by TTS); start with an [expression] tag, e.g. [happy] Hello! [curious] How are you?\n\n## Time now\n{clock}\n\n## Recent chat\n{chat_history}\n\n## User's last message\n{clock} - {username}: {chat}"
       },
       "pos": [
-        556,
-        -100
+        360,
+        -252
       ],
       "size": [
         374,
@@ -34,7 +34,7 @@
       },
       "pos": [
         1728,
-        -36
+        -180
       ]
     },
     {
@@ -42,8 +42,8 @@
       "type": "core.output.preview",
       "config": {},
       "pos": [
-        2184,
-        -36
+        2124,
+        12
       ],
       "size": [
         290,
@@ -58,8 +58,8 @@
         "timezone": "Local"
       },
       "pos": [
-        148,
-        -280
+        -492,
+        -576
       ]
     },
     {
@@ -96,8 +96,8 @@
         ]
       },
       "pos": [
-        -884,
-        -556
+        -888,
+        -456
       ]
     },
     {
@@ -111,8 +111,8 @@
         "where": ""
       },
       "pos": [
-        2412,
-        -516
+        2124,
+        -492
       ],
       "size": [
         290,
@@ -130,8 +130,8 @@
         "where": ""
       },
       "pos": [
-        -356,
-        -100
+        -492,
+        -324
       ],
       "size": [
         353,
@@ -149,8 +149,8 @@
         "where": ""
       },
       "pos": [
-        640,
-        -580
+        -36,
+        -156
       ],
       "size": [
         290,
@@ -162,8 +162,8 @@
       "type": "core.ai.tts",
       "config": {},
       "pos": [
-        2568,
-        -36
+        2520,
+        24
       ],
       "disabled": true
     },
@@ -172,8 +172,8 @@
       "type": "core.output.preview",
       "config": {},
       "pos": [
-        1224,
-        -36
+        1236,
+        -132
       ],
       "size": [
         386,
@@ -188,8 +188,8 @@
         "separator": "\\n\\n"
       },
       "pos": [
-        136,
-        -28
+        -36,
+        -432
       ]
     },
     {
@@ -199,8 +199,8 @@
         "text": "User"
       },
       "pos": [
-        -872,
-        116
+        -492,
+        84
       ],
       "size": [
         290,
@@ -214,8 +214,8 @@
         "autoplay": true
       },
       "pos": [
-        2952,
-        -36
+        2916,
+        24
       ],
       "size": [
         290,
@@ -230,8 +230,8 @@
         "channel": "1"
       },
       "pos": [
-        1080,
-        -252
+        840,
+        -336
       ]
     },
     {
@@ -241,8 +241,8 @@
         "channel": "1"
       },
       "pos": [
-        876,
-        72
+        840,
+        -36
       ]
     }
   ],
