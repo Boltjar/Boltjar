@@ -480,3 +480,81 @@ def test_tool_body_fires_through_tool_args_end_to_end():
     # the second hop carries the role:tool message with our value.
     tool_msg = next(m for m in bodies[1]["messages"] if m["role"] == "tool")
     assert tool_msg["content"] == "Paris"
+
+
+def test_tools_on_editor_named_sockets_reach_the_model(vendor_http):
+    """The editor names the LLM's tool sockets tool0, tool1 and so on; a
+    hand-written graph may use `tools` or `tools_1`. A Tool's `call` on any of
+    them is offered to the model, in wiring order. A Tool wired into the LLM by
+    its `trigger` is not a tool."""
+    import httpx
+
+    graph = {
+        "nodes": [
+            {"id": "go", "type": "core.trigger.manual"},
+            {"id": "clock", "type": "core.ai.tool",
+             "config": {"name": "get_time", "description": "The time."}},
+            {"id": "weather", "type": "core.ai.tool",
+             "config": {"name": "get_weather", "description": "The weather."}},
+            {"id": "news", "type": "core.ai.tool",
+             "config": {"name": "get_news", "description": "The news."}},
+            {"id": "search", "type": "core.ai.tool",
+             "config": {"name": "search", "description": "A search."}},
+            {"id": "decoy", "type": "core.ai.tool",
+             "config": {"name": "not_a_tool", "description": "Wired by its trigger."}},
+            {"id": "llm", "type": "core.ai.llm", "config": {"model": "ollama/qwen3:14b"}},
+        ],
+        "edges": [
+            {"src": "go", "src_port": "trigger", "dst": "llm", "dst_port": "trigger"},
+            {"src": "clock", "src_port": "call", "dst": "llm", "dst_port": "tool0"},
+            {"src": "weather", "src_port": "call", "dst": "llm", "dst_port": "tool1"},
+            {"src": "news", "src_port": "call", "dst": "llm", "dst_port": "tools"},
+            {"src": "search", "src_port": "call", "dst": "llm", "dst_port": "tools_1"},
+            {"src": "decoy", "src_port": "trigger", "dst": "llm", "dst_port": "trigger"},
+        ],
+    }
+    vendor_http.reply = lambda request: httpx.Response(
+        200, json={"message": {"role": "assistant", "content": "done"}})
+
+    async def driver():
+        rt = Runtime()
+        rt.build(graph)
+        await rt.run()  # the Manual fires the LLM at once
+        for _ in range(300):
+            await asyncio.sleep(0.01)
+            if rt.nodes["llm"].out_latch.get("response"):
+                break
+        resp = rt.nodes["llm"].out_latch.get("response")
+        await rt.stop()
+        return resp
+
+    assert asyncio.run(driver()) == "done"
+    assert str(vendor_http.last.url).endswith("/api/chat")
+    offered = [t["function"]["name"] for t in vendor_http.last_json()["tools"]]
+    assert offered == ["get_time", "get_weather", "get_news", "search"]
+
+
+def test_a_growable_socket_is_known_by_what_its_wire_carries():
+    """growable_sources reads a socket of a growable input from its wire, not its
+    name: declared ports, promoted knobs and wires of another type are left out."""
+    graph = {
+        "nodes": [
+            {"id": "t", "type": "core.ai.tool", "config": {"name": "a"}},
+            {"id": "u", "type": "core.ai.tool", "config": {"name": "b"}},
+            {"id": "temp", "type": "core.value.float", "config": {"number": 0.2}},
+            {"id": "text", "type": "core.value.text", "config": {"text": "hi"}},
+            {"id": "llm", "type": "core.ai.llm",
+             "config": {"model": "ollama/qwen3:14b", "promoted": ["temperature"]}},
+        ],
+        "edges": [
+            {"src": "t", "src_port": "call", "dst": "llm", "dst_port": "anything"},
+            {"src": "u", "src_port": "call", "dst": "llm", "dst_port": "tool7"},
+            {"src": "temp", "src_port": "out", "dst": "llm", "dst_port": "temperature"},
+            {"src": "text", "src_port": "out", "dst": "llm", "dst_port": "prompt"},
+        ],
+    }
+    rt = Runtime()
+    rt.build(graph)
+    assert rt.growable_sources("llm", "tools") == [("t", "call"), ("u", "call")]
+    assert rt.growable_sources("llm", "prompt") == []  # not a growable input
+    assert rt.growable_sources("nope", "tools") == []

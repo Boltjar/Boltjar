@@ -41,7 +41,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 
 from . import secrets as _secrets
-from .sdk import Kind, NodeFailure, NodeSpec, NODE_REGISTRY
+from .sdk import Kind, NodeFailure, NodeSpec, NODE_REGISTRY, types
 
 _TURN_CACHE_KEEP = 64  # bound the per-turn memo cache
 
@@ -350,15 +350,8 @@ class Runtime:
         # result via ctx.call_tool(). Cheap to compute; only the LLM reads it.
         if inst.spec.id == "core.ai.llm":
             setattr(obj, "_ctx", inst.ctx)
-            tool_ids: list[str] = []
-            for (dst, port), (src, _src_port) in self.edges_into.items():
-                if dst != inst.id:
-                    continue
-                if port != "tools" and not port.startswith("tools_"):
-                    continue
-                src_inst = self.nodes.get(src)
-                if src_inst is not None and src_inst.spec.id == "core.ai.tool":
-                    tool_ids.append(src)
+            tool_ids = [src for src, _port in self.growable_sources(inst.id, "tools")
+                        if self.nodes[src].spec.id == "core.ai.tool"]
             setattr(obj, "_tool_node_ids", tool_ids)
         if kind == Kind.OUTPUT:
             # deliver the value on the actual triggering port. `inputs` carries every
@@ -387,6 +380,37 @@ class Runtime:
             if nid == node_id and port not in names:
                 names.append(port)
         return names
+
+    def growable_sources(self, node_id: str, base: str) -> list[tuple[str, str]]:
+        """The (source node, source port) of every wire into a socket of the
+        growable input `base` of `node_id`, in the graph's edge order.
+
+        A socket is known by what its wire carries, never by its name: the editor
+        names the sockets it mints (`tool0`, `tool1` for the LLM's `tools`), a
+        hand-written graph may use the base's own name, and a pack may pick any
+        other. So a socket of `base` is any wired input the node does not declare
+        and did not promote from a knob, fed by an output whose type fits the
+        base's type."""
+        inst = self.nodes.get(node_id)
+        if inst is None:
+            return []
+        grow = next((p for p in inst.spec.inputs if p.name == base and p.growable), None)
+        if grow is None:
+            return []
+        cfg = getattr(inst.obj, "_node_cfg", None) or {}
+        promoted = cfg.get("promoted") if isinstance(cfg.get("promoted"), (list, tuple)) else []
+        other = {p.name for p in inst.spec.inputs if p.name != base} | set(promoted)
+        found: list[tuple[str, str]] = []
+        for (dst, port), (src, src_port) in self.edges_into.items():
+            if dst != node_id or port in other:
+                continue
+            src_inst = self.nodes.get(src)
+            if src_inst is None:
+                continue
+            out_type = next((p.type for p in src_inst.spec.outputs if p.name == src_port), "any")
+            if types.compatible(out_type, grow.type):
+                found.append((src, src_port))
+        return found
 
     def _pull_input(self, node_id: str, port: str, turn: int) -> Any:
         src = self.edges_into.get((node_id, port))
