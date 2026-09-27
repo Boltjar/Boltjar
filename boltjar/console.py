@@ -849,7 +849,7 @@ def log_config(verbose: bool = False) -> dict:
 
 
 # ---------------------------------------------------------------- graph lines
-_GRAPH_KINDS = frozenset({"live_graph", "status", "invalid", "error", "node_error", "log"})
+_GRAPH_KINDS = frozenset({"live_graph", "status", "invalid", "error", "node_error", "warning", "log"})
 # a refused power-on lists this many of its problems under the line
 _PROBLEMS_SHOWN = 3
 
@@ -858,10 +858,11 @@ class GraphLines:
     """The live graph lines under `── Graphs ──`. Fed every event the runtime
     broadcasts (and each refused power-on), it logs what a person watching the
     terminal needs: a graph turning on or off, a graph refused by validation, a
-    graph that failed to build, a node error, and what a Log node echoes. Wire
-    values are never printed. Each (graph, node, kind) may burst a few lines and
-    is then held to one a second; the next line that prints says how many were
-    skipped."""
+    graph that failed to build, a node error, a node warning (a Database whose
+    store cannot match the tables it declares), and what a Log node echoes.
+    Wire values are never printed. Each (graph, node, kind) may burst a few
+    lines and is then held to one a second; the next line that prints says how
+    many were skipped."""
 
     BURST = 5
     PER_SECOND = 1.0
@@ -909,6 +910,11 @@ class GraphLines:
         elif kind == "node_error":
             node = str(event.get("node"))
             self._limited((slug, node, kind), "bad", node, summarize(event.get("error"), 200))
+        elif kind == "warning":
+            # something a node could not do that does not stop the graph: one line
+            # per warning, laid out as a node error is
+            node = str(event.get("node"))
+            self._limited((slug, node, kind), "warn", node, summarize(event.get("message"), 200))
         elif kind == "log" and event.get("echo") is True:
             # summarized from the message as broadcast, never from the raw value:
             # what the server keeps out of a live event stays out of the terminal.
@@ -965,7 +971,7 @@ class GraphLines:
         for key in [k for k in self._buckets if k[0] == slug]:
             skipped = self._buckets.pop(key)[2]
             if skipped:
-                what = "errors" if key[2] == "node_error" else "log lines"
+                what = {"node_error": "errors", "warning": "warnings"}.get(key[2], "log lines")
                 self._line(slug, "info", str(key[1]), f"{skipped} more {what} skipped")
 
     def _line(self, slug: str, tone: str, event: str, detail: str = "", *, glyph: str | None = None,

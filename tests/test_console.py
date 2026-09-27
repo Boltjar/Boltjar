@@ -651,6 +651,24 @@ def test_a_graph_line_reads_on_its_own_without_the_console(lines):
     assert caplog.records[0].getMessage() == "On  refused: 1 problem\nx: m"
 
 
+def test_a_node_warning_is_one_warn_line_under_its_graph(lines):
+    graph, _clock, seen, caplog = lines
+    graph.feed({"kind": "warning", "node": "memory", "slug": "chat",
+                "message": "notes.body is declared text but the database holds it as real"})
+    assert seen() == [("chat", "warn", "memory", "notes.body is declared text but the database holds it as real")]
+    (rec,) = caplog.records
+    assert rec.glyph == "warn" and rec.hints == []
+
+
+def test_warnings_held_back_are_counted_when_the_graph_turns_off(lines):
+    graph, _clock, seen, _caplog = lines
+    graph.feed({"kind": "live_graph", "nodes": ["memory"], "edges": [], "slug": "chat"})
+    for _ in range(8):
+        graph.feed({"kind": "warning", "node": "memory", "message": "m", "slug": "chat"})
+    graph.feed({"kind": "status", "power": "off", "slug": "chat"})
+    assert seen()[-2:] == [("chat", "info", "memory", "3 more warnings skipped"), ("chat", "info", "Off", "")]
+
+
 def test_wire_values_are_never_printed(lines):
     graph, _clock, seen, _caplog = lines
     for event in ({"kind": "value", "node": "a", "port": "out", "value": "secret text"},

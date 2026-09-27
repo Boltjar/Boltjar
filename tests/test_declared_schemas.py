@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import pathlib
 import sqlite3
 import sys
@@ -189,6 +190,19 @@ def test_power_on_warns_about_a_conflict_and_still_runs(store):
         ("a", "notes.body is declared text but the database holds it as blob"),
     ]
     assert any(e["kind"] == "status" and e["power"] == "on" for e in seen)
+
+
+def test_a_conflict_reaches_the_terminal_as_one_graph_line(store, monkeypatch, caplog):
+    from boltjar.console import GraphLines
+
+    caplog.set_level(logging.DEBUG, logger="test.schema.terminal")
+    monkeypatch.setattr(server, "GRAPH_LINES", GraphLines(logging.getLogger("test.schema.terminal")))
+    store.create_table("k1", "notes", [{"name": "id", "type": "int", "pk": True},
+                                      {"name": "body", "type": "real"}])
+    problems, _seen = _power_on(_graph(_db("a", NOTES, db_key="k1")))
+    assert problems is None
+    warned = [(r.tone, r.event, r.detail) for r in caplog.records if r.tone == "warn"]
+    assert warned == [("warn", "a", "notes.body is declared text but the database holds it as real")]
 
 
 def _run(graph: dict) -> list[dict]:
