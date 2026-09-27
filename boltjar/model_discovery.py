@@ -41,6 +41,7 @@ import pathlib
 import re
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -81,6 +82,16 @@ _DEFAULT_LISTED_KINDS = frozenset({"llm"})
 # modalities.
 _NOT_CHAT = re.compile(r"embed|tts|whisper|transcribe|dall-e|gpt-image|moderation|realtime|"
                        r"audio|search|babbage|davinci|sora|computer-use", re.IGNORECASE)
+# api.openai.com lists every model the key reaches and reports no modalities, so
+# its list keeps the chat families (gpt-*, o<n>*, chatgpt-*) minus the models
+# POST /chat/completions refuses or no node here runs: legacy completions
+# (*-instruct), the Responses-only ones (*-pro, codex, deep research, computer
+# use), search, realtime, live voice, audio, speech, transcription, images.
+_OPENAI_HOST = "api.openai.com"
+_OPENAI_CHAT = re.compile(r"^(gpt-|o\d|chatgpt-)", re.IGNORECASE)
+_OPENAI_NOT_CHAT = re.compile(r"instruct|(^|-)pro($|-)|codex|deep-research|search|realtime|"
+                              r"(^|-)live($|-)|audio|tts|transcribe|whisper|image|embed|"
+                              r"moderation|computer-use", re.IGNORECASE)
 
 
 # ---------------------------------------------------------------- state + cache
@@ -330,13 +341,16 @@ def anthropic_manifest(entry: dict) -> ModelManifest | None:
                       max=max_out or 64000)])
 
 
-def openai_manifest(provider: str, entry: dict) -> ModelManifest | None:
+def openai_manifest(provider: str, entry: dict, *, openai_api: bool = False) -> ModelManifest | None:
     """A chat model from an OpenAI-compatible /models list. Plain servers send
     only an id, so a model is text in and out with no tools until a manifest says
     more; a server that reports modalities, context and supported parameters
-    (OpenRouter, Groq, vLLM) is read as reported."""
+    (OpenRouter, Groq, vLLM) is read as reported. `openai_api`: the list comes
+    from api.openai.com, which keeps only its chat completions families."""
     mid = str(entry.get("id") or "").strip()
     if not mid:
+        return None
+    if openai_api and (not _OPENAI_CHAT.match(mid) or _OPENAI_NOT_CHAT.search(mid)):
         return None
     arch = entry.get("architecture") if isinstance(entry.get("architecture"), dict) else {}
     ins, outs = arch.get("input_modalities"), arch.get("output_modalities")
@@ -425,8 +439,9 @@ async def _discover_openai(endpoint: endpoints.Endpoint,
     _check(resp, endpoint.name)
     data = resp.json()
     items = data.get("data") if isinstance(data, dict) else data
+    openai_api = urlsplit(endpoint.base_url).hostname == _OPENAI_HOST
     return [m for e in items or [] if isinstance(e, dict)
-            if (m := openai_manifest(endpoint.name, e)) is not None]
+            if (m := openai_manifest(endpoint.name, e, openai_api=openai_api)) is not None]
 
 
 Discoverer = Callable[[httpx.AsyncClient], Awaitable[list[ModelManifest]]]

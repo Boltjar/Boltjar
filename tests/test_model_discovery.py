@@ -306,6 +306,27 @@ def test_openai_compatible_endpoints_read_what_they_report(fresh, vendor_http, m
         "Bearer test-openai-key"
 
 
+def test_the_openai_list_keeps_only_chat_completions_models(fresh, vendor_http, monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
+    ids = ["gpt-3.5-turbo-instruct", "o1-pro", "o3-pro-2025-06-10", "gpt-5-pro",
+           "codex-mini-latest", "gpt-5-codex", "o3-deep-research", "gpt-4o-search-preview",
+           "gpt-realtime", "gpt-live-1", "gpt-4o-audio-preview", "gpt-4o-mini-tts",
+           "gpt-4o-transcribe", "gpt-image-1", "dall-e-3", "tts-1", "whisper-1", "davinci-002",
+           "text-embedding-3-small", "omni-moderation-latest", "computer-use-preview", "sora-2",
+           # the chat completions models
+           "gpt-4o", "gpt-4o-2024-08-06", "gpt-4.1-mini", "gpt-5", "gpt-5-chat-latest",
+           "o3", "o4-mini", "chatgpt-4o-latest"]
+    listed = {"object": "list", "data": [{"id": i, "object": "model"} for i in ids]}
+    vendor_http.reply = vendors(ollama=False, openai=listed)
+    refresh()
+    got = sorted(m.split("/", 1)[1] for m in rows() if m.startswith("openai/")
+                 and rows()[m]["source"] != "manifest")
+    assert got == sorted(["gpt-4o", "gpt-4o-2024-08-06", "gpt-4.1-mini", "gpt-5",
+                          "gpt-5-chat-latest", "o3", "o4-mini", "chatgpt-4o-latest"])
+    # the same names from another OpenAI-compatible server are its own chat models.
+    assert md.openai_manifest("lmstudio", {"id": "qwen2.5-7b-instruct"}) is not None
+
+
 # ---------------------------------------------------------- cache + offline
 
 def test_the_cache_keeps_the_list_when_a_provider_goes_offline(fresh, vendor_http):
