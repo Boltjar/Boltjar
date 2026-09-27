@@ -112,7 +112,8 @@ export interface NodeDef {
   /** the Ionicons name the node declares for itself; empty: its kind glyph. */
   icon?: string;
   /** the header subline template: text with {field|filter} placeholders
-   *  (lib/nodeMeta renderSubline); empty: the category in lower case. */
+   *  (lib/nodeMeta renderSubline); empty: a node with a model widget shows its
+   *  model (provider · model), any other its category in lower case. */
   subline?: string;
 }
 

@@ -145,3 +145,20 @@ def test_the_filters_are_the_ones_the_editor_applies():
                for line in source.split("function applyFilter", 1)[1].splitlines()
                if line.strip().startswith('case "')}
     assert handled == SUBLINE_FILTERS
+
+
+def test_the_pack_author_docs_say_what_an_empty_subline_shows():
+    # the editor draws a model node's model and any other node's category
+    # (editor/src/lib/nodeMeta.ts headerSubline); the three places a pack
+    # author reads about `subline` say so
+    repo = pathlib.Path(__file__).resolve().parent.parent
+    docs = {
+        "CONTRIBUTING.md": (repo / "CONTRIBUTING.md").read_text(encoding="utf-8"),
+        "boltjar/sdk.py node()": node.__doc__ or "",
+        "editor/src/types/protocol.ts": (repo / "editor" / "src" / "types" / "protocol.ts")
+        .read_text(encoding="utf-8").replace("*", " "),
+    }
+    for where, text in docs.items():
+        prose = " ".join(text.split())
+        assert "a node with a model widget shows its model" in prose, where
+        assert "any other its category in lower case" in prose, where

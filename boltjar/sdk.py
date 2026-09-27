@@ -510,7 +510,8 @@ def node(*, id: str, name: str, kind: Kind, category: str,
     ``{field}`` placeholders naming the node's fields, each optionally passed
     through filters, ``{text|clip:16|or:empty}``. A field that is not set reads
     as its default. The filters are listed in ``SUBLINE_FILTERS``. Left empty,
-    the line is the node's category in lower case.
+    a node with a model widget shows its model (``provider · model``), any
+    other its category in lower case.
     """
     def deco(cls: type) -> type:
         inputs = list(getattr(cls, "inputs", []))
