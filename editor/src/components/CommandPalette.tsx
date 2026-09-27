@@ -12,6 +12,7 @@ import { libraryGroup, nodeIcon } from "../lib/kinds";
 import { capabilityHint } from "../lib/nodeMeta";
 import { rankNodes } from "../lib/nodeSearch";
 import { PALETTE_GROUPS, inGroupOrder, type PaletteGroup } from "../lib/paletteGroups";
+import { pointerGate } from "../lib/pointerGate";
 import { typesCompatible } from "../lib/types";
 
 export interface PaletteAction {
@@ -55,6 +56,9 @@ export function CommandPalette(props: CommandPaletteProps) {
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  // hover picks a row only after the pointer really moves (lib/pointerGate):
+  // rows reordering under a resting pointer never take Enter off the best match
+  const hover = useRef(pointerGate());
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -205,7 +209,9 @@ export function CommandPalette(props: CommandPaletteProps) {
                     key={row.key}
                     data-idx={index}
                     className={`pal-row ${index === active ? "active" : ""}`}
-                    onMouseEnter={() => setActive(index)}
+                    onMouseMove={(e) => {
+                      if (hover.current.moved(e.clientX, e.clientY)) setActive(index);
+                    }}
                     onClick={row.run}
                   >
                     <div className="pr-ico">
