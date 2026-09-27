@@ -185,7 +185,8 @@ def test_the_settings_api_turns_it_on_and_off(monkeypatch, tmp_path):
 def test_a_remote_peer_cannot_turn_it_on(monkeypatch, tmp_path):
     home = account(monkeypatch, tmp_path, "linux")
     with local_client(client=("192.168.1.20", 50000)) as client:
-        assert client.get("/api/settings").json()["autostart"]["editable"] is False
+        shown = client.get("/api/settings").json()
+        assert shown["here"] is False and "launch_with_system" in shown["local_only"]
         r = client.patch("/api/settings", json={"launch_with_system": True})
     assert r.status_code == 403
     assert "only on this computer" in r.json()["error"]
@@ -202,11 +203,26 @@ def test_a_request_passed_on_by_a_proxy_cannot_turn_it_off(monkeypatch, tmp_path
     assert (home / ".config" / "autostart" / "boltjar.desktop").is_file()
 
 
-def test_a_remote_peer_may_still_change_the_other_settings(monkeypatch, tmp_path):
+def test_a_remote_peer_cannot_turn_on_start_ollama_with_boltjar(monkeypatch, tmp_path):
+    """It makes every later launch start a program on this computer."""
     from boltjar import settings
     monkeypatch.setattr(settings, "PATH", tmp_path / "settings.json")
     account(monkeypatch, tmp_path, "linux")
     with local_client(client=("192.168.1.20", 50000)) as client:
-        r = client.patch("/api/settings", json={"start_ollama": True})
+        assert "start_ollama" in client.get("/api/settings").json()["local_only"]
+        r = client.patch("/api/settings", json={"start_ollama": True, "resume_workflows": True})
+    assert r.status_code == 403
+    assert "Start Ollama with Boltjar" in r.json()["error"]
+    assert "only on this computer" in r.json()["error"]
+    assert not settings.PATH.exists()  # nothing of the change was made
+
+
+def test_a_remote_peer_may_still_change_resume_workflows(monkeypatch, tmp_path):
+    """A browser that reaches the editor can turn graphs On already."""
+    from boltjar import settings
+    monkeypatch.setattr(settings, "PATH", tmp_path / "settings.json")
+    account(monkeypatch, tmp_path, "linux")
+    with local_client(client=("192.168.1.20", 50000)) as client:
+        r = client.patch("/api/settings", json={"resume_workflows": True})
     assert r.status_code == 200
-    assert r.json()["settings"]["start_ollama"] is True
+    assert r.json()["settings"]["resume_workflows"] is True

@@ -1333,23 +1333,35 @@ async def runtime_chat(slug: str, body: dict = Body(...)):
 # Values are NEVER returned from any route.
 
 @app.get("/api/connections")
-def api_connections() -> dict:
+def api_connections(request: Request) -> dict:
     """Return the connectivity status of every known provider. Ollama's entry
     also carries `local`: whether it is installed here, stopped or running
-    (boltjar.ollama.status), so its card offers the right next step."""
+    (boltjar.ollama.status), so its card offers the right next step, and
+    `editable`: whether this browser may start it (one on this computer only)."""
     providers = _secrets.provider_status()
+    here = _security.from_this_machine(request.scope, request.headers)
     for entry in providers:
         if entry["provider"] == "ollama":
-            entry["local"] = _ollama.status(entry["connected"])
+            entry["local"] = {**_ollama.status(entry["connected"]), "editable": here}
     return {"providers": providers}
 
 
+def _elsewhere(what: str) -> JSONResponse:
+    """The refusal for a browser on another machine (the token link, or a proxy
+    passing a request on) asking for something that starts a program here."""
+    return JSONResponse({"error": f"{what} only on this computer, not from another machine"},
+                        status_code=403)
+
+
 @app.post("/api/connections/ollama/start")
-async def api_start_ollama():
+async def api_start_ollama(request: Request):
     """Start the Ollama installed on this computer (`ollama serve`, output in
     user/logs/ollama.log) and wait until it answers. Boltjar stops it again
-    when it exits. 409 when it is not installed here, 502 when it did not come
-    up (the error names the log)."""
+    when it exits. 403 from another machine (it starts a program here), 409
+    when it is not installed here, 502 when it did not come up (the error
+    names the log)."""
+    if not _security.from_this_machine(request.scope, request.headers):
+        return _elsewhere("Ollama can be started")
     result = await _ollama.start()
     _secrets.forget_ollama_status()
     if result["ok"]:
@@ -1361,14 +1373,22 @@ async def api_start_ollama():
 
 # ---- Settings (the editor's Settings panel, General tab) ---------------------
 
+# The settings that make Boltjar start a program on this computer, by the name
+# the Settings panel shows: only a browser on this computer may change them.
+LOCAL_ONLY_SETTINGS = {"launch_with_system": "Launch with system",
+                       "start_ollama": "Start Ollama with Boltjar"}
+
+
 def _settings_payload(request: Request) -> dict:
     """Every setting, "launch_with_system" read from disk (the entry exists and
-    starts this install), plus where that entry lives and whether this caller
-    may change it (a browser on this computer only)."""
+    starts this install), where that entry lives, whether this caller is a
+    browser on this computer (`here`), and the settings only such a browser
+    may change (`local_only`)."""
     auto = _autostart.status()
-    editable = _security.from_this_machine(request.scope, request.headers)
     return {"settings": {**_settings.load(), "launch_with_system": auto["enabled"]},
-            "autostart": {**auto, "editable": editable}}
+            "here": _security.from_this_machine(request.scope, request.headers),
+            "local_only": list(LOCAL_ONLY_SETTINGS),
+            "autostart": auto}
 
 
 def _settings_unreadable(exc: OSError) -> JSONResponse:
@@ -1386,9 +1406,10 @@ def api_settings(request: Request):
 @app.patch("/api/settings")
 async def api_update_settings(request: Request, body: dict = Body(...)):
     """Body: {name: value, ...}. Every change is checked before any is made.
-    "launch_with_system" writes or deletes the login entry, and only a browser
-    on this computer may change it: a person reaching the editor from another
-    machine (the token link) is refused, since it starts programs here."""
+    "launch_with_system" writes or deletes the login entry. It and
+    "start_ollama" start programs here, so only a browser on this computer may
+    change them: a person reaching the editor from another machine (the token
+    link) is refused, and none of the change is made."""
     changes = dict(body)
     launch = changes.pop("launch_with_system", None)
     try:
@@ -1397,9 +1418,9 @@ async def api_update_settings(request: Request, body: dict = Body(...)):
             raise ValueError(f"launch_with_system takes bool, not {type(launch).__name__}")
     except ValueError as exc:
         return JSONResponse({"error": str(exc)}, status_code=400)
-    if launch is not None and not _security.from_this_machine(request.scope, request.headers):
-        return JSONResponse({"error": "Launch with system can be changed only on this computer, "
-                                      "not from another machine"}, status_code=403)
+    refused = [label for name, label in LOCAL_ONLY_SETTINGS.items() if name in body]
+    if refused and not _security.from_this_machine(request.scope, request.headers):
+        return _elsewhere(f"{' and '.join(refused)} can be changed")
     try:
         if launch is True:
             _autostart.enable()

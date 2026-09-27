@@ -18,7 +18,7 @@ const js = ts.transpileModule(read("../src/lib/settingsTabs.ts"), {
   compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 },
 }).outputText;
 const {
-  GEAR_TAB, SETTINGS_TABS, SETTINGS_LINKS, openingTab, GENERAL_SECTIONS, SETTINGS_DEFAULTS,
+  GEAR_TAB, SETTINGS_TABS, SETTINGS_LINKS, openingTab, GENERAL_SECTIONS, SETTINGS_DEFAULTS, mayChange,
 } = await import("data:text/javascript," + encodeURIComponent(js));
 
 let failures = 0;
@@ -77,6 +77,18 @@ check("the panel opens on openingTab(initialTab)", (panel.match(/openingTab\(ini
 check("the panel draws its tabs from SETTINGS_TABS", /SETTINGS_TABS\.map\(/.test(panel), true);
 check("the panel header reads SETTINGS", />SETTINGS</.test(panel), true);
 check("its subline", /startup, providers &amp; secrets/.test(panel), true);
+
+// ---- what a browser on another machine may change
+const names = ["launch_with_system", "start_ollama", "resume_workflows"];
+const localOnly = ["launch_with_system", "start_ollama"];
+check("a browser on Boltjar's computer may change every setting",
+  names.map((n) => mayChange({ here: true, local_only: localOnly }, n)), [true, true, true]);
+check("another machine may change only what starts no program there",
+  names.map((n) => mayChange({ here: false, local_only: localOnly }, n)), [false, false, true]);
+const general = read("../src/components/GeneralSettings.tsx");
+check("the General tab locks each row the server lists", /!mayChange\(info, row\.name\)/.test(general), true);
+check("the Start Ollama button waits for a browser on Boltjar's computer",
+  /disabled=\{starting \|\| !local\.editable\}/.test(panel), true);
 
 if (failures) {
   console.error(`\n${failures} settings tab check(s) failed`);

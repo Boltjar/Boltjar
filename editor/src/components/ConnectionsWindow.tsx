@@ -35,6 +35,8 @@ interface OllamaLocal {
   reason: string | null;
   /** this Boltjar started it, and stops it when it exits */
   started_here: boolean;
+  /** this browser may start it (only one on Boltjar's computer may) */
+  editable: boolean;
   /** where its output goes, relative to the install */
   log: string;
   download: string;
@@ -459,12 +461,20 @@ function OllamaStart({ local, onStarted }: OllamaStartProps) {
         <span>Installed{local.path ? ` at ${local.path}` : ""}, not running</span>
       </div>
       {local.startable ? (
-        <button type="button" className="conn-save-btn" onClick={() => void start()} disabled={starting}>
+        <button
+          type="button"
+          className="conn-save-btn"
+          onClick={() => void start()}
+          disabled={starting || !local.editable}
+        >
           <Icon name={starting ? "sync-outline" : "play-circle-outline"} />
           {starting ? "Starting…" : "Start Ollama"}
         </button>
       ) : (
         local.reason && <div className="prov-add-key-hint">{local.reason}</div>
+      )}
+      {local.startable && !local.editable && (
+        <div className="prov-add-key-hint">start it on the computer Boltjar runs on</div>
       )}
       <div className="prov-add-key-footer">
         <span className="prov-add-key-hint">

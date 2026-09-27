@@ -6,8 +6,9 @@
 // is sent at once and the toggle shows what the server answered.
 //
 // "Launch with system" is read from disk by the server (the login entry exists
-// and starts this install), so its row also says where that entry lives. Only a
-// browser on the same computer may change it; elsewhere the toggle is shown but
+// and starts this install), so its row also says where that entry lives. The
+// settings that start a program on Boltjar's computer (the server lists them)
+// only a browser on that computer may change; elsewhere the toggle is shown but
 // does not flip, and the row says why.
 // ============================================================================
 import { useEffect, useState } from "react";
@@ -15,8 +16,10 @@ import { Icon } from "../lib/icons";
 import { Knob } from "./canvas/Knob";
 import { serverError } from "../lib/serverGraph";
 import {
+  ELSEWHERE_NOTE,
   GENERAL_SECTIONS,
   SETTINGS_DEFAULTS,
+  mayChange,
   type SettingName,
   type SettingsInfo,
 } from "../lib/settingsTabs";
@@ -85,7 +88,8 @@ export function GeneralSettings() {
           <div className="prov-card-body set-rows">
             {section.rows.map((row) => {
               const isLaunch = row.name === "launch_with_system";
-              const locked = !info || (isLaunch && auto !== undefined && !auto.editable);
+              const elsewhere = info !== null && !mayChange(info, row.name);
+              const locked = !info || elsewhere;
               return (
                 <div key={row.name} className={`set-row ${saving === row.name ? "saving" : ""}`}>
                   <Knob
@@ -112,10 +116,10 @@ export function GeneralSettings() {
                       </span>
                     </div>
                   )}
-                  {isLaunch && auto && !auto.editable && (
+                  {elsewhere && (
                     <div className="set-where">
                       <Icon name="information-circle-outline" />
-                      <span>change this on the computer Boltjar runs on</span>
+                      <span>{ELSEWHERE_NOTE}</span>
                     </div>
                   )}
                   {rowError?.name === row.name && <div className="insp-problem">{rowError.message}</div>}

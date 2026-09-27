@@ -31,7 +31,8 @@ def test_the_api_serves_every_setting_off_on_a_fresh_install(store):
         body = client.get("/api/settings").json()
     assert body["settings"] == {"start_ollama": False, "resume_workflows": False,
                                 "launch_with_system": False}
-    assert body["autostart"]["editable"] is True  # a browser on this computer
+    assert body["here"] is True  # a browser on this computer
+    assert body["local_only"] == ["launch_with_system", "start_ollama"]
 
 
 def test_a_change_persists_across_a_restart(store):

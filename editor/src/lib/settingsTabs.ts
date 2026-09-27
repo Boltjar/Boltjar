@@ -89,6 +89,10 @@ export const GENERAL_SECTIONS: readonly SettingsSection[] = [
 /** What the server answers for GET and PATCH /api/settings. */
 export interface SettingsInfo {
   settings: Record<SettingName, boolean>;
+  /** this browser runs on the computer Boltjar runs on */
+  here: boolean;
+  /** the settings only such a browser may change: they start a program there */
+  local_only: SettingName[];
   autostart: {
     enabled: boolean;
     /** where the login entry lives (~ for the home folder) */
@@ -96,10 +100,17 @@ export interface SettingsInfo {
     /** another Boltjar install that entry starts, else null */
     other: string | null;
     system: "windows" | "macos" | "xdg";
-    /** this browser may change it (only one on the same computer may) */
-    editable: boolean;
   };
 }
+
+/** Whether this browser may change `name`: every setting but the ones that
+ *  start a program on Boltjar's computer, which only a browser there may. */
+export function mayChange(info: SettingsInfo, name: SettingName): boolean {
+  return info.here || !info.local_only.includes(name);
+}
+
+/** The line under a setting this browser may not change. */
+export const ELSEWHERE_NOTE = "change this on the computer Boltjar runs on";
 
 /** The settings a fresh install has: every one off. */
 export const SETTINGS_DEFAULTS: Record<SettingName, boolean> = {

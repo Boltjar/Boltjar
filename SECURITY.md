@@ -75,9 +75,10 @@ machine, and each one gets the cookie. Never port-forward or tunnel the whole
 server.
 
 **Launch with system** writes a login entry that runs Boltjar on this computer,
-so only a browser on this computer can turn it on or off. A browser on another
-machine (through the token link, or a proxy that passes on the original `Host`
-or an `X-Forwarded-For`) sees the setting but cannot change it.
+and **Start Ollama with Boltjar** and the **Start Ollama** button start Ollama
+here, so only a browser on this computer can change them or press it. A browser
+on another machine (through the token link, or a proxy that passes on the
+original `Host` or an `X-Forwarded-For`) sees them but cannot change them.
 
 To receive webhooks, expose only `/hook/*`. Those routes skip the token and
 host checks because outside services call them, so give every Webhook node a

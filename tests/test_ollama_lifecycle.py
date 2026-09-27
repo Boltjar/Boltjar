@@ -322,3 +322,26 @@ def test_the_serve_command_stops_ollama_however_the_server_returns(fake_ollama, 
     monkeypatch.setenv("BOLTJAR_PORT", "")
     assert serve.serve(port=9001, open_browser=False) == 0
     assert fake_ollama.ended == [4242]
+
+
+# ---------------------------------------------------------------- another machine
+REMOTE_PEER = ("192.168.1.20", 50000)  # a browser on the LAN, through the token link
+
+
+def test_a_remote_peer_cannot_start_ollama(fake_ollama):
+    with local_client(client=REMOTE_PEER) as client:
+        r = client.post("/api/connections/ollama/start")
+    assert r.status_code == 403
+    assert "only on this computer" in r.json()["error"]
+    assert FakeProc.started == []
+
+
+@pytest.mark.parametrize("peer, editable", [(("127.0.0.1", 50000), True), (REMOTE_PEER, False)])
+def test_the_ollama_card_knows_whether_this_browser_may_start_it(fake_ollama, monkeypatch,
+                                                                 peer, editable):
+    monkeypatch.setattr(server._secrets, "_ollama_connected", lambda: False)
+    with local_client(client=peer) as client:
+        providers = client.get("/api/connections").json()["providers"]
+    entry = next(p for p in providers if p["provider"] == "ollama")
+    assert entry["local"]["state"] == "stopped"
+    assert entry["local"]["editable"] is editable
