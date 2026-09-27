@@ -585,7 +585,7 @@
   "name": "Webhook",
   "kind": "trigger",
   "category": "Triggers",
-  "summary": "Listen for HTTP calls from outside. Fires when a POST or GET reaches {origin}/hook/{workflow}/{path}, and emits the body, json, headers and query.",
+  "summary": "Listen for HTTP calls from outside. Fires when a POST or GET reaches {origin}/hook/{workflow}/{path}, and emits the body, json, headers and query. It replies right away, or, set to reply from Respond to Webhook, keeps the caller waiting until a Respond to Webhook in the same run answers, within the timeout.",
   "icon": "link-outline",
   "subline": "",
   "inputs": [],
@@ -621,6 +621,30 @@
     "promotable": true,
     "op_field": null,
     "op_values": [],
+    "model_kind": null
+   },
+   {
+    "name": "reply",
+    "kind": "select",
+    "label": "reply",
+    "default": "right away",
+    "surface": "body",
+    "promotable": false,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
+   },
+   {
+    "name": "timeout",
+    "kind": "number",
+    "label": "timeout (seconds)",
+    "default": 30,
+    "surface": "body",
+    "promotable": false,
+    "op_field": "reply",
+    "op_values": [
+     "from Respond to Webhook"
+    ],
     "model_kind": null
    }
   ]
@@ -1090,7 +1114,7 @@
   "name": "Sentences",
   "kind": "transform",
   "category": "Data",
-  "summary": "Split text into a list of sentences (each ends on . ! ? ... or a new line). Feed it through For-each to send an LLM reply to TTS one sentence at a time, so speech starts sooner.",
+  "summary": "Split text into a list of sentences (each ends on . ! ? ... or a new line). Feed it through For-each to send an LLM reply to TTS or Avatar one sentence at a time, so speech starts sooner.",
   "icon": "reorder-four-outline",
   "subline": "",
   "inputs": [
@@ -2221,5 +2245,126 @@
    }
   ],
   "widgets": []
+ },
+ {
+  "id": "core.output.avatar",
+  "name": "Avatar",
+  "kind": "output",
+  "category": "Output",
+  "summary": "Stream one avatar chunk per fire (text, audio, mood, action and lang) to an avatar client, such as a VRM renderer, listening on /stream. For one chunk per sentence, fire it once per sentence (a For-each over Sentences). Wire the separate ports or one combined `utterance` JSON; the separate ports win. Lip-sync stays on the client.",
+  "icon": "happy-outline",
+  "subline": "",
+  "inputs": [
+   {
+    "name": "trigger",
+    "growable": false
+   },
+   {
+    "name": "text",
+    "growable": false
+   },
+   {
+    "name": "audio",
+    "growable": false
+   },
+   {
+    "name": "mood",
+    "growable": false
+   },
+   {
+    "name": "action",
+    "growable": false
+   },
+   {
+    "name": "lang",
+    "growable": false
+   },
+   {
+    "name": "done",
+    "growable": false
+   },
+   {
+    "name": "utterance",
+    "growable": false
+   }
+  ],
+  "widgets": [
+   {
+    "name": "channel",
+    "kind": "text",
+    "label": "stream channel",
+    "default": "avatar",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
+   }
+  ]
+ },
+ {
+  "id": "core.output.respond_webhook",
+  "name": "Respond to Webhook",
+  "kind": "output",
+  "category": "Output",
+  "summary": "Answer the HTTP call that started this run, for a Webhook set to reply from Respond to Webhook. Each fire writes `body` to that caller. With `last` on (the default) the fire sends one whole response. Fires with `last` off stream the response piece by piece, and the next fire with `last` on ends it. The status, headers and content type of the first fire hold for the whole response. A stream goes out as server-sent events when the caller asks for text/event-stream, else one line per piece.",
+  "icon": "paper-plane-outline",
+  "subline": "respond · {status}",
+  "inputs": [
+   {
+    "name": "trigger",
+    "growable": false
+   },
+   {
+    "name": "body",
+    "growable": false
+   }
+  ],
+  "widgets": [
+   {
+    "name": "status",
+    "kind": "number",
+    "label": "status",
+    "default": 200,
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
+   },
+   {
+    "name": "content_type",
+    "kind": "select",
+    "label": "Content Type",
+    "default": "auto",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
+   },
+   {
+    "name": "headers",
+    "kind": "code",
+    "label": "headers (JSON object)",
+    "default": "{}",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
+   },
+   {
+    "name": "last",
+    "kind": "bool",
+    "label": "last (ends the response)",
+    "default": true,
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
+   }
+  ]
  }
 ]

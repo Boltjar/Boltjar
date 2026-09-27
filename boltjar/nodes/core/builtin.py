@@ -19,6 +19,7 @@ from simpleeval import SimpleEval, DEFAULT_FUNCTIONS
 
 from boltjar.sdk import node, Kind, NodeFailure, Port, Widget, code, model, select, slider, tmpl
 from boltjar import endpoints, models
+from boltjar import replies as _replies
 from boltjar.secrets import resolve_secrets
 
 _log = logging.getLogger(__name__)
@@ -832,7 +833,9 @@ class AudioInput:
 @node(id="core.trigger.webhook", name="Webhook", kind=Kind.TRIGGER, category="Triggers",
       summary="Listen for HTTP calls from outside. Fires when a POST or GET reaches "
               "{origin}/hook/{workflow}/{path}, and emits the body, json, headers and "
-              "query.",
+              "query. It replies right away, or, set to reply from Respond to Webhook, "
+              "keeps the caller waiting until a Respond to Webhook in the same run "
+              "answers, within the timeout.",
       icon="link-outline")
 class WebhookTrigger:
     path: Widget = Widget(kind="text", default="my-hook", label="path")
@@ -841,6 +844,15 @@ class WebhookTrigger:
     # (accepts_secrets) but is not a {tag} template.
     secret: Widget = Widget(kind="text", default="", label="X-Webhook-Secret (optional)",
                             accepts_secrets=True)
+    # who answers the caller: the server at once ({"ok": true}), or the Respond
+    # to Webhook the run reaches (boltjar.replies). The server reads both knobs
+    # when a call arrives, so neither can become an input.
+    reply: Widget = Widget(kind="select", options=[_replies.REPLY_RIGHT_AWAY,
+                                                   _replies.REPLY_FROM_RESPOND],
+                           default=_replies.REPLY_RIGHT_AWAY, label="reply", promotable=False)
+    timeout: Widget = Widget(kind="number", default=30, min=1, max=600, step=1,
+                             label="timeout (seconds)", promotable=False,
+                             op_field="reply", op_values=(_replies.REPLY_FROM_RESPOND,))
     outputs = [Port("trigger", "event"),
                Port("body", "text"),
                Port("json", "any"),
@@ -3224,6 +3236,79 @@ class ChatOutput:
         # the editor renders the conversation from the wired streams, committing a
         # turn when its side's trigger fires. The sink just lights up; no output.
         return {}
+
+
+@node(id="core.output.respond_webhook", name="Respond to Webhook", kind=Kind.OUTPUT,
+      category="Output",
+      summary="Answer the HTTP call that started this run, for a Webhook set to reply "
+              "from Respond to Webhook. Each fire writes `body` to that caller. With "
+              "`last` on (the default) the fire sends one whole response. Fires with "
+              "`last` off stream the response piece by piece, and the next fire with "
+              "`last` on ends it. The status, headers and content type of the first fire "
+              "hold for the whole response. A stream goes out as server-sent events when "
+              "the caller asks for text/event-stream, else one line per piece.",
+      icon="paper-plane-outline", subline="respond · {status}")
+class RespondWebhook:
+    status: Widget = Widget(kind="number", default=200, min=100, max=599, step=1,
+                            label="status", port_type="int")
+    content_type: Widget = select(list(_replies.CONTENT_TYPES), default="auto")
+    # a JSON object merged into the response headers; hop-by-hop headers and
+    # Content-Length are refused (boltjar.replies.REFUSED_HEADERS)
+    headers: Widget = Widget(kind="code", default="{}", label="headers (JSON object)",
+                             port_type="json")
+    last: Widget = Widget(kind="bool", default=True, label="last (ends the response)",
+                          port_type="bool")
+    inputs = [Port("trigger", "event", trigger=True),
+              # unwired, the response has an empty body (a bare 200 or 204)
+              Port("body", "any", optional=True)]
+    # fires once the write went out, so the next piece can follow it
+    outputs = [Port("trigger", "event")]
+
+    def deliver(self, value, ctx, inputs=None):
+        reply = ctx.origin
+        if not isinstance(reply, _replies.HeldReply) or not reply.open:
+            ctx.log("no webhook call is waiting for this response, so nothing was sent")
+            return {}
+        status = _http_status(self.status)
+        content_type = str(self.content_type or "auto").strip().lower()
+        if content_type not in _replies.CONTENT_TYPES:
+            ctx.warn(f"content type {self.content_type!r} is not one of "
+                     f"{', '.join(_replies.CONTENT_TYPES)}, so auto was used")
+            content_type = "auto"
+        headers, problems = _replies.clean_headers(self.headers)
+        if not reply.started:
+            for problem in problems:
+                ctx.warn(f"{problem}, so it was left out")
+        last = _knob_bool(self.last)
+        written = reply.write((inputs or {}).get("body"), last=last, status=status,
+                              headers=headers, content_type=content_type)
+        if written.reason == "too-large":
+            raise ValueError(f"the response went over {_replies.cap_text()}, so it was cut off")
+        if not written.sent:
+            ctx.log("no webhook call is waiting for this response, so nothing was sent")
+            return {}
+        if written.head_ignored:
+            ctx.warn("the status, headers and content type of a response come from its "
+                     "first fire; this fire's differ and were ignored")
+        return {"trigger": True}
+
+
+def _http_status(value) -> int:
+    """A status knob (or its wired value) as an HTTP status, 100 to 599."""
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        raise ValueError(f"status {value!r} is not a number") from None
+    if not number.is_integer() or not 100 <= number <= 599:
+        raise ValueError(f"status {value!r} is not an HTTP status (100 to 599)")
+    return int(number)
+
+
+def _knob_bool(value) -> bool:
+    """A bool knob (or its wired value): "false", "0", "off" and "no" read as off."""
+    if isinstance(value, str):
+        return value.strip().lower() in ("true", "1", "yes", "on")
+    return bool(value)
 
 
 # ============================================================ helpers

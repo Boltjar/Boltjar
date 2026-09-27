@@ -67,6 +67,7 @@ from boltjar import endpoints as _endpoints
 from boltjar import model_discovery as _discovery
 from boltjar import ollama as _ollama
 from boltjar import packs as _packs
+from boltjar import replies as _replies
 from boltjar import resume as _resume
 from boltjar import settings as _settings
 from boltjar.console import GraphLines
@@ -157,6 +158,9 @@ class Hub:
         self._busy = 0
         # set by get_hub() when this Hub is registered; broadcast() stamps it.
         self.slug: str = "_default"
+        # webhook calls held open until a Respond to Webhook answers them
+        # (boltjar.replies); released with 503 whenever the graph stops.
+        self.replies = _replies.ReplyBook()
 
     def broadcast(self, event: dict) -> None:
         event["slug"] = self.slug
@@ -185,6 +189,9 @@ class Hub:
                 _log.debug("could not close a subscriber of %s", self.slug, exc_info=True)
 
     async def _stop(self) -> None:
+        # a call still waiting for its Respond to Webhook gets 503 now, never a
+        # wait for a timeout the stopped graph can no longer beat
+        self.replies.close_all(503, "workflow stopped")
         if self.runtime:
             await self.runtime.stop()
             self.runtime = None
@@ -887,6 +894,73 @@ def _trigger_problem(spec, node: dict, port, live: set[str], dead: dict[str, str
     return f"required trigger '{port.name}' is wired through {where}, which passes nothing on"
 
 
+WEBHOOK_ID = "core.trigger.webhook"
+RESPOND_ID = "core.output.respond_webhook"
+
+
+def _respond_problems(graph: dict, flat) -> list[dict]:
+    """A Webhook that waits for a Respond to Webhook must reach one, and a
+    Respond to Webhook must be reached from a Webhook that waits for it: either
+    alone would hold every call to its timeout, or answer nothing. Reach follows
+    the wires the runtime builds (flatten_graph), so a bypassed node passes
+    reach on only where it wires through. A Respond to Webhook's own knobs are
+    checked too, while they are knobs (promoted, a wire sets them per fire)."""
+    problems: list[dict] = []
+    nodes = {n["id"]: n for n in graph.get("nodes", []) if not n.get("disabled")}
+    down: dict[str, set[str]] = {}
+    up: dict[str, set[str]] = {}
+    for src, _sp, dst, _dp in flat.live:
+        down.setdefault(src, set()).add(dst)
+        up.setdefault(dst, set()).add(src)
+
+    def reach(start: str, links: dict[str, set[str]]) -> set[str]:
+        seen, todo = set(), [start]
+        while todo:
+            for nxt in links.get(todo.pop(), ()):
+                if nxt not in seen:
+                    seen.add(nxt)
+                    todo.append(nxt)
+        return seen
+
+    def waits(node_id: str) -> bool:
+        n = nodes.get(node_id)
+        if n is None or n["type"] != WEBHOOK_ID:
+            return False
+        cfg = node_config(NODE_REGISTRY[WEBHOOK_ID], n.get("config"))
+        return str(cfg.get("reply")) == _replies.REPLY_FROM_RESPOND
+
+    responds = [nid for nid, n in nodes.items() if n["type"] == RESPOND_ID]
+    for nid in nodes:
+        if waits(nid) and not any(r in reach(nid, down) for r in responds):
+            problems.append({"node": nid, "kind": "respond-missing",
+                             "message": "Webhook waits for a Respond to Webhook that is not "
+                                        "in the graph"})
+    for nid in responds:
+        if not any(waits(w) for w in reach(nid, up)):
+            problems.append({"node": nid, "kind": "respond-unused",
+                             "message": "Respond to Webhook answers no Webhook: set one "
+                                        "upstream to reply from Respond to Webhook"})
+        spec = NODE_REGISTRY.get(RESPOND_ID)
+        if spec is None:
+            continue
+        config = nodes[nid].get("config") or {}
+        cfg = node_config(spec, config)
+        promoted = set(config.get("promoted") or ())
+        if "status" not in promoted:
+            try:
+                status = float(cfg.get("status"))
+            except (TypeError, ValueError):
+                status = -1.0
+            if not status.is_integer() or not 100 <= status <= 599:
+                problems.append({"node": nid, "kind": "bad-config",
+                                 "message": f"status {cfg.get('status')!r} is not an HTTP "
+                                            "status (100 to 599)"})
+        if "headers" not in promoted:
+            for message in _replies.clean_headers(cfg.get("headers"))[1]:
+                problems.append({"node": nid, "kind": "bad-config", "message": message})
+    return problems
+
+
 def validate_graph(graph: dict) -> list[dict]:
     """Pre-run validation: a graph cannot turn On if any node is broken."""
     problems: list[dict] = []
@@ -965,6 +1039,7 @@ def validate_graph(graph: dict) -> list[dict]:
                              "message": f"tool name '{nm}' already used by {tool_names[nm]}"})
         else:
             tool_names[nm] = n["id"]
+    problems.extend(_respond_problems(graph, flat))
     # a {{secret.NAME}} nobody defined stays literal text where it is used (sent
     # as a key, or refused as a Webhook's secret), so name it before On. Only
     # stored secrets and provider keys resolve, never another .env name.
@@ -1565,7 +1640,10 @@ async def api_delete_endpoint(name: str) -> dict:
 # inside the live runtime for {slug}. The route is intentionally tiny: look up
 # the hub, find the matching webhook instance, emit the body/json/headers/query
 # onto its data ports, then fire `trigger` LAST so a downstream graph sees data
-# already latched before the fan-out. Returns 200 immediately (fire-and-forget).
+# already latched before the fan-out. With `reply` "right away" it returns 200
+# immediately (fire-and-forget). With "from Respond to Webhook" the call is held
+# (boltjar.replies) and the run is fired in a TurnScope whose origin is the held
+# call, so the Respond to Webhook of THIS run answers it.
 
 # Headers we never echo back into the graph: a webhook payload must not carry
 # session cookies, auth tokens or the webhook's own shared secret to a downstream
@@ -1657,8 +1735,23 @@ async def webhook_handler(slug: str, path: str, request: Request):
 
     query_dict = dict(request.query_params)
 
-    # Fresh turn so the propagation/pull cache resets per webhook hit.
-    turn = runtime.new_turn()
+    reply = None
+    if str(cfg.get("reply") or _replies.REPLY_RIGHT_AWAY) == _replies.REPLY_FROM_RESPOND:
+        accept = (request.headers.get("accept") or "").lower()
+        node_id = node.id
+        reply = hub.replies.hold(accepts_sse=_replies.SSE in accept,
+                                 log=lambda msg: runtime.log(node_id, msg))
+        if reply is None:
+            return JSONResponse({"error": "too many calls are waiting for a response"},
+                                status_code=429)
+        # Fresh turn in a scope of its own: every turn of this run carries the
+        # held call, and its values never cross into a concurrent call's run.
+        scope = runtime.open_scope(reply)
+        reply.scope = scope
+        turn = runtime.new_turn(scope=scope)
+    else:
+        # Fresh turn so the propagation/pull cache resets per webhook hit.
+        turn = runtime.new_turn(scope=None)
     runtime.emit(node.id, "body", body_text, turn)
     runtime.emit(node.id, "json", json_value, turn)
     runtime.emit(node.id, "headers", headers_dict, turn)
@@ -1666,7 +1759,20 @@ async def webhook_handler(slug: str, path: str, request: Request):
     # Fire LAST so downstream consumers see data latched before they run.
     runtime.emit(node.id, "trigger", 1, turn)
 
-    return {"ok": True}
+    if reply is None:
+        return {"ok": True}
+    return await reply.response(_reply_timeout(cfg.get("timeout")))
+
+
+def _reply_timeout(value) -> float:
+    """A Webhook's `timeout` knob in seconds, kept within 1 to 600."""
+    try:
+        seconds = float(value)
+    except (TypeError, ValueError):
+        seconds = 30.0
+    if seconds != seconds:  # NaN
+        seconds = 30.0
+    return min(600.0, max(1.0, seconds))
 
 
 # ---- Ollama local model management -----------------------------------------

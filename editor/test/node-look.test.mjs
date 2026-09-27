@@ -152,6 +152,8 @@ const SUBLINE_BEFORE = [
   ["core.flow.wait", {}, "flow"],
   ["core.flow.queue", {}, "flow"],
   ["core.output.chat", {}, "inspect"],
+  ["core.output.respond_webhook", {}, "respond · 200"],
+  ["core.output.respond_webhook", {"status":404}, "respond · 404"],
 ];
 
 const BODY_BEFORE = [
@@ -218,6 +220,7 @@ const BODY_BEFORE = [
   ["core.flow.wait", {}, []],
   ["core.flow.queue", {}, []],
   ["core.output.chat", {}, []],
+  ["core.output.respond_webhook", {}, []],
 ];
 
 // ---- every core node declares an icon the editor ships, and draws it

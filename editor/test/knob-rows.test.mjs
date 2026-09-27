@@ -59,6 +59,16 @@ check("it is the surface that keeps the Template's text out",
 check("the Database's hidden schema is never a row", rows(core("core.store.database")), []);
 check("a placeholder promoted to a port is no longer a row",
   rows(core("core.trigger.chat"), { promoted: ["placeholder"] }), []);
+check("a Webhook that replies right away draws no timeout",
+  rows(core("core.trigger.webhook")), ["path", "method", "secret", "reply"]);
+check("a Webhook that waits for its Respond to Webhook draws the timeout",
+  rows(core("core.trigger.webhook"), { reply: "from Respond to Webhook" }),
+  ["path", "method", "secret", "reply", "timeout"]);
+check("Respond to Webhook draws its four knobs",
+  rows(core("core.output.respond_webhook")), ["status", "content_type", "headers", "last"]);
+check("a Respond to Webhook knob promoted to a port is no longer a row",
+  rows(core("core.output.respond_webhook"), { promoted: ["last"] }),
+  ["status", "content_type", "headers"]);
 
 // ── the generic mechanism, on pack nodes ──
 const widget = (name, kind, extra = {}) => ({
