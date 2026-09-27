@@ -158,7 +158,7 @@ def test_loading_an_unstamped_graph_returns_the_current_format(dirs):
 
 def test_saving_stamps_the_current_format_on_the_file_and_its_snapshot(dirs, tmp_path):
     user, _ = dirs
-    assert client.put("/api/graphs/fmt", json=GRAPH).json() == {"ok": True}
+    assert client.put("/api/graphs/fmt", json=GRAPH).json()["ok"] is True
     on_disk = json.loads((user / "fmt.json").read_text(encoding="utf-8"))
     assert list(on_disk)[0] == "format" and on_disk["format"] == CURRENT_FORMAT
     snapshot = next((tmp_path / "user" / "autosave" / "fmt").glob("*.json"))
@@ -192,14 +192,14 @@ def test_a_saved_graph_this_boltjar_cannot_read_is_never_saved_over(dirs, tmp_pa
     assert not (tmp_path / "user" / "autosave" / "future").exists()
     # deleting it is a deliberate act, and then the slug saves as usual.
     assert client.delete("/api/graphs/future").json() == {"ok": True}
-    assert client.put("/api/graphs/future", json=GRAPH).json() == {"ok": True}
+    assert client.put("/api/graphs/future", json=GRAPH).json()["ok"] is True
 
 
 def test_a_saved_file_that_is_not_a_graph_is_saved_over(dirs):
     user, _ = dirs
     user.mkdir(parents=True)
     (user / "broken.json").write_text("{not json", encoding="utf-8")
-    assert client.put("/api/graphs/broken", json=GRAPH).json() == {"ok": True}
+    assert client.put("/api/graphs/broken", json=GRAPH).json()["ok"] is True
     assert json.loads((user / "broken.json").read_text(encoding="utf-8"))["nodes"] == GRAPH["nodes"]
 
 

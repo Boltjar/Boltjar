@@ -28,7 +28,7 @@ def _graph(n):
 
 def test_save_writes_a_snapshot(iso):
     r = client.put("/api/graphs/vtest", json=_graph(3))
-    assert r.status_code == 200 and r.json() == {"ok": True}
+    assert r.status_code == 200 and r.json()["ok"] is True
     assert len(list((iso / "vtest").glob("vtest_*.json"))) == 1, "one Save -> one snapshot"
 
 
@@ -69,4 +69,4 @@ def test_snapshot_failure_never_breaks_save(tmp_path, monkeypatch):
     blocker.write_text("not a dir")
     monkeypatch.setattr(server, "AUTOSAVE_DIR", blocker)
     r = client.put("/api/graphs/vtest", json=_graph(1))
-    assert r.status_code == 200 and r.json() == {"ok": True}
+    assert r.status_code == 200 and r.json()["ok"] is True

@@ -29,6 +29,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import datetime
+import hashlib
 import hmac
 import itertools
 import json
@@ -1189,12 +1190,39 @@ def _load_graph_file(path: pathlib.Path):
         return JSONResponse({"error": str(exc)}, status_code=422)
 
 
+def graph_version(data: bytes) -> str:
+    """The version of a saved graph: a short hash of its file's bytes. Two
+    editors holding the same version hold the same saved copy; any save that
+    changes the file changes it."""
+    return hashlib.sha256(data).hexdigest()[:16]
+
+
+def _file_version(path: pathlib.Path) -> str:
+    return graph_version(path.read_bytes())
+
+
 @app.get("/api/graphs/{name}")
 def get_graph(name: str):
+    """The saved graph (a linked file, the user copy, else the example) in the
+    current format, its version in the X-Graph-Version header. The version is
+    read from the same bytes the graph is, so the two always match."""
     path = _graph_path(name)
     if path is None:
         return JSONResponse({"error": "not found"}, status_code=404)
-    return _load_graph_file(path)
+    data = path.read_bytes()
+    try:
+        graph = migrate(json.loads(data.decode("utf-8")))
+    except GraphFormatError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=422)
+    return JSONResponse(graph, headers={"X-Graph-Version": graph_version(data)})
+
+
+def _announce_saved(name: str, version: str) -> None:
+    """Tell every editor that has `name` open that its saved copy is now
+    `version`: a clean one reloads it, one with unsaved edits is told."""
+    hub = HUBS.get(name)
+    if hub is not None:
+        hub.broadcast({"kind": "graph-saved", "version": version})
 
 
 def _snapshot_graph(name: str, graph: dict) -> None:
@@ -1259,7 +1287,9 @@ async def put_graph(name: str, graph: dict):
             return JSONResponse({"error": f"could not save to {_display_path(str(linked))}: {exc}"},
                                 status_code=500)
         _snapshot_graph(name, graph)
-        return {"ok": True, "path": _display_path(str(linked))}
+        version = _file_version(linked)
+        _announce_saved(name, version)
+        return {"ok": True, "path": _display_path(str(linked)), "version": version}
     # nor is a saved graph this Boltjar cannot read ever saved over: nothing here
     # could open it, so whatever is sent in its place is not an edit of it.
     unreadable = _unreadable_saved_graph(name)
@@ -1270,13 +1300,16 @@ async def put_graph(name: str, graph: dict):
         )
     # always a user copy: an example is never overwritten, only overridden.
     GRAPHS_DIR.mkdir(parents=True, exist_ok=True)
-    (GRAPHS_DIR / f"{_safe(name)}.json").write_text(json.dumps(graph, indent=2), encoding="utf-8")
+    target = GRAPHS_DIR / f"{_safe(name)}.json"
+    target.write_text(json.dumps(graph, indent=2), encoding="utf-8")
     _snapshot_graph(name, graph)  # versioned backup on every explicit Save
     try:
         _resume.mark_saved(name)  # a draft On since before it had a file has one now
     except OSError as exc:
         _log.warning("could not note %s as saved for the next launch: %s", name, exc)
-    return {"ok": True}
+    version = _file_version(target)
+    _announce_saved(name, version)
+    return {"ok": True, "version": version}
 
 
 @app.get("/api/graphs/{name}/versions")
@@ -1412,7 +1445,9 @@ async def save_workflow_file_as(request: Request, body: dict = Body(...)):
         slug, linked = _linked.plan(path, _taken_slugs()), True
         _linked.link(path, slug)
     _snapshot_graph(slug, graph)
-    return {"slug": slug, "path": _display_path(str(path)), "linked": linked}
+    version = _file_version(path)
+    _announce_saved(slug, version)
+    return {"slug": slug, "path": _display_path(str(path)), "linked": linked, "version": version}
 
 
 def _repo_path(path: str) -> str:

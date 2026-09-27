@@ -628,7 +628,7 @@ def test_a_graph_saved_while_on_and_then_removed_by_hand_is_dropped(fresh, monke
     settings.update({"resume_workflows": True})
     with local_client() as client:
         power(client, "draft", "on", MANUAL_LOG)  # never saved when it turned On
-        assert client.put("/api/graphs/draft", json=MANUAL_LOG).json() == {"ok": True}
+        assert client.put("/api/graphs/draft", json=MANUAL_LOG).json()["ok"] is True
     (fresh / "draft.json").unlink()  # removed outside Boltjar
     restart_server(monkeypatch)
     with caplog.at_level(logging.INFO, logger="boltjar.graph"):
