@@ -5,7 +5,6 @@
 // ============================================================================
 import { useMemo, useState, type CSSProperties } from "react";
 import type { NodeDef } from "../types/protocol";
-import type { NodePreset } from "../lib/presets";
 import { Icon, hasIcon } from "../lib/icons";
 import {
   GROUP_ORDER,
@@ -18,12 +17,9 @@ import { capabilityHint } from "../lib/nodeMeta";
 
 interface NodeLibraryProps {
   defs: NodeDef[];
-  /** data-defined pre-wired clusters, shown in their own "Presets" group. */
-  presets?: NodePreset[];
   loading: boolean;
   error: string | null;
   onAdd: (typeId: string) => void;
-  onAddPreset?: (presetId: string) => void;
   onClose: () => void;
 }
 
@@ -41,19 +37,10 @@ function highlight(name: string, query: string) {
   );
 }
 
-export function NodeLibrary({ defs, presets, loading, error, onAdd, onAddPreset, onClose }: NodeLibraryProps) {
+export function NodeLibrary({ defs, loading, error, onAdd, onClose }: NodeLibraryProps) {
   void onClose; // collapse is now triggered from the Workflows header at the top of the rail
   const [query, setQuery] = useState("");
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
-
-  // presets matching the current filter (label / cap / id), shown in their own
-  // group above the node defs. Rendered with the SAME lib-item markup as nodes.
-  const shownPresets = useMemo(() => {
-    const list = presets ?? [];
-    const q = query.trim().toLowerCase();
-    if (!q) return list;
-    return list.filter((p) => `${p.label} ${p.cap} ${p.id}`.toLowerCase().includes(q));
-  }, [presets, query]);
 
   const grouped = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -79,7 +66,7 @@ export function NodeLibrary({ defs, presets, loading, error, onAdd, onAddPreset,
     return ordered;
   }, [defs, query]);
 
-  const total = grouped.reduce((n, [, list]) => n + list.length, 0) + shownPresets.length;
+  const total = grouped.reduce((n, [, list]) => n + list.length, 0);
 
   const onDragStart = (e: React.DragEvent, typeId: string) => {
     e.dataTransfer.setData("application/boltjar-node", typeId);
@@ -118,47 +105,6 @@ export function NodeLibrary({ defs, presets, loading, error, onAdd, onAddPreset,
         {!loading && !error && total === 0 && (
           <div className="lib-empty">no nodes match “{query}”.</div>
         )}
-
-        {shownPresets.length > 0 && onAddPreset && (() => {
-          const group = "Presets";
-          const isCollapsed = collapsed[group] ?? false;
-          // presets read with the AI accent (the current roster is AI-flavoured).
-          const fc = groupColorVar("AI");
-          return (
-            <div className="lib-group" key={group}>
-              <button
-                className={`group-head ${isCollapsed ? "collapsed" : ""}`}
-                onClick={() => setCollapsed((c) => ({ ...c, [group]: !isCollapsed }))}
-              >
-                <span className="gd" style={{ background: groupColorVar(group) }} />
-                <span className="gname">{group}</span>
-                <span className="count">{shownPresets.length}</span>
-                <Icon name="chevron-down-outline" className="chev" />
-              </button>
-              {!isCollapsed &&
-                shownPresets.map((preset) => (
-                  <button
-                    className="lib-item"
-                    key={preset.id}
-                    onClick={() => onAddPreset(preset.id)}
-                    title={`${preset.label} · ${preset.cap}`}
-                  >
-                    <div
-                      className="li-ico"
-                      style={{ background: `color-mix(in srgb, ${fc} 13%, transparent)` } as CSSProperties}
-                    >
-                      <Icon name={preset.icon} style={{ color: fc } as CSSProperties} />
-                    </div>
-                    <div className="li-text">
-                      <div className="li-name">{highlight(preset.label, query)}</div>
-                      <div className="li-cap">{preset.cap}</div>
-                    </div>
-                    <Icon name="add-outline" className="drag-grip" />
-                  </button>
-                ))}
-            </div>
-          );
-        })()}
 
         {grouped.map(([group, list]) => {
           const isCollapsed = collapsed[group] ?? false;

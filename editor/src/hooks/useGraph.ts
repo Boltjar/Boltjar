@@ -41,7 +41,6 @@ import {
   type WFNode,
 } from "../lib/graphAdapter";
 import { typesCompatible } from "../lib/types";
-import { PRESETS } from "../lib/presets";
 import { renameGraph } from "../lib/renameGraph";
 import {
   ghostBase,
@@ -110,8 +109,6 @@ export interface GraphStore {
 
   isValidConnection: (conn: Connection | WFEdge) => boolean;
   addNodeOfType: (typeId: string, pos: { x: number; y: number }) => string | null;
-  /** Drop a data-defined preset (a pre-wired cluster of nodes) at `pos`. */
-  addPreset: (presetId: string, pos: { x: number; y: number }) => void;
   /** The scaffold gestures available on a node: for each output port that
    *  DECLARES a scaffold and has no body of that type yet, a {port,label} the
    *  chrome renders as an "Add <node>" menu item. Generic, read from the port. */
@@ -445,59 +442,11 @@ export function useGraph(
     [defs, commit, markEdited],
   );
 
-  // ── scaffold / preset: build pre-wired clusters generically ──
-  // Both read declarations (a Port's `scaffold`, or a PRESETS entry) rather than
-  // branching on a node id, and mint nodes+edges in a SINGLE commit so one undo
-  // reverts the whole gesture. They mirror addNodeOfType/insertOnEdge: newId is
+  // ── scaffold: build a pre-wired cluster generically ──
+  // It reads a declaration (a Port's `scaffold`) rather than branching on a
+  // node id, and mints nodes+edges in a SINGLE commit so one undo reverts the
+  // whole gesture. It mirrors addNodeOfType/insertOnEdge: newId is
   // derived from the current `nodes` set (not captured inside a setState updater).
-
-  /** Drop a data-defined preset (nodes + edges) at `pos`. */
-  const addPreset = useCallback((presetId: string, pos: { x: number; y: number }) => {
-    const preset = PRESETS.find((p) => p.id === presetId);
-    if (!preset) return;
-    const nodeDefs = preset.nodes.map((pn) => defs.get(pn.typeId));
-    if (nodeDefs.some((d) => !d)) return; // an unknown node type: drop nothing
-    commit();
-    const existing = new Set(nodes.map((n) => n.id));
-    const ids: string[] = [];
-    const newNodes: WFNode[] = preset.nodes.map((pn, i) => {
-      const def = nodeDefs[i]!;
-      const nid = freshId(pn.typeId, existing);
-      existing.add(nid);
-      ids.push(nid);
-      const nn: WFNode = {
-        id: nid,
-        type: "workflow",
-        position: snapPosition({ x: pos.x + pn.dx, y: pos.y + pn.dy }),
-        selected: true,
-        data: { instanceId: nid, typeId: pn.typeId, config: { ...defaultConfig(def), ...(pn.config ?? {}) } },
-      };
-      const sz = DEFAULT_SIZE[pn.typeId];
-      if (sz) { nn.width = sz[0]; nn.height = sz[1]; }
-      return nn;
-    });
-    const newEdges: WFEdge[] = preset.edges.map((pe) => {
-      const [si, sport] = pe.from;
-      const [ti, tport] = pe.to;
-      const src = ids[si];
-      const dst = ids[ti];
-      const srcType = outputType(defs, preset.nodes[si].typeId, sport, models, newNodes[si].data.config);
-      return {
-        id: edgeId({ src, src_port: sport, dst, dst_port: tport }),
-        source: src,
-        target: dst,
-        sourceHandle: sport,
-        targetHandle: tport,
-        type: "typed",
-        reconnectable: "target",
-        data: { type: srcType },
-      };
-    });
-    setNodes((nds) => [...nds.map((n) => ({ ...n, selected: false })), ...newNodes]);
-    setEdges((eds) => [...eds, ...newEdges]);
-    setSelectedIds(ids);
-    markEdited();
-  }, [nodes, defs, models, commit, markEdited]);
 
   const scaffoldsFor = useCallback((nodeId: string): Array<{ port: string; label: string }> => {
     const node = nodes.find((n) => n.id === nodeId);
@@ -1059,7 +1008,6 @@ export function useGraph(
     reconnectEdge,
     isValidConnection,
     addNodeOfType,
-    addPreset,
     scaffoldsFor,
     scaffoldFromPort,
     updateConfig,

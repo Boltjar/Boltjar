@@ -25,7 +25,6 @@ import { fetchServerGraph, serverError, unreadableNotice } from "./lib/serverGra
 import { mod } from "./lib/platform";
 import { DOCS_URL, FEEDBACK_URL, SPONSOR_URL, bugReportUrl, copyText, diagnosticsText, openExternal, osName } from "./lib/help";
 import logoUrl from "./assets/boltjar-logo-dark.svg";
-import { PRESETS } from "./lib/presets";
 import { CommandBar, type PowerPhase, type PrimaryAction } from "./components/CommandBar";
 import { NodeLibrary } from "./components/NodeLibrary";
 import { SavedWorkflowsPanel } from "./components/SavedWorkflowsPanel";
@@ -203,7 +202,6 @@ export default function App() {
     reconnectEdge,
     isValidConnection,
     addNodeOfType,
-    addPreset,
     scaffoldsFor,
     scaffoldFromPort,
     updateConfig,
@@ -604,18 +602,6 @@ export default function App() {
       addNodeOfType(typeId, pin ?? { x: p.x + Math.random() * 40, y: p.y + Math.random() * 40 });
     },
     [addNodeOfType],
-  );
-
-  // Drop a picker preset (a pre-wired cluster) at the same spot a single node
-  // would land. Presets are data (lib/presets.ts); this just routes to addPreset.
-  const handleAddPreset = useCallback(
-    (presetId: string) => {
-      const pin = dropPinRef.current;
-      const p = pin ?? lastFlowPos.current;
-      dropPinRef.current = null;
-      addPreset(presetId, pin ?? { x: p.x + Math.random() * 40, y: p.y + Math.random() * 40 });
-    },
-    [addPreset],
   );
 
   // when a wire is dropped on empty space, remember the drop position and the
@@ -1216,11 +1202,9 @@ export default function App() {
           <div className="rail-library">
             <NodeLibrary
               defs={defList}
-              presets={PRESETS}
               loading={defsLoading}
               error={defsError}
               onAdd={handleAddAtCenter}
-              onAddPreset={handleAddPreset}
               onClose={handleLibraryClose}
             />
           </div>
