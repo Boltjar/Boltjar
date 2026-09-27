@@ -162,11 +162,9 @@ def test_a_model_picker_always_stays_a_knob() -> None:
 
 
 def test_a_body_the_node_draws_itself_stays_a_knob() -> None:
-    # the Template's text is the node and the Chat Input hint belongs to its send
-    # box: the editor draws both without Convert to input, and the declaration says so.
+    # the Template's text is the node: the editor draws it without Convert to
+    # input, and the declaration says so.
     from boltjar.sdk import NODE_REGISTRY
 
     template = {w.name: w for w in NODE_REGISTRY["core.data.template"].widgets}["template"]
-    chat = {w.name: w for w in NODE_REGISTRY["core.trigger.chat"].widgets}["placeholder"]
     assert (template.kind, template.default, template.expand, template.promotable) == ("code", "{in}", True, False)
-    assert (chat.kind, chat.default, chat.promotable) == ("text", "Type a message...", False)

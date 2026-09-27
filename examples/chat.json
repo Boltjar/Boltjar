@@ -5,9 +5,7 @@
     {
       "id": "chat",
       "type": "core.trigger.chat",
-      "config": {
-        "placeholder": "Type a message..."
-      },
+      "config": {},
       "pos": [
         -872,
         -100

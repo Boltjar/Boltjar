@@ -11,16 +11,18 @@ import { useEffect, useRef, useState } from "react";
 import { Icon } from "../../lib/icons";
 import type { ChatMessage } from "../../hooks/useRunSocket";
 
+// the send box's hint while the graph is On (Off shows the power-on hint)
+const SEND_HINT = "Type a message...";
+
 interface ChatBoxProps {
   messages: ChatMessage[];
-  placeholder: string;
   enabled: boolean; // power is On
   onSend: (text: string) => void;
   /** send-only: drop the message history (the conversation lives in a Chat output). */
   sendOnly?: boolean;
 }
 
-export function ChatBox({ messages, placeholder, enabled, onSend, sendOnly = false }: ChatBoxProps) {
+export function ChatBox({ messages, enabled, onSend, sendOnly = false }: ChatBoxProps) {
   const [text, setText] = useState("");
   const histRef = useRef<HTMLDivElement>(null);
 
@@ -58,7 +60,7 @@ export function ChatBox({ messages, placeholder, enabled, onSend, sendOnly = fal
         <input
           type="text"
           value={text}
-          placeholder={enabled ? placeholder : "off: power on to send"}
+          placeholder={enabled ? SEND_HINT : "off: power on to send"}
           disabled={!enabled}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {

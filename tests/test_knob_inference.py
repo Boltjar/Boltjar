@@ -75,7 +75,7 @@ CORE_WIDGET_KINDS = {
     "core.text.strip": {"emoji": "bool", "markdown": "bool", "tags": "bool", "actions": "bool", "urls": "bool"},
     "core.trigger.agenda": {"poll": "number", "table": "text"},
     "core.trigger.audio_in": {"placeholder": "text"},
-    "core.trigger.chat": {"placeholder": "text"},
+    "core.trigger.chat": {},
     "core.trigger.interval": {"seconds": "number"},
     "core.trigger.manual": {},
     "core.trigger.schedule": {"cron": "text", "timezone": "select"},

@@ -79,10 +79,10 @@ def test_list_node_types_is_condensed_schema():
     assert {"name": "user", "type": "text", "direction": "in",
             "trigger": False, "optional": True, "growable": False} in chat_out["ports"]
     # a node with knobs exposes name/kind/default/options
-    chat = next(n for n in cat if n["id"] == "core.trigger.chat")
-    knob_names = {k["name"] for k in chat["knobs"]}
-    assert "placeholder" in knob_names
-    for k in chat["knobs"]:
+    interval = next(n for n in cat if n["id"] == "core.trigger.interval")
+    knob_names = {k["name"] for k in interval["knobs"]}
+    assert "seconds" in knob_names
+    for k in interval["knobs"]:
         assert set(k) >= {"name", "kind", "default", "options"}
 
 

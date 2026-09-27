@@ -543,19 +543,7 @@
   "icon": "chatbubble-ellipses-outline",
   "subline": "chat · on send",
   "inputs": [],
-  "widgets": [
-   {
-    "name": "placeholder",
-    "kind": "text",
-    "label": "Placeholder",
-    "default": "Type a message...",
-    "surface": "body",
-    "promotable": false,
-    "op_field": null,
-    "op_values": [],
-    "model_kind": null
-   }
-  ]
+  "widgets": []
  },
  {
   "id": "core.trigger.audio_in",

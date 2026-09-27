@@ -55,3 +55,33 @@ def test_chat_fires_llm_and_reply_reaches_convo():
     # the reply reached the conversation node, and the user turn is the typed text
     assert convo.get("reply") == llm_resp
     assert convo.get("user") == "hello there"
+
+
+def test_chat_input_declares_no_knob():
+    # the send box's hint is fixed ("Type a message..."): Chat Input has no
+    # placeholder knob, so it draws no knob row under the send box.
+    from boltjar.sdk import NODE_REGISTRY
+
+    assert NODE_REGISTRY["core.trigger.chat"].widgets == []
+
+
+def test_a_saved_placeholder_is_ignored():
+    # a graph saved while Chat Input had a placeholder knob still validates and
+    # runs: the frozen fixture keeps the value, and the node never reads it.
+    from boltjar.server import validate_graph
+
+    g = _load_mocked()
+    chat = next(n for n in g["nodes"] if n["type"] == "core.trigger.chat")
+    assert chat["config"].get("placeholder") == "Type a message..."
+    # (its TTS model is not installed here; that problem is not the chat's)
+    assert [p for p in validate_graph(g) if p["node"] == chat["id"]] == []
+
+    async def run():
+        rt = Runtime()
+        rt.build(g)
+        await rt.run()
+        obj = rt.nodes[chat["id"]].obj
+        await rt.stop()
+        return obj
+
+    assert not hasattr(asyncio.run(run()), "placeholder")

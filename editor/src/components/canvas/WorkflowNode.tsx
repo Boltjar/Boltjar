@@ -19,7 +19,7 @@ import { liveGatePasses } from "../../lib/liveClassify";
 import { functionColorVar, nodeIcon } from "../../lib/kinds";
 import { typeColorVar, typesCompatible } from "../../lib/types";
 import { Icon, hasIcon } from "../../lib/icons";
-import { bodySummary, defaultOf, headerSubline } from "../../lib/nodeMeta";
+import { bodySummary, headerSubline } from "../../lib/nodeMeta";
 import { useDraft } from "../../lib/useDraft";
 import { convertAction } from "../../lib/knobOptions";
 import {
@@ -403,8 +403,6 @@ function WorkflowNodeImpl({ id, data, selected }: NodeProps) {
           {isChat && (
             <ChatBox
               messages={chats[id] ?? []}
-              // the send box's hint is the placeholder knob's value, as the knob shows it
-              placeholder={String(nd.config.placeholder ?? defaultOf(def, "placeholder") ?? "")}
               enabled={power === "on"}
               onSend={(text) => sendChat(id, text)}
               sendOnly

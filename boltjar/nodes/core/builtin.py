@@ -807,8 +807,6 @@ class Manual:
       summary="Type a message and send it into the live graph.",
       icon="chatbubble-ellipses-outline", subline="chat · on send")
 class ChatInput:
-    # the send box's hint on the canvas, never an input
-    placeholder: Widget = Widget(kind="text", default="Type a message...", promotable=False)
     outputs = [Port("trigger", "event"), Port("text", "text")]
 
     async def start(self, ctx):

@@ -4,9 +4,9 @@
 // transpiled with the installed TypeScript compiler (its only imports are
 // type-only). Run from editor/: `node test/knob-rows.test.mjs`.
 //
-// The case it guards: a node with a surface of its own (a model picker, the
-// Chat Input send box) drew no knob rows at all, so Chat Input's `placeholder`
-// could be set only in the graph JSON. The core nodes come from
+// The case it guards: a node with a surface of its own (a model picker, a
+// send box) drew no knob rows at all, so its other knobs could be set only in
+// the graph JSON. The core nodes come from
 // fixtures/core-nodes.json, the served definitions (tests/test_node_look.py
 // keeps that file equal to the live registry), so a declaration change on
 // @node shows up here. The pack cases are built by hand: they test the generic
@@ -45,10 +45,10 @@ const core = (id) => {
 const rows = (d, config = {}, drawn) => knobRowWidgets(d, config, drawn).map((w) => w.name);
 
 // ── the core nodes, as /api/object_info serves them ──
-check("Chat Input draws its placeholder under the send box",
-  rows(core("core.trigger.chat")), ["placeholder"]);
-check("the Chat Input placeholder is a knob with no Convert to input",
-  core("core.trigger.chat").widgets.find((w) => w.name === "placeholder")?.promotable, false);
+check("Chat Input draws no knob row under its send box",
+  rows(core("core.trigger.chat")), []);
+check("Chat Input declares no knob: the send box's hint is fixed",
+  core("core.trigger.chat").widgets, []);
 for (const id of ["core.ai.llm", "core.ai.tts", "core.ai.stt", "core.ai.embed", "core.ai.rerank"]) {
   check(`${id}: the picker and its params are the whole body, no rows`, rows(core(id)), []);
 }
@@ -57,8 +57,6 @@ check("the Template's text editor draws its text: no second row",
 check("it is the surface that keeps the Template's text out",
   rows(core("core.data.template")), ["template"]);
 check("the Database's hidden schema is never a row", rows(core("core.store.database")), []);
-check("a placeholder promoted to a port is no longer a row",
-  rows(core("core.trigger.chat"), { promoted: ["placeholder"] }), []);
 check("a Webhook that replies right away draws no timeout",
   rows(core("core.trigger.webhook")), ["path", "method", "secret", "reply"]);
 check("a Webhook that waits for its Respond to Webhook draws the timeout",
