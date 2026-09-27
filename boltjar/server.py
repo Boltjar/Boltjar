@@ -236,7 +236,9 @@ class Hub:
             except Exception as exc:
                 self.runtime = None
                 self.graph = None
-                self.broadcast({"kind": "error", "error": repr(exc)})
+                # built here, not in the runtime, so it gets the redaction every
+                # runtime event gets on its way out (Runtime._notify)
+                self.broadcast({"kind": "error", "error": _secrets.redact(repr(exc))})
                 return None
             self.graph = graph  # the now-running graph (the live set source of truth)
         self.broadcast({"kind": "status", "power": "on"})
