@@ -8,6 +8,7 @@
 import { createContext, useContext } from "react";
 import type { ModelManifest, NodeDef, Problem } from "../types/protocol";
 import type { ChatMessage, HistPoint, LiveValue, NodeRunStatus, Power } from "../hooks/useRunSocket";
+import type { ModelsMeta } from "./modelMeta";
 
 /** A resolved inbound wire into a node: where it comes from + the carried type. */
 export interface InboundWire {
@@ -25,6 +26,12 @@ export interface EditorContextValue {
   defs: Map<string, NodeDef>;
   /** model id -> manifest, so the LLM node + inspector resolve the selected model. */
   models: ReadonlyMap<string, ModelManifest>;
+  /** the live list's state: what "auto" runs, when it was updated, who answered. */
+  modelsMeta: ModelsMeta;
+  /** read the model list again (the server answers from its cache). */
+  reloadModels: () => Promise<void>;
+  /** ask every provider for its models now, then show the fresh list. */
+  refreshModels: () => Promise<void>;
   power: Power;
   nodeStatus: Record<string, NodeRunStatus>;
   liveValues: Record<string, LiveValue>;

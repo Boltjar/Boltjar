@@ -1,11 +1,13 @@
 // ============================================================================
-// ModelPicker: the LLM node's model selector. A button showing the current
-// model's label opens a searchable dropdown, grouped by provider, each row a
-// label + capability chips (in/out modalities, a tools chip, the context size).
+// ModelPicker: a model node's model selector. A button showing the current
+// model's label opens a searchable dropdown of the models that can run now,
+// grouped by provider, each row a label + capability chips (in/out modalities,
+// tools, thinking, the context size). A picker that offers "auto" lists it first:
+// the runtime runs the first runnable model, and the row says which one. A
+// footer says when the list was last updated and refreshes it on demand.
 // Selecting a model calls back so the node can set config.model, reset params to
-// the model's defaults and drop stale promotions. Used on the node body (compact)
-// and in the inspector (full). It never mutates state itself (it only reports a
-// choice), so the graph store stays the single source of truth.
+// the model's defaults and drop stale promotions. It never mutates state itself
+// (it only reports a choice), so the graph store stays the single source of truth.
 //
 // The dropdown is rendered in a PORTAL to document.body and positioned in screen
 // space. A node lives inside React Flow's zoomed/transformed canvas, so an
@@ -18,11 +20,25 @@ import { createPortal } from "react-dom";
 import type { ModelManifest } from "../../types/protocol";
 import { Icon } from "../../lib/icons";
 import { typeColorVar } from "../../lib/types";
-import { formatContext, groupByProvider, modalityIcon, providerLabel } from "../../lib/modelMeta";
+import {
+  AUTO_MODEL,
+  formatContext,
+  modalityIcon,
+  modelStatus,
+  pickerGroups,
+  providerLabel,
+  runnableModels,
+  updatedLine,
+} from "../../lib/modelMeta";
 import { useEditor } from "../../lib/editorContext";
 
 interface ModelPickerProps {
+  /** every model the server lists; the picker keeps the runnable ones of `kind`. */
   manifests: ModelManifest[];
+  /** the family this picker lists (the model widget's model_kind). */
+  kind: string;
+  /** offer "auto" above the list (declared on the model widget). */
+  offersAuto?: boolean;
   selectedId: string;
   /** the resolved manifest for selectedId, if any (so a missing model still shows). */
   selected: ModelManifest | undefined;
@@ -38,10 +54,18 @@ interface TriggerRect {
 }
 
 const PANEL_MIN_W = 264;
-const PANEL_MAX_H = 300;
+const PANEL_MAX_H = 340;
 
-export function ModelPicker({ manifests, selectedId, selected, onSelect, variant = "node" }: ModelPickerProps) {
-  const { openConnections } = useEditor();
+export function ModelPicker({
+  manifests,
+  kind,
+  offersAuto = false,
+  selectedId,
+  selected,
+  onSelect,
+  variant = "node",
+}: ModelPickerProps) {
+  const { openConnections, models, modelsMeta, reloadModels, refreshModels } = useEditor();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
@@ -65,13 +89,16 @@ export function ModelPicker({ manifests, selectedId, selected, onSelect, variant
     return () => window.removeEventListener("click", onClick);
   }, [open]);
 
+  // opening reads the list again: the server answers from its cache and
+  // refreshes a stale list in the background.
   useEffect(() => {
     if (open) {
       setQuery("");
       setActive(0);
+      void reloadModels();
       requestAnimationFrame(() => inputRef.current?.focus());
     }
-  }, [open]);
+  }, [open, reloadModels]);
 
   // measure the trigger in screen space and decide up/down (keeps the panel
   // on-screen). The trigger lives on a node inside React Flow's transformed
@@ -104,19 +131,20 @@ export function ModelPicker({ manifests, selectedId, selected, onSelect, variant
     return () => cancelAnimationFrame(raf);
   }, [open]);
 
-  const flat = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return q
-      ? manifests.filter((m) =>
-          `${m.label} ${m.id} ${m.provider} ${m.summary}`.toLowerCase().includes(q))
-      : manifests;
-  }, [manifests, query]);
-
-  const groups = useMemo(() => groupByProvider(flat), [flat]);
+  const runnable = useMemo(() => runnableModels(manifests, kind), [manifests, kind]);
+  const groups = useMemo(() => pickerGroups(manifests, kind, query), [manifests, kind, query]);
+  const flat = useMemo(() => groups.flatMap((g) => g.models), [groups]);
+  const q = query.trim().toLowerCase();
+  const showAuto = offersAuto && (!q || "auto".includes(q));
+  // keyboard order: auto first (when offered), then the rows as grouped.
+  const navIds = useMemo(
+    () => [...(showAuto ? [AUTO_MODEL] : []), ...flat.map((m) => m.id)],
+    [showAuto, flat],
+  );
 
   useEffect(() => {
-    setActive((a) => Math.min(a, Math.max(0, flat.length - 1)));
-  }, [flat.length]);
+    setActive((a) => Math.min(a, Math.max(0, navIds.length - 1)));
+  }, [navIds.length]);
 
   const pick = (id: string) => {
     onSelect(id);
@@ -127,20 +155,30 @@ export function ModelPicker({ manifests, selectedId, selected, onSelect, variant
     e.stopPropagation();
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setActive((a) => Math.min(flat.length - 1, a + 1));
+      setActive((a) => Math.min(navIds.length - 1, a + 1));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setActive((a) => Math.max(0, a - 1));
     } else if (e.key === "Enter") {
       e.preventDefault();
-      if (flat[active]) pick(flat[active].id);
+      if (navIds[active]) pick(navIds[active]);
     } else if (e.key === "Escape") {
       e.preventDefault();
       setOpen(false);
     }
   };
 
-  const label = selected?.label ?? (selectedId || "select a model");
+  const status = modelStatus(selectedId, models, modelsMeta.auto);
+  const warn = status.state === "missing" || status.state === "unavailable";
+  const label =
+    status.state === "auto" ? "Auto" : selected?.label ?? (selectedId || "select a model");
+  let sub = "";
+  if (status.state === "auto" || warn) sub = status.note;
+  else if (selected) {
+    // a voice / embed model has no token context: show just its provider.
+    sub = `${providerLabel(selected.provider)}${selected.context > 0 ? ` · ${formatContext(selected.context)} ctx` : ""}`;
+  }
+  const autoNote = modelStatus(AUTO_MODEL, models, modelsMeta.auto).note;
 
   // screen-space placement for the portaled panel: prefer below the trigger,
   // flip above when it would not fit, and clamp to the viewport otherwise.
@@ -170,20 +208,16 @@ export function ModelPicker({ manifests, selectedId, selected, onSelect, variant
     <div className={`modelpick ${variant}`} ref={rootRef}>
       <button
         type="button"
-        className={`mp-trigger nodrag ${open ? "open" : ""} ${selected ? "" : "missing"}`}
+        className={`mp-trigger nodrag ${open ? "open" : ""} ${warn || status.state === "none" ? "missing" : ""}`}
         onClick={() => setOpen((o) => !o)}
-        title={selected ? selected.summary : "no model selected"}
+        title={warn || status.state === "auto" ? status.note : selected ? selected.summary : "no model selected"}
       >
-        <span className="mp-trig-ico"><Icon name="sparkles" /></span>
+        <span className="mp-trig-ico">
+          <Icon name={warn ? "warning-outline" : "sparkles"} />
+        </span>
         <span className="mp-trig-text">
           <span className="mp-trig-label">{label}</span>
-          {selected && (
-            // a voice / embed model has no token context: show just its provider.
-            <span className="mp-trig-sub">
-              {providerLabel(selected.provider)}
-              {selected.context > 0 ? ` · ${formatContext(selected.context)} ctx` : ""}
-            </span>
-          )}
+          {sub && <span className={`mp-trig-sub ${warn ? "warn" : ""}`}>{sub}</span>}
         </span>
         <Icon name="chevron-expand-outline" className="mp-trig-chev" />
       </button>
@@ -202,9 +236,23 @@ export function ModelPicker({ manifests, selectedId, selected, onSelect, variant
             />
           </div>
           <div className="mp-list nowheel">
+            {showAuto && (
+              <button
+                type="button"
+                className={`mp-row ${navIds[active] === AUTO_MODEL ? "active" : ""} ${selectedId === AUTO_MODEL ? "selected" : ""}`}
+                onMouseEnter={() => setActive(0)}
+                onClick={() => pick(AUTO_MODEL)}
+              >
+                <span className="mp-row-main">
+                  <span className="mp-row-label">Auto</span>
+                  {selectedId === AUTO_MODEL && <Icon name="checkmark" className="mp-row-check" />}
+                </span>
+                <span className="mp-row-note">{autoNote}</span>
+              </button>
+            )}
             {flat.length === 0 ? (
-              manifests.length === 0 ? (
-                // No manifests at all for this kind: invite the user to add a connection.
+              runnable.length === 0 ? (
+                // Nothing of this family can run: invite the user to add a connection.
                 <button
                   type="button"
                   className="mp-getmore nodrag"
@@ -219,7 +267,7 @@ export function ModelPicker({ manifests, selectedId, selected, onSelect, variant
                   </span>
                   <Icon name="chevron-forward-outline" className="mp-getmore-arrow" />
                 </button>
-              ) : (
+              ) : showAuto ? null : (
                 <div className="mp-empty">no matching model</div>
               )
             ) : (
@@ -227,7 +275,7 @@ export function ModelPicker({ manifests, selectedId, selected, onSelect, variant
                 <div className="mp-group" key={grp.provider}>
                   <div className="mp-group-head">{providerLabel(grp.provider)}</div>
                   {grp.models.map((m) => {
-                    const idx = flat.indexOf(m);
+                    const idx = navIds.indexOf(m.id);
                     return (
                       <button
                         type="button"
@@ -235,6 +283,7 @@ export function ModelPicker({ manifests, selectedId, selected, onSelect, variant
                         className={`mp-row ${idx === active ? "active" : ""} ${m.id === selectedId ? "selected" : ""}`}
                         onMouseEnter={() => setActive(idx)}
                         onClick={() => pick(m.id)}
+                        title={m.summary}
                       >
                         <span className="mp-row-main">
                           <span className="mp-row-label">{m.label}</span>
@@ -248,6 +297,18 @@ export function ModelPicker({ manifests, selectedId, selected, onSelect, variant
               ))
             )}
           </div>
+          <div className="mp-foot">
+            <span className="mp-updated">{updatedLine(modelsMeta, Date.now())}</span>
+            <button
+              type="button"
+              className={`mp-refresh nodrag ${modelsMeta.refreshing ? "busy" : ""}`}
+              disabled={modelsMeta.refreshing}
+              onClick={() => void refreshModels()}
+              title="Ask every connected provider for its models now"
+            >
+              <Icon name="refresh-outline" /> Refresh
+            </button>
+          </div>
         </div>,
         document.body,
       )}
@@ -255,7 +316,8 @@ export function ModelPicker({ manifests, selectedId, selected, onSelect, variant
   );
 }
 
-/** The small capability chips on a model row: in→out modalities, tools, context. */
+/** The small capability chips on a model row: in→out modalities, tools,
+ *  thinking, context. */
 export function ModelChips({ manifest, compact = false }: { manifest: ModelManifest; compact?: boolean }) {
   return (
     <span className={`mp-chips ${compact ? "compact" : ""}`}>
@@ -287,6 +349,11 @@ export function ModelChips({ manifest, compact = false }: { manifest: ModelManif
       {manifest.tools && (
         <span className="mp-chip tools" title="supports tool-calls">
           <Icon name="construct-outline" /> tools
+        </span>
+      )}
+      {manifest.thinking && (
+        <span className="mp-chip think" title="can reason before it answers">
+          <Icon name="bulb-outline" /> think
         </span>
       )}
       {manifest.context > 0 && (

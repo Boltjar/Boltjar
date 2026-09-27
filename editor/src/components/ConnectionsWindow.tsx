@@ -133,7 +133,7 @@ interface OllamaPanelProps {
 }
 
 function OllamaPanel({ onRefetch: _onRefetch }: OllamaPanelProps) {
-  const { models } = useEditor();
+  const { models, refreshModels } = useEditor();
 
   const [localModels, setLocalModels] = useState<OllamaLocalModel[]>([]);
   const [loadingLib, setLoadingLib] = useState(false);
@@ -230,6 +230,7 @@ function OllamaPanel({ onRefetch: _onRefetch }: OllamaPanelProps) {
               setPulling(false);
               abortRef.current = null;
               refreshLib();
+              void refreshModels(); // the pulled model joins the picker
               setTimeout(() => {
                 setPullDone(null);
                 setPullName("");
@@ -275,6 +276,7 @@ function OllamaPanel({ onRefetch: _onRefetch }: OllamaPanelProps) {
     try {
       await fetch(`/api/connections/ollama/models/${encodeURIComponent(name)}`, { method: "DELETE" });
       refreshLib();
+      void refreshModels(); // and a deleted one leaves it
     } catch {
       // ignore
     }
@@ -374,7 +376,7 @@ function OllamaPanel({ onRefetch: _onRefetch }: OllamaPanelProps) {
                 <span className="ollama-lib-name">{m.name}</span>
                 <span className="ollama-lib-size">{fmtBytes(m.size)}</span>
                 <span className={`mp-chip ctx ${inPicker ? "in-picker" : "not-mapped"}`}>
-                  {inPicker ? "in picker" : "not mapped"}
+                  {inPicker ? "in picker" : "not in picker"}
                 </span>
                 <button
                   type="button"

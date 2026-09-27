@@ -658,11 +658,12 @@ function llmParams(config: Record<string, unknown>): Record<string, unknown> {
 }
 
 /** The model-driven node body (any node with a model widget): the same picker +
- *  per-model knob surface. The picker lists the models of the family the widget
- *  declares, so a TTS node only lists TTS models. With nothing picked it shows
- *  the model the backend runs, the widget's declared default (TTS xai/tts, STT
- *  fish/asr); a node whose default is empty (the LLM) shows a picker only and
- *  its base ports. */
+ *  per-model knob surface. The picker lists the runnable models of the family
+ *  the widget declares, so a TTS node only lists TTS models. With nothing picked
+ *  it shows the model the backend runs, the widget's declared default (TTS
+ *  xai/tts, STT fish/asr); a node whose default is empty (the LLM) shows a picker
+ *  only and its base ports. "auto" also keeps the base ports: the model it runs
+ *  can change with what is installed. */
 function LLMBody({
   config,
   widget,
@@ -685,7 +686,9 @@ function LLMBody({
   return (
     <div className="llm-body nodrag">
       <ModelPicker
-        manifests={[...models.values()].filter((m) => (m.kind ?? "llm") === (widget.model_kind || "llm"))}
+        manifests={[...new Set(models.values())]}
+        kind={widget.model_kind || "llm"}
+        offersAuto={widget.options.includes("auto")}
         selectedId={selectedId}
         selected={manifest}
         onSelect={onSelectModel}

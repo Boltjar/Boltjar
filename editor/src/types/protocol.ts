@@ -147,8 +147,14 @@ export interface ModelManifest {
   inputs: string[];
   outputs: string[];
   tools: boolean;
-  /** flag from the connections API: true when the provider's key/health is good. */
+  /** runnable now: its provider has a key / answers, and lists it. */
   available?: boolean;
+  /** why it is not runnable (only when available is false). */
+  reason?: string;
+  /** where it comes from: a TOML manifest, a provider's live list, or both. */
+  source?: "manifest" | "discovered" | "both";
+  /** other names its provider takes for it; `<provider>/<alias>` resolves to it. */
+  aliases?: string[];
   /** the model can reason; when true the LLM node grows a `reasoning` output. */
   thinking: boolean;
   /** how the thinking lever reshapes: effort | level | budget | token | bool. */
@@ -158,9 +164,26 @@ export interface ModelManifest {
   params: ModelParam[];
 }
 
-/** GET /api/models payload. */
+/** One provider's last answer to "which models do you have?". Times are ISO
+ *  8601 UTC. */
+export interface ProviderListing {
+  ok: boolean;
+  checked: string;
+  updated: string | null;
+  error: string | null;
+  count: number;
+}
+
+/** GET /api/models (and POST /api/models/refresh) payload: the live list. */
 export interface ModelsInfo {
   models: ModelManifest[];
+  /** the model an "auto" LLM runs now; null means the offline mock. */
+  auto?: string | null;
+  /** the newest successful refresh (ISO 8601 UTC); null before the first. */
+  updated?: string | null;
+  /** a background refresh is running (the list will change soon). */
+  refreshing?: boolean;
+  providers?: Record<string, ProviderListing>;
 }
 
 // --------------------------------------------------------------- db schema

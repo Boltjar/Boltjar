@@ -103,7 +103,7 @@ type MenuState = CanvasMenuRequest;
 
 export default function App() {
   const { nodes: defList, defs, loading: defsLoading, error: defsError } = useObjectInfo();
-  const { models, loading: modelsLoading } = useModels();
+  const { models, loading: modelsLoading, meta: modelsMeta, reload: reloadModels, refresh: refreshModels } = useModels();
 
   // ── tabs (browser-like multi-workflow strip) ─────────────────────────────
   // Each open tab is a backend slug. The EDITOR shows the active tab's graph;
@@ -1033,6 +1033,9 @@ export default function App() {
     () => ({
       defs,
       models,
+      modelsMeta,
+      reloadModels,
+      refreshModels,
       power: socket.power,
       nodeStatus: socket.nodeStatus,
       liveValues: socket.liveValues,
@@ -1072,6 +1075,9 @@ export default function App() {
     [
       defs,
       models,
+      modelsMeta,
+      reloadModels,
+      refreshModels,
       socket.power,
       socket.nodeStatus,
       socket.liveValues,
@@ -1342,7 +1348,11 @@ export default function App() {
 
       <ConnectionsWindow
         open={connectionsOpen}
-        onClose={() => setConnectionsOpen(false)}
+        onClose={() => {
+          setConnectionsOpen(false);
+          // a key added or removed changes which models can run.
+          void reloadModels();
+        }}
       />
 
       {pendingDelete && (

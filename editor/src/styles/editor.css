@@ -904,7 +904,7 @@ button{font-family:inherit;}
 
 .mp-panel{position:absolute; left:0; right:0; z-index:var(--z-tooltip);
   background:var(--surface-glass); backdrop-filter:blur(16px); border:1px solid var(--line-2); border-radius:var(--radius-md);
-  box-shadow:var(--shadow-pop); overflow:hidden; display:flex; flex-direction:column; max-height:300px;
+  box-shadow:var(--shadow-pop); overflow:hidden; display:flex; flex-direction:column; max-height:340px;
   animation:fadeup var(--dur-2) var(--ease-out) both;}
 .mp-panel.down{top:calc(100% + 5px);}
 .mp-panel.up{bottom:calc(100% + 5px);}
@@ -913,7 +913,7 @@ button{font-family:inherit;}
 .mp-search input{flex:1; min-width:0; background:none; border:none; outline:none; color:var(--ink-bright);
   font-family:var(--font-mono); font-size:var(--fs-xs); caret-color:var(--accent);}
 .mp-search input::placeholder{color:var(--ink-ghost);}
-.mp-list{overflow-y:auto; padding:4px;}
+.mp-list{overflow-y:auto; padding:4px; flex:1 1 auto; min-height:0;}
 .mp-empty{padding:14px 10px; font-family:var(--font-mono); font-size:10px; color:var(--ink-ghost); text-align:center;}
 .mp-group{padding:2px 0 4px;}
 .mp-group-head{font-family:var(--font-mono); font-size:9px; font-weight:600; text-transform:uppercase; letter-spacing:var(--tr-label);
@@ -938,6 +938,25 @@ button{font-family:inherit;}
 .mp-chip.tools{color:var(--t-tool); border:1px solid color-mix(in srgb, var(--t-tool) 45%, transparent); background:color-mix(in srgb, var(--t-tool) 10%, transparent); text-transform:uppercase; letter-spacing:var(--tr-label);}
 .mp-chip.tools svg{width:10px; height:10px;}
 .mp-chip.ctx{color:var(--ink-dim); border:1px solid var(--line-2); background:var(--bg-2);}
+.mp-chip.think{color:var(--fn-ai); border:1px solid color-mix(in srgb, var(--fn-ai) 45%, transparent); background:color-mix(in srgb, var(--fn-ai) 10%, transparent); text-transform:uppercase; letter-spacing:var(--tr-label);}
+.mp-chip.think svg{width:10px; height:10px;}
+
+/* the picked model can not run (vanished, not installed, no key): say why */
+.mp-trig-sub.warn{color:var(--warn);}
+/* the "auto" row: which model it runs now */
+.mp-row-note{font-family:var(--font-mono); font-size:9px; color:var(--ink-faint); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+/* footer: when the list was last updated + refresh on demand */
+.mp-foot{display:flex; align-items:center; gap:8px; padding:6px 8px 6px 10px; border-top:1px solid var(--line); flex:none;}
+.mp-updated{flex:1; min-width:0; font-family:var(--font-mono); font-size:9px; color:var(--ink-faint);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.mp-refresh{display:inline-flex; align-items:center; gap:4px; flex:none; cursor:pointer;
+  font-family:var(--font-mono); font-size:9px; text-transform:uppercase; letter-spacing:var(--tr-label); color:var(--ink-dim);
+  background:var(--bg-2); border:1px solid var(--line-2); border-radius:var(--radius-xs); padding:3px 7px;
+  transition:color var(--dur-1), border-color var(--dur-1);}
+.mp-refresh:hover:not(:disabled){color:var(--ink-bright); border-color:var(--accent);}
+.mp-refresh:disabled{cursor:default; opacity:0.7;}
+.mp-refresh svg{width:11px; height:11px;}
+.mp-refresh.busy svg{animation:spin 1.1s linear infinite;}
 
 /* param knobs */
 .knobs{display:flex; flex-direction:column; gap:6px; width:100%;}
