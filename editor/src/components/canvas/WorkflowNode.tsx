@@ -25,17 +25,16 @@ import { convertAction } from "../../lib/knobOptions";
 import {
   concreteInputs,
   concreteOutputs,
-  opVisible,
+  knobRowWidgets,
   llmPromoted,
   modelWidgetOf,
-  nodePromoted,
-  onBody,
   reservedInputNames,
   templateTags,
   DB_ID,
   KV_ID,
   LLM_ID,
   TEMPLATE_ID,
+  TEMPLATE_TEXT,
   WIRELESS_IN_ID,
   ROUTER_ID,
   type ConcretePort,
@@ -227,13 +226,13 @@ function WorkflowNodeImpl({ id, data, selected }: NodeProps) {
   const special = isChat || isPreview || isTemplate || isModelNode || isChatOut || isStore;
   const wide = isLLM || def.inputs.length + def.outputs.length >= 7;
 
-  // the widgets actually rendered on the body (not modal, visible under the current
-  // operation, not promoted to a port), so we can size around them. Special nodes
-  // render their own surface, so they have no inline knob rows here.
-  const promotedNames = new Set(nodePromoted(nd.config));
-  const bodyWidgets = special ? [] : def.widgets.filter(
-    (w) => onBody(w) && opVisible(w, nd.config) && !promotedNames.has(w.name),
-  );
+  // the widgets drawn as knob rows (lib/dynamicPorts knobRowWidgets): on body,
+  // in the current operation, not promoted to a port. A node with a surface of
+  // its own draws them under it, all but the widget the surface edits itself:
+  // the model picker's and the Template text editor's.
+  const knobWidgets = knobRowWidgets(def, nd.config, isTemplate ? [TEMPLATE_TEXT] : []);
+  // the rows a plain node sizes around (a surface node sizes around its surface)
+  const bodyWidgets = special ? [] : knobWidgets;
   const expandWidgets = bodyWidgets.filter((w) => w.expand);
   const fixedRows = bodyWidgets.length - expandWidgets.length;
   // resizable = a special single-surface body (Preview / Chat / Template) OR any
@@ -399,83 +398,89 @@ function WorkflowNodeImpl({ id, data, selected }: NodeProps) {
         </div>
       )}
 
-      {isChat && (
+      {/* ── the node's own surface, then its other knobs as rows under it ── */}
+      {special && (
         <div className="node-special">
-          <ChatBox
-            messages={chats[id] ?? []}
-            placeholder={String(nd.config.placeholder ?? "Message…")}
-            enabled={power === "on"}
-            onSend={(text) => sendChat(id, text)}
-            sendOnly
-          />
-        </div>
-      )}
+          {isChat && (
+            <ChatBox
+              messages={chats[id] ?? []}
+              // the send box's hint is the placeholder knob's value, as the knob shows it
+              placeholder={String(nd.config.placeholder ?? defaultOf(def, "placeholder") ?? "")}
+              enabled={power === "on"}
+              onSend={(text) => sendChat(id, text)}
+              sendOnly
+            />
+          )}
 
-      {isPreview && (
-        <div className="node-special">
-          <PreviewSurface
+          {isPreview && (
+            <PreviewSurface
+              nodeId={id}
+              inboundSources={inboundSources}
+              valueHistory={valueHistory}
+              power={power}
+              autoplay={Boolean(nd.config.autoplay)}
+              onAutoplay={(v) => updateConfig(id, "autoplay", v)}
+            />
+          )}
+
+          {isChatOut && (
+            <ChatConversation nodeId={id} inboundSources={inboundSources} valueHistory={valueHistory} power={power} />
+          )}
+
+          {isStore && (
+            <StoreBody
+              kind={isDbStore ? "db" : "kv"}
+              storeKey={storeKey}
+              nodeId={id}
+              disabled={disabled}
+              declared={declaredWidget ? nd.config[declaredWidget.name] : undefined}
+              onDeclare={declaredWidget ? (t) => updateConfig(id, declaredWidget.name, t) : undefined}
+            />
+          )}
+
+          {modelWidget && (
+            <LLMBody
+              config={nd.config}
+              widget={modelWidget}
+              onSelectModel={(mid) => setLlmModel(id, mid)}
+              onParamChange={(name, value) =>
+                updateConfig(id, "params", { ...llmParams(nd.config), [name]: value })
+              }
+              onPromote={(name) => promoteParam(id, name)}
+            />
+          )}
+
+          {isTemplate && (
+            <TemplateField
+              variant="inline"
+              fill={resizable}
+              value={String(nd.config[TEMPLATE_TEXT] ?? "")}
+              suggestions={templateSuggestions(id, inboundSources, nd.config, def)}
+              onChange={(v) => updateConfig(id, TEMPLATE_TEXT, v)}
+              placeholder="{tag} prose…"
+            />
+          )}
+
+          <InlineKnobs
+            def={def}
             nodeId={id}
-            inboundSources={inboundSources}
-            valueHistory={valueHistory}
-            power={power}
-            autoplay={Boolean(nd.config.autoplay)}
-            onAutoplay={(v) => updateConfig(id, "autoplay", v)}
-          />
-        </div>
-      )}
-
-      {isChatOut && (
-        <div className="node-special">
-          <ChatConversation nodeId={id} inboundSources={inboundSources} valueHistory={valueHistory} power={power} />
-        </div>
-      )}
-
-      {isStore && (
-        <div className="node-special">
-          <StoreBody
-            kind={isDbStore ? "db" : "kv"}
-            storeKey={storeKey}
-            nodeId={id}
-            disabled={disabled}
-            declared={declaredWidget ? nd.config[declaredWidget.name] : undefined}
-            onDeclare={declaredWidget ? (t) => updateConfig(id, declaredWidget.name, t) : undefined}
-          />
-        </div>
-      )}
-
-      {modelWidget && (
-        <div className="node-special">
-          <LLMBody
             config={nd.config}
-            widget={modelWidget}
-            onSelectModel={(mid) => setLlmModel(id, mid)}
-            onParamChange={(name, value) =>
-              updateConfig(id, "params", { ...llmParams(nd.config), [name]: value })
-            }
-            onPromote={(name) => promoteParam(id, name)}
+            widgets={knobWidgets}
+            bodyRows={[]}
+            inboundSources={inboundSources}
+            onChange={(k, v) => updateConfig(id, k, v)}
+            onPromote={(name) => promoteWidget(id, name)}
           />
         </div>
       )}
 
-      {isTemplate && (
-        <div className="node-special">
-          <TemplateField
-            variant="inline"
-            fill={resizable}
-            value={String(nd.config.template ?? "")}
-            suggestions={templateSuggestions(id, inboundSources, nd.config, def)}
-            onChange={(v) => updateConfig(id, "template", v)}
-            placeholder="{tag} prose…"
-          />
-        </div>
-      )}
-
-      {/* ── compact inline knobs (non-special nodes) ── */}
+      {/* ── compact inline knobs (a node with no surface of its own) ── */}
       {!special && (
         <InlineKnobs
           def={def}
           nodeId={id}
           config={nd.config}
+          widgets={knobWidgets}
           bodyRows={bodyRows}
           inboundSources={inboundSources}
           onChange={(k, v) => updateConfig(id, k, v)}
@@ -723,12 +728,13 @@ function LLMBody({
   );
 }
 
-/** Compact inline knobs for ordinary nodes: the one or two most-identifying
- *  config values, editable in place (text/number/bool/select), else a snippet. */
+/** A node's knob rows, editable in place (text/number/bool/select, a code or
+ *  store-sourced field), else a snippet of its config (`bodyRows`). */
 function InlineKnobs({
   def,
   nodeId,
   config,
+  widgets,
   bodyRows,
   inboundSources,
   onChange,
@@ -737,20 +743,16 @@ function InlineKnobs({
   def: import("../../types/protocol").NodeDef;
   nodeId: string;
   config: Record<string, unknown>;
+  /** the widgets drawn as rows (lib/dynamicPorts knobRowWidgets): EVERY declared
+   *  widget, with no inspector and no per-id subset, unless it is surface="modal"
+   *  (the shared modal) or "hidden" (never drawn), op-shaped and out of its op,
+   *  promoted to a port, or drawn by a surface of the node. */
+  widgets: Widget[];
   bodyRows: ReturnType<typeof bodySummary>;
   inboundSources: Map<string, InboundWire[]>;
   onChange: (key: string, value: unknown) => void;
   onPromote: (name: string) => void;
 }) {
-  // The body shows EVERY declared widget: there is no inspector and no per-id
-  // INLINE_KNOBS subset. A widget is shown unless it is: surface="modal" (opens
-  // the shared modal instead) or "hidden" (never drawn), op-shaped and out of its
-  // op, or promoted to a port.
-  const promoted = new Set(nodePromoted(config));
-  const widgets = def.widgets.filter(
-    (w) => onBody(w) && opVisible(w, config) && !promoted.has(w.name),
-  );
-
   if (widgets.length === 0) {
     if (bodyRows.length === 0) return null;
     return (

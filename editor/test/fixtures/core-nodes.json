@@ -11,7 +11,12 @@
     "name": "text",
     "kind": "code",
     "label": "Text",
-    "default": ""
+    "default": "",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    }
   ]
  },
@@ -27,7 +32,12 @@
     "name": "number",
     "kind": "number",
     "label": "Number",
-    "default": 0
+    "default": 0,
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    }
   ]
  },
@@ -43,7 +53,12 @@
     "name": "number",
     "kind": "number",
     "label": "Number",
-    "default": 0.0
+    "default": 0.0,
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    }
   ]
  },
@@ -59,7 +74,12 @@
     "name": "on",
     "kind": "bool",
     "label": "On",
-    "default": false
+    "default": false,
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    }
   ]
  },
@@ -75,7 +95,12 @@
     "name": "src",
     "kind": "text",
     "label": "URL or path",
-    "default": ""
+    "default": "",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    }
   ]
  },
@@ -91,7 +116,12 @@
     "name": "src",
     "kind": "text",
     "label": "URL or path",
-    "default": ""
+    "default": "",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    }
   ]
  },
@@ -112,37 +142,67 @@
     "name": "moods",
     "kind": "code",
     "label": "tag -> mood",
-    "default": "{\"laughing\":\"happy\",\"chuckling\":\"happy\",\"delighted\":\"happy\",\"grateful\":\"happy\",\"excited\":\"excited\",\"proud\":\"excited\",\"curious\":\"curious\",\"confused\":\"curious\",\"surprised\":\"surprised\",\"gasping\":\"surprised\",\"angry\":\"angry\",\"frustrated\":\"angry\",\"sad\":\"sad\",\"sighing\":\"sad\",\"sobbing\":\"sad\",\"disappointed\":\"sad\",\"worried\":\"sad\",\"embarrassed\":\"playful\",\"sarcastic\":\"playful\"}"
+    "default": "{\"laughing\":\"happy\",\"chuckling\":\"happy\",\"delighted\":\"happy\",\"grateful\":\"happy\",\"excited\":\"excited\",\"proud\":\"excited\",\"curious\":\"curious\",\"confused\":\"curious\",\"surprised\":\"surprised\",\"gasping\":\"surprised\",\"angry\":\"angry\",\"frustrated\":\"angry\",\"sad\":\"sad\",\"sighing\":\"sad\",\"sobbing\":\"sad\",\"disappointed\":\"sad\",\"worried\":\"sad\",\"embarrassed\":\"playful\",\"sarcastic\":\"playful\"}",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    },
    {
     "name": "actions",
     "kind": "code",
     "label": "tag -> action",
-    "default": "{\"wave\":\"wave\",\"nod\":\"nod\",\"dance\":\"dance\",\"point\":\"point\",\"think\":\"think\"}"
+    "default": "{\"wave\":\"wave\",\"nod\":\"nod\",\"dance\":\"dance\",\"point\":\"point\",\"think\":\"think\"}",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    },
    {
     "name": "priority",
     "kind": "code",
     "label": "tag -> priority",
-    "default": "{\"laughing\":9,\"sobbing\":9,\"crying loudly\":9,\"sighing\":8,\"chuckling\":7,\"angry\":7,\"sad\":7,\"excited\":7,\"surprised\":7,\"delighted\":7,\"disappointed\":7,\"frustrated\":7,\"embarrassed\":6,\"gasping\":6,\"grateful\":6,\"proud\":6,\"curious\":6,\"confused\":6,\"worried\":6,\"sarcastic\":6,\"whispering\":5,\"soft\":4,\"calm\":4}"
+    "default": "{\"laughing\":9,\"sobbing\":9,\"crying loudly\":9,\"sighing\":8,\"chuckling\":7,\"angry\":7,\"sad\":7,\"excited\":7,\"surprised\":7,\"delighted\":7,\"disappointed\":7,\"frustrated\":7,\"embarrassed\":6,\"gasping\":6,\"grateful\":6,\"proud\":6,\"curious\":6,\"confused\":6,\"worried\":6,\"sarcastic\":6,\"whispering\":5,\"soft\":4,\"calm\":4}",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    },
    {
     "name": "default",
     "kind": "text",
     "label": "default mood",
-    "default": "neutral"
+    "default": "neutral",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    },
    {
     "name": "max_emoji",
     "kind": "number",
     "label": "max emoji (0 = no cap)",
-    "default": 3
+    "default": 3,
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    },
    {
     "name": "emoji",
     "kind": "bool",
     "label": "tags -> emoji in clean text",
-    "default": true
+    "default": true,
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    }
   ]
  },
@@ -163,31 +223,56 @@
     "name": "emoji",
     "kind": "bool",
     "label": "strip emoji",
-    "default": true
+    "default": true,
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    },
    {
     "name": "markdown",
     "kind": "bool",
     "label": "strip markdown",
-    "default": true
+    "default": true,
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    },
    {
     "name": "tags",
     "kind": "bool",
     "label": "strip [tags]",
-    "default": true
+    "default": true,
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    },
    {
     "name": "actions",
     "kind": "bool",
     "label": "strip *actions*",
-    "default": true
+    "default": true,
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    },
    {
     "name": "urls",
     "kind": "bool",
     "label": "strip urls",
-    "default": true
+    "default": true,
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    }
   ]
  },
@@ -203,25 +288,45 @@
     "name": "monitor",
     "kind": "select",
     "label": "Monitor",
-    "default": "Primary"
+    "default": "Primary",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    },
    {
     "name": "max_dim",
     "kind": "number",
     "label": "max dimension",
-    "default": 1280
+    "default": 1280,
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    },
    {
     "name": "format",
     "kind": "select",
     "label": "Format",
-    "default": "jpeg"
+    "default": "jpeg",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    },
    {
     "name": "quality",
     "kind": "number",
     "label": "jpeg quality",
-    "default": 60
+    "default": 60,
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    }
   ]
  },
@@ -242,25 +347,45 @@
     "name": "title",
     "kind": "text",
     "label": "Title",
-    "default": ""
+    "default": "",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    },
    {
     "name": "max_dim",
     "kind": "number",
     "label": "max dimension",
-    "default": 1280
+    "default": 1280,
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    },
    {
     "name": "format",
     "kind": "select",
     "label": "Format",
-    "default": "jpeg"
+    "default": "jpeg",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    },
    {
     "name": "quality",
     "kind": "number",
     "label": "jpeg quality",
-    "default": 60
+    "default": 60,
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    }
   ]
  },
@@ -276,7 +401,12 @@
     "name": "list_all",
     "kind": "bool",
     "label": "list all windows",
-    "default": false
+    "default": false,
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    }
   ]
  },
@@ -292,13 +422,23 @@
     "name": "format",
     "kind": "select",
     "label": "Format",
-    "default": "2026-06-08 14:30:00"
+    "default": "2026-06-08 14:30:00",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    },
    {
     "name": "timezone",
     "kind": "select",
     "label": "Timezone",
-    "default": "Local"
+    "default": "Local",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    }
   ]
  },
@@ -314,7 +454,12 @@
     "name": "seconds",
     "kind": "number",
     "label": "Seconds",
-    "default": 2.0
+    "default": 2.0,
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    }
   ]
  },
@@ -330,13 +475,23 @@
     "name": "cron",
     "kind": "text",
     "label": "cron (min hour day month weekday)",
-    "default": "0 * * * *"
+    "default": "0 * * * *",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    },
    {
     "name": "timezone",
     "kind": "select",
     "label": "Timezone",
-    "default": "Local"
+    "default": "Local",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    }
   ]
  },
@@ -361,7 +516,12 @@
     "name": "placeholder",
     "kind": "text",
     "label": "Placeholder",
-    "default": "Type a message..."
+    "default": "Type a message...",
+    "surface": "body",
+    "promotable": false,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    }
   ]
  },
@@ -377,7 +537,12 @@
     "name": "placeholder",
     "kind": "text",
     "label": "Placeholder",
-    "default": "Hold to talk..."
+    "default": "Hold to talk...",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    }
   ]
  },
@@ -393,19 +558,34 @@
     "name": "path",
     "kind": "text",
     "label": "path",
-    "default": "my-hook"
+    "default": "my-hook",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    },
    {
     "name": "method",
     "kind": "select",
     "label": "Method",
-    "default": "POST"
+    "default": "POST",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    },
    {
     "name": "secret",
     "kind": "text",
     "label": "X-Webhook-Secret (optional)",
-    "default": ""
+    "default": "",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    }
   ]
  },
@@ -430,7 +610,12 @@
     "name": "template",
     "kind": "code",
     "label": "Template",
-    "default": "{in}"
+    "default": "{in}",
+    "surface": "body",
+    "promotable": false,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    }
   ]
  },
@@ -451,13 +636,23 @@
     "name": "item",
     "kind": "code",
     "label": "Item",
-    "default": "{sender}: {message}"
+    "default": "{sender}: {message}",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    },
    {
     "name": "separator",
     "kind": "select",
     "label": "separator",
-    "default": "\\n"
+    "default": "\\n",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    }
   ]
  },
@@ -492,7 +687,12 @@
     "name": "expression",
     "kind": "code",
     "label": "Expression",
-    "default": "value"
+    "default": "value",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    }
   ]
  },
@@ -517,7 +717,12 @@
     "name": "expression",
     "kind": "code",
     "label": "Expression",
-    "default": "value"
+    "default": "value",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    }
   ]
  },
@@ -546,7 +751,12 @@
     "name": "model",
     "kind": "model",
     "label": "Model",
-    "default": ""
+    "default": "",
+    "surface": "body",
+    "promotable": false,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": "llm"
    }
   ]
  },
@@ -567,25 +777,47 @@
     "name": "name",
     "kind": "text",
     "label": "name",
-    "default": "my_tool"
+    "default": "my_tool",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    },
    {
     "name": "description",
     "kind": "code",
     "label": "Description",
-    "default": "Describe what this tool does for the model."
+    "default": "Describe what this tool does for the model.",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    },
    {
     "name": "schema_mode",
     "kind": "select",
     "label": "Schema Mode",
-    "default": "auto"
+    "default": "auto",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    },
    {
     "name": "schema",
     "kind": "code",
     "label": "Schema",
-    "default": "{\"type\":\"object\",\"properties\":{},\"required\":[]}"
+    "default": "{\"type\":\"object\",\"properties\":{},\"required\":[]}",
+    "surface": "body",
+    "promotable": true,
+    "op_field": "schema_mode",
+    "op_values": [
+     "manual"
+    ],
+    "model_kind": null
    }
   ]
  },
@@ -606,7 +838,12 @@
     "name": "fields",
     "kind": "text",
     "label": "Arguments",
-    "default": ""
+    "default": "",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    }
   ]
  },
@@ -631,7 +868,12 @@
     "name": "model",
     "kind": "model",
     "label": "Model",
-    "default": "fish/asr"
+    "default": "fish/asr",
+    "surface": "body",
+    "promotable": false,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": "stt"
    }
   ]
  },
@@ -660,7 +902,12 @@
     "name": "model",
     "kind": "model",
     "label": "Model",
-    "default": "xai/tts"
+    "default": "xai/tts",
+    "surface": "body",
+    "promotable": false,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": "tts"
    }
   ]
  },
@@ -685,7 +932,12 @@
     "name": "model",
     "kind": "model",
     "label": "Model",
-    "default": "ollama/bge-m3"
+    "default": "ollama/bge-m3",
+    "surface": "body",
+    "promotable": false,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": "embed"
    }
   ]
  },
@@ -714,7 +966,12 @@
     "name": "model",
     "kind": "model",
     "label": "Model",
-    "default": "rerank/bge-v2-m3"
+    "default": "rerank/bge-v2-m3",
+    "surface": "body",
+    "promotable": false,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": "rerank"
    }
   ]
  },
@@ -735,19 +992,34 @@
     "name": "size",
     "kind": "number",
     "label": "size",
-    "default": 800
+    "default": 800,
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    },
    {
     "name": "overlap",
     "kind": "number",
     "label": "overlap",
-    "default": 120
+    "default": 120,
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    },
    {
     "name": "by",
     "kind": "select",
     "label": "By",
-    "default": "chars"
+    "default": "chars",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    }
   ]
  },
@@ -807,37 +1079,75 @@
     "name": "operation",
     "kind": "select",
     "label": "Operation",
-    "default": "search"
+    "default": "search",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    },
    {
     "name": "namespace",
     "kind": "text",
     "label": "Namespace",
-    "default": "default"
+    "default": "default",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    },
    {
     "name": "top_k",
     "kind": "number",
     "label": "top k",
-    "default": 5
+    "default": 5,
+    "surface": "body",
+    "promotable": true,
+    "op_field": "operation",
+    "op_values": [
+     "search"
+    ],
+    "model_kind": null
    },
    {
     "name": "min_score",
     "kind": "number",
     "label": "min score",
-    "default": 0.45
+    "default": 0.45,
+    "surface": "body",
+    "promotable": true,
+    "op_field": "operation",
+    "op_values": [
+     "search"
+    ],
+    "model_kind": null
    },
    {
     "name": "metadata",
     "kind": "code",
     "label": "Metadata",
-    "default": ""
+    "default": "",
+    "surface": "body",
+    "promotable": true,
+    "op_field": "operation",
+    "op_values": [
+     "index"
+    ],
+    "model_kind": null
    },
    {
     "name": "ref",
     "kind": "text",
     "label": "Ref",
-    "default": ""
+    "default": "",
+    "surface": "body",
+    "promotable": true,
+    "op_field": "operation",
+    "op_values": [
+     "delete"
+    ],
+    "model_kind": null
    }
   ]
  },
@@ -853,7 +1163,12 @@
     "name": "schema",
     "kind": "schema",
     "label": "Schema",
-    "default": []
+    "default": [],
+    "surface": "hidden",
+    "promotable": false,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    }
   ]
  },
@@ -882,31 +1197,71 @@
     "name": "operation",
     "kind": "select",
     "label": "Operation",
-    "default": "query"
+    "default": "query",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    },
    {
     "name": "sql",
     "kind": "code",
     "label": "Sql",
-    "default": ""
+    "default": "",
+    "surface": "body",
+    "promotable": true,
+    "op_field": "operation",
+    "op_values": [
+     "query",
+     "exec"
+    ],
+    "model_kind": null
    },
    {
     "name": "table",
     "kind": "text",
     "label": "Table",
-    "default": ""
+    "default": "",
+    "surface": "body",
+    "promotable": true,
+    "op_field": "operation",
+    "op_values": [
+     "insert",
+     "find",
+     "update",
+     "delete"
+    ],
+    "model_kind": null
    },
    {
     "name": "fields",
     "kind": "code",
     "label": "Fields",
-    "default": ""
+    "default": "",
+    "surface": "body",
+    "promotable": true,
+    "op_field": "operation",
+    "op_values": [
+     "insert",
+     "update"
+    ],
+    "model_kind": null
    },
    {
     "name": "where",
     "kind": "code",
     "label": "Where",
-    "default": ""
+    "default": "",
+    "surface": "body",
+    "promotable": true,
+    "op_field": "operation",
+    "op_values": [
+     "find",
+     "update",
+     "delete"
+    ],
+    "model_kind": null
    }
   ]
  },
@@ -969,7 +1324,12 @@
     "name": "path",
     "kind": "text",
     "label": "Path",
-    "default": ""
+    "default": "",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    }
   ]
  },
@@ -990,7 +1350,12 @@
     "name": "keys",
     "kind": "text",
     "label": "Keys",
-    "default": ""
+    "default": "",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    }
   ]
  },
@@ -1011,7 +1376,12 @@
     "name": "path",
     "kind": "text",
     "label": "Path",
-    "default": ""
+    "default": "",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    }
   ]
  },
@@ -1040,7 +1410,12 @@
     "name": "path",
     "kind": "text",
     "label": "Path",
-    "default": ""
+    "default": "",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    }
   ]
  },
@@ -1069,7 +1444,12 @@
     "name": "path",
     "kind": "text",
     "label": "Path",
-    "default": ""
+    "default": "",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    }
   ]
  },
@@ -1094,7 +1474,12 @@
     "name": "path",
     "kind": "text",
     "label": "Path",
-    "default": ""
+    "default": "",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    }
   ]
  },
@@ -1115,7 +1500,12 @@
     "name": "path",
     "kind": "text",
     "label": "Path",
-    "default": ""
+    "default": "",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    }
   ]
  },
@@ -1153,25 +1543,54 @@
     "name": "operation",
     "kind": "select",
     "label": "Operation",
-    "default": "get"
+    "default": "get",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    },
    {
     "name": "key",
     "kind": "text",
     "label": "Key",
-    "default": ""
+    "default": "",
+    "surface": "body",
+    "promotable": true,
+    "op_field": "operation",
+    "op_values": [
+     "get",
+     "set",
+     "delete",
+     "has"
+    ],
+    "model_kind": null
    },
    {
     "name": "value",
     "kind": "code",
     "label": "Value",
-    "default": ""
+    "default": "",
+    "surface": "body",
+    "promotable": true,
+    "op_field": "operation",
+    "op_values": [
+     "set"
+    ],
+    "model_kind": null
    },
    {
     "name": "prefix",
     "kind": "text",
     "label": "Prefix",
-    "default": ""
+    "default": "",
+    "surface": "body",
+    "promotable": true,
+    "op_field": "operation",
+    "op_values": [
+     "keys"
+    ],
+    "model_kind": null
    }
   ]
  },
@@ -1196,55 +1615,100 @@
     "name": "amount",
     "kind": "number",
     "label": "nudge amount",
-    "default": 1.0
+    "default": 1.0,
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    },
    {
     "name": "to",
     "kind": "number",
     "label": "set to",
-    "default": 0.0
+    "default": 0.0,
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    },
    {
     "name": "rest",
     "kind": "number",
     "label": "rest",
-    "default": 0
+    "default": 0,
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    },
    {
     "name": "rate",
     "kind": "number",
     "label": "drift rate / sec",
-    "default": 0
+    "default": 0,
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    },
    {
     "name": "min",
     "kind": "number",
     "label": "min",
-    "default": 0
+    "default": 0,
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    },
    {
     "name": "max",
     "kind": "number",
     "label": "max",
-    "default": 100
+    "default": 100,
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    },
    {
     "name": "threshold",
     "kind": "number",
     "label": "threshold",
-    "default": 50
+    "default": 50,
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    },
    {
     "name": "start",
     "kind": "number",
     "label": "start",
-    "default": 0
+    "default": 0,
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    },
    {
     "name": "persist",
     "kind": "bool",
     "label": "persist across restart",
-    "default": false
+    "default": false,
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    }
   ]
  },
@@ -1265,13 +1729,23 @@
     "name": "poll",
     "kind": "number",
     "label": "poll (seconds)",
-    "default": 60
+    "default": 60,
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    },
    {
     "name": "table",
     "kind": "text",
     "label": "Table",
-    "default": "agenda"
+    "default": "agenda",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    }
   ]
  },
@@ -1296,37 +1770,67 @@
     "name": "method",
     "kind": "select",
     "label": "Method",
-    "default": "GET"
+    "default": "GET",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    },
    {
     "name": "url",
     "kind": "text",
     "label": "Url",
-    "default": "https://"
+    "default": "https://",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    },
    {
     "name": "headers",
     "kind": "code",
     "label": "Headers",
-    "default": ""
+    "default": "",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    },
    {
     "name": "query",
     "kind": "code",
     "label": "Query",
-    "default": ""
+    "default": "",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    },
    {
     "name": "body",
     "kind": "code",
     "label": "Body",
-    "default": ""
+    "default": "",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    },
    {
     "name": "response_type",
     "kind": "select",
     "label": "response",
-    "default": "auto"
+    "default": "auto",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    }
   ]
  },
@@ -1347,7 +1851,12 @@
     "name": "label",
     "kind": "text",
     "label": "Label",
-    "default": "log"
+    "default": "log",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    }
   ]
  },
@@ -1386,7 +1895,12 @@
     "name": "channel",
     "kind": "select",
     "label": "Channel",
-    "default": "1"
+    "default": "1",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    }
   ]
  },
@@ -1402,7 +1916,12 @@
     "name": "channel",
     "kind": "select",
     "label": "Channel",
-    "default": "1"
+    "default": "1",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    }
   ]
  },
@@ -1423,7 +1942,12 @@
     "name": "label",
     "kind": "text",
     "label": "label",
-    "default": ""
+    "default": "",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    }
   ]
  },
@@ -1498,13 +2022,23 @@
     "name": "amount",
     "kind": "number",
     "label": "amount",
-    "default": 1
+    "default": 1,
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    },
    {
     "name": "unit",
     "kind": "select",
     "label": "Unit",
-    "default": "Seconds"
+    "default": "Seconds",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    }
   ]
  },
@@ -1529,7 +2063,12 @@
     "name": "timeout",
     "kind": "number",
     "label": "ack timeout (s, 0 = wait forever)",
-    "default": 300
+    "default": 300,
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    }
   ]
  },
@@ -1604,7 +2143,12 @@
     "name": "channel",
     "kind": "text",
     "label": "stream channel",
-    "default": "avatar"
+    "default": "avatar",
+    "surface": "body",
+    "promotable": true,
+    "op_field": null,
+    "op_values": [],
+    "model_kind": null
    }
   ]
  }

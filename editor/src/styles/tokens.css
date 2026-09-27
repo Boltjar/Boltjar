@@ -180,6 +180,10 @@
   --space-7:  48px;
   --space-8:  64px;
 
+  /* The gap between knobs stacked under a node's surface (a model's params,
+     then the node's other knob rows): one value, so they read as one stack. */
+  --knob-gap: 6px;
+
   /* Canvas grid geometry */
   --grid-cell:      24px;
   --grid-major-mul: 5;

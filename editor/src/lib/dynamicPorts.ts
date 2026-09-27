@@ -21,6 +21,8 @@ import type { ModelManifest, ModelParam, NodeDef, Port, Widget, WidgetKind } fro
 
 /** The Template node id; its growable port is driven by the template string. */
 export const TEMPLATE_ID = "core.data.template";
+/** The Template's text widget, which the node's own text editor draws. */
+export const TEMPLATE_TEXT = "template";
 
 /** The consolidated KV node id; the 'operation' knob reshapes its visible
  *  knobs + output ports. Knobs are templates ({tag} from wired inputs,
@@ -47,6 +49,24 @@ export function opVisible(
  *  the node keeps with the graph, such as a store's declared schema). */
 export function onBody(w: { surface?: string }): boolean {
   return (w.surface ?? "body") === "body";
+}
+
+/** The widgets a node draws as knob rows on its body: each body widget shown
+ *  for the current operation and not promoted to a port. A node with a surface
+ *  of its own draws its knob rows too, under the surface, so Chat Input's
+ *  placeholder and a pack model node's own knobs are on the canvas like any
+ *  knob. Left out is what a surface already draws: the model picker draws the
+ *  model widget (kind "model"), and `drawnBySurface` names any widget another
+ *  surface edits. */
+export function knobRowWidgets(
+  def: NodeDef,
+  config: Record<string, unknown>,
+  drawnBySurface: readonly string[] = [],
+): Widget[] {
+  const promoted = new Set(nodePromoted(config));
+  return def.widgets.filter((w) =>
+    onBody(w) && w.kind !== "model" && !drawnBySurface.includes(w.name)
+    && opVisible(w, config) && !promoted.has(w.name));
 }
 
 /** The Build JSON node id; each wired named input becomes a key in the json object. */

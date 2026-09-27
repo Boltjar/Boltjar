@@ -292,6 +292,8 @@ button{font-family:inherit;}
 .node.resizable .ib.code.expand .secret-ac, .node.resizable .ib.code.expand .secret-ac textarea{flex:1 1 0; max-height:none; min-height:0;}
 /* the Preview / Chat bodies grow to fill a resized node too (not just text blocks) */
 .node.resizable .node-special{flex:1 1 auto; min-height:0; display:flex; flex-direction:column;}
+/* knob rows under a surface keep their own height; the surface takes the rest */
+.node.resizable .node-special > .node-body{flex:none;}
 .node.resizable .pv-wrap{flex:1 1 auto; min-height:0; display:flex; flex-direction:column;}
 .node.resizable .pv-term, .node.resizable .pv-json,
 .node.resizable .pv-empty{flex:1 1 auto; min-height:0; max-height:none;}
@@ -654,6 +656,11 @@ button{font-family:inherit;}
    NODE-SPECIAL SURFACES (chat, preview, template) on the card body
    ========================================================================== */
 .node-special{padding:0 11px 10px;}
+/* a node's other knobs, as rows under its surface (Chat Input's placeholder under
+   the send box, a pack model node's own knobs under its params): the surface's
+   inset, and the same gap as the params above so every knob under the picker
+   sits the same distance apart */
+.node-special > .node-body{padding:var(--knob-gap) 0 0; gap:var(--knob-gap);}
 
 /* Chat Input box */
 .chatbox{display:flex; flex-direction:column; gap:7px;
@@ -973,7 +980,7 @@ button{font-family:inherit;}
 .mp-refresh.busy svg{animation:spin 1.1s linear infinite;}
 
 /* param knobs */
-.knobs{display:flex; flex-direction:column; gap:6px; width:100%;}
+.knobs{display:flex; flex-direction:column; gap:var(--knob-gap); width:100%;}
 .knob{position:relative;}
 .knob-lbl{font-family:var(--font-mono); font-size:9px; text-transform:uppercase; letter-spacing:var(--tr-label); color:var(--ink-dim); flex:none;}
 /* number knob */
