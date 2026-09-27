@@ -390,7 +390,8 @@ def openai_manifest(provider: str, entry: dict, *, openai_api: bool = False) -> 
 
 # ------------------------------------------------------------------ discovery
 
-def _ollama_base() -> str:
+def ollama_base() -> str:
+    """Where Ollama answers: OLLAMA_BASE_URL, else its default local address."""
     return os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
 
 
@@ -413,7 +414,7 @@ _LOOPBACK = {"localhost", "127.0.0.1", "::1"}
 def _base_url(provider: str) -> str:
     """Where discovery asks `provider` (for telling a local server from a remote one)."""
     if provider == "ollama":
-        return _ollama_base()
+        return ollama_base()
     if provider == "xai":
         return XAI_MODELS_URL
     if provider == "anthropic":
@@ -436,7 +437,7 @@ def failure_kind(exc: BaseException, provider: str) -> str:
 
 
 async def _discover_ollama(client: httpx.AsyncClient) -> list[ModelManifest]:
-    base = _ollama_base()
+    base = ollama_base()
     resp = await client.get(f"{base}/api/tags")
     _check(resp, "Ollama")
     tags = [t for t in resp.json().get("models") or [] if isinstance(t, dict)]

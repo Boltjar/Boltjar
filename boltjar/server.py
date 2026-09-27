@@ -61,6 +61,7 @@ from boltjar.graph_format import GraphFormatError, format_of, migrate
 from boltjar import __version__, models
 from boltjar import endpoints as _endpoints
 from boltjar import model_discovery as _discovery
+from boltjar import ollama as _ollama
 from boltjar import packs as _packs
 from boltjar.console import GraphLines
 import boltjar.secrets as _secrets
@@ -295,9 +296,11 @@ async def shutdown_all() -> int:
     """Stop every running graph (services and stores close cleanly) and end
     every live connection, the editors' /ws and the /stream media clients, so
     the server exits on one Ctrl+C. The graphs stop side by side: one whose
-    stop hangs holds up none of the others. Safe to call twice. Returns how
-    many graphs were stopped."""
+    stop hangs holds up none of the others. Then the Ollama this process
+    started, if any, stops too. Safe to call twice. Returns how many graphs
+    were stopped."""
     stopped = await asyncio.gather(*(_stop_for_exit(hub) for hub in list(HUBS.values())))
+    await _ollama.stop_if_started()  # only the Ollama this process started
     return sum(stopped)
 
 
@@ -1034,8 +1037,29 @@ async def runtime_chat(slug: str, body: dict = Body(...)):
 
 @app.get("/api/connections")
 def api_connections() -> dict:
-    """Return the connectivity status of every known provider."""
-    return {"providers": _secrets.provider_status()}
+    """Return the connectivity status of every known provider. Ollama's entry
+    also carries `local`: whether it is installed here, stopped or running
+    (boltjar.ollama.status), so its card offers the right next step."""
+    providers = _secrets.provider_status()
+    for entry in providers:
+        if entry["provider"] == "ollama":
+            entry["local"] = _ollama.status(entry["connected"])
+    return {"providers": providers}
+
+
+@app.post("/api/connections/ollama/start")
+async def api_start_ollama():
+    """Start the Ollama installed on this computer (`ollama serve`, output in
+    user/logs/ollama.log) and wait until it answers. Boltjar stops it again
+    when it exits. 409 when it is not installed here, 502 when it did not come
+    up (the error names the log)."""
+    result = await _ollama.start()
+    _secrets.forget_ollama_status()
+    if result["ok"]:
+        _discovery.schedule_refresh({"ollama"}, changed=True)  # its models join the list
+        return result
+    status = 409 if result["state"] == _ollama.NOT_INSTALLED or not result["started"] else 502
+    return JSONResponse(result, status_code=status)
 
 
 @app.post("/api/connections/providers/{provider}/key")

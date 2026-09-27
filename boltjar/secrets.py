@@ -222,6 +222,12 @@ def _ollama_connected() -> bool:
     return result
 
 
+def forget_ollama_status() -> None:
+    """Ask Ollama again on the next check: it was just started or stopped."""
+    global _ollama_cache
+    _ollama_cache = None
+
+
 def provider_status() -> list[dict]:
     """Return one entry per provider: {provider, connected, envVar}.
 
