@@ -795,7 +795,8 @@ class Manual:
       summary="Type a message and send it into the live graph.",
       icon="chatbubble-ellipses-outline", subline="chat · on send")
 class ChatInput:
-    placeholder: str = "Type a message..."
+    # the send box's hint on the canvas, never an input
+    placeholder: Widget = Widget(kind="text", default="Type a message...", promotable=False)
     outputs = [Port("trigger", "event"), Port("text", "text")]
 
     async def start(self, ctx):
@@ -846,7 +847,8 @@ class WebhookTrigger:
                            "text. A node that reads `out` gets the current turn's text.",
       icon="document-text-outline", subline="template · {template|tags}")
 class Template:
-    template: Widget = code("{in}", expand=True)
+    # the Template's own body: its text is the node, so it never becomes an input
+    template: Widget = Widget(kind="code", default="{in}", expand=True, promotable=False)
     # `trigger` fires the node and must be wired (Chat History -> Template -> LLM):
     # a fire pulls the tags, assembles, emits `out`, then passes the trigger on.
     # The Template is also pulled, so a node that reads `out` gets this turn's
