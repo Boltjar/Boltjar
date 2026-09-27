@@ -29,7 +29,7 @@ function check(label, got, want) {
 const row = (group, key) => ({ group, key });
 const keys = (rows) => rows.map((r) => r.key);
 
-check("the drawn heading order", PALETTE_GROUPS, ["Add node", "Actions", "Help", "Go to node"]);
+check("the drawn heading order", PALETTE_GROUPS, ["Add node", "Actions", "File", "Help", "Go to node"]);
 
 // a caller that lists a Help action first, and one between two ordinary actions
 const passed = [
@@ -39,10 +39,11 @@ const passed = [
   row("Help", "act:help-bug"),
   row("Actions", "act:fit"),
   row("Go to node", "go:llm"),
+  row("File", "act:file-export"),
 ];
 const ordered = inGroupOrder(passed);
 check("rows come out group by group in the drawn order",
-  keys(ordered), ["add:text", "act:save", "act:fit", "act:help-docs", "act:help-bug", "go:llm"]);
+  keys(ordered), ["add:text", "act:save", "act:fit", "act:file-export", "act:help-docs", "act:help-bug", "go:llm"]);
 check("each group keeps the order it came in",
   keys(ordered.filter((r) => r.group === "Help")), ["act:help-docs", "act:help-bug"]);
 check("no row is lost or doubled", ordered.length, passed.length);
@@ -50,7 +51,8 @@ check("no row is lost or doubled", ordered.length, passed.length);
 // the keyboard: ↓ from the last ordinary action lands on the first Help row,
 // the row drawn right below it, and walks every group without jumping back.
 const at = (key) => ordered.findIndex((r) => r.key === key);
-check("down from the last action is the first Help row", ordered[at("act:fit") + 1].key, "act:help-docs");
+check("down from the last action is the first File row", ordered[at("act:fit") + 1].key, "act:file-export");
+check("down from the last File row is the first Help row", ordered[at("act:file-export") + 1].key, "act:help-docs");
 const walk = ordered.map((r) => PALETTE_GROUPS.indexOf(r.group));
 check("a full walk never goes back to an earlier group", walk.every((g, i) => i === 0 || g >= walk[i - 1]), true);
 

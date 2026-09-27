@@ -5,7 +5,7 @@
 // below, whatever order a caller passes its actions in.
 // ============================================================================
 
-export const PALETTE_GROUPS = ["Add node", "Actions", "Help", "Go to node"] as const;
+export const PALETTE_GROUPS = ["Add node", "Actions", "File", "Help", "Go to node"] as const;
 export type PaletteGroup = (typeof PALETTE_GROUPS)[number];
 
 /** `rows` in PALETTE_GROUPS order, each group keeping the order it came in. */

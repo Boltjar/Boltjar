@@ -1,6 +1,6 @@
 // ============================================================================
 // CommandPalette: the ⌘K overlay. Grouped results (Add node,
-// Actions, Help, Go to node) over a scrim, keyboard-navigable (↑/↓/Enter/Esc), with
+// Actions, File, Help, Go to node) over a scrim, keyboard-navigable (↑/↓/Enter/Esc), with
 // the active row carrying a full accent ring (never a single-side stripe) and a
 // forward marker.
 // ============================================================================
@@ -21,9 +21,9 @@ export interface PaletteAction {
   hint: string;
   icon: string;
   kbd?: string;
-  /** the heading it lists under: "Actions" (default) or "Help". A query that
-   *  names the group ("help") finds all of its actions. */
-  group?: "Actions" | "Help";
+  /** the heading it lists under: "Actions" (default), "File" or "Help". A
+   *  query that names the group ("help", "file") finds all of its actions. */
+  group?: "Actions" | "File" | "Help";
   run: () => void;
 }
 
