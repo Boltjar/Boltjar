@@ -18,6 +18,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Graph, Problem, RunEvent } from "../types/protocol";
 import { liveEdgeKey, type Power } from "../lib/liveClassify";
+import { consoleText } from "../lib/mediaSummary";
 
 export type NodeRunStatus = "idle" | "running" | "ok" | "warn" | "error";
 export type { Power };
@@ -27,6 +28,8 @@ export interface ConsoleLine {
   ts: string;
   level: "info" | "ok" | "warn" | "bad";
   node?: string;
+  /** one console-safe line (lib/mediaSummary): media as "mime · size", long
+   *  text cut with its total length, never a base64 payload. */
   message: string;
   tag?: string;
 }
@@ -80,18 +83,13 @@ export interface RunSocketState {
 const MAX_LOG = 300;
 const HIST_KEEP = 48; // points retained per port for sparklines
 const MAX_CHAT = 80;
+const VALUE_MAX = 60; // chars of a value shown after `port =`
+const MESSAGE_MAX = 500; // chars of a log / error line before it is cut
 
 function nowStamp(): string {
   const d = new Date();
   const p = (n: number) => String(n).padStart(2, "0");
   return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
-}
-
-function shortValue(value: unknown, max = 60): string {
-  let s = typeof value === "string" ? value : JSON.stringify(value);
-  if (s === undefined) s = String(value);
-  s = s.replace(/\s+/g, " ").trim();
-  return s.length > max ? s.slice(0, max - 1) + "…" : s;
 }
 
 export function useRunSocket(slug: string = "_default"): RunSocketState {
@@ -121,9 +119,12 @@ export function useRunSocket(slug: string = "_default"): RunSocketState {
   const [problems, setProblems] = useState<Problem[]>([]);
   const [counters, setCounters] = useState({ eventsPerSec: 0, inFlight: 0 });
 
+  // every console line passes through here, so none can carry a raw payload
+  // (a TTS reply is megabytes of base64) into the panel or the bounded log.
   const pushLine = useCallback((line: Omit<ConsoleLine, "id">) => {
+    const message = consoleText(line.message, MESSAGE_MAX);
     setLog((prev) => {
-      const next = [...prev, { ...line, id: lineId.current++ }];
+      const next = [...prev, { ...line, message, id: lineId.current++ }];
       return next.length > MAX_LOG ? next.slice(next.length - MAX_LOG) : next;
     });
   }, []);
@@ -148,7 +149,7 @@ export function useRunSocket(slug: string = "_default"): RunSocketState {
             ts: nowStamp(),
             level: "info",
             node: evt.node,
-            message: `${evt.port} = ${shortValue(evt.value)}`,
+            message: `${evt.port} = ${consoleText(evt.value, VALUE_MAX)}`,
             tag: evt.port,
           });
           break;
@@ -179,10 +180,10 @@ export function useRunSocket(slug: string = "_default"): RunSocketState {
         // a tool hop the model made: show the call args then the result it got
         // back, attributed to the Tool node, so the agentic loop is legible.
         case "tool_call":
-          pushLine({ ts: nowStamp(), level: "info", node: evt.node, message: `tool call ${shortValue(evt.args)}` });
+          pushLine({ ts: nowStamp(), level: "info", node: evt.node, message: `tool call ${consoleText(evt.args, VALUE_MAX)}` });
           break;
         case "tool_result":
-          pushLine({ ts: nowStamp(), level: "ok", node: evt.node, message: `tool result -> ${shortValue(evt.result)}` });
+          pushLine({ ts: nowStamp(), level: "ok", node: evt.node, message: `tool result -> ${consoleText(evt.result, VALUE_MAX)}` });
           break;
         case "status":
           setPower(evt.power);
