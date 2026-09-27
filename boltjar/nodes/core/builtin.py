@@ -97,10 +97,19 @@ def _is_base64(text: str) -> bool:
     return len(compact) % 4 == 0 and _BASE64_RE.fullmatch(compact) is not None
 
 
+def _is_file(path) -> bool:
+    """True for a regular file. A name the OS refuses to look up (ENAMETOOLONG
+    on Linux for an over-long component, for one) is no local file."""
+    try:
+        return path.is_file()
+    except (OSError, ValueError):
+        return False
+
+
 def _media_file(src: str, node_name: str):
     """The readable file `src` names, or None when there is none (the value then
-    passes through as-is: bare base64, or a name with no file behind it). Raises
-    PathEscapeError for a path outside the media roots that is not base64."""
+    passes through as-is: a name with no file behind it). Raises PathEscapeError
+    for a path outside the media roots. `src` is never bare base64 here."""
     import pathlib
     from boltjar.file_store import PathEscapeError, within
     from boltjar.server import EXAMPLES_DIR, FILE_STORE, ROOT
@@ -120,27 +129,32 @@ def _media_file(src: str, node_name: str):
                 continue
             real = cand.resolve()  # then again on the real path (symlinks followed)
         except (OSError, ValueError):
-            return None  # not a usable path at all (raw base64 too long for one)
+            return None  # not a usable path at all
         if any(within(r, real) for r in roots):
             allowed = True
-            if real.is_file():
+            if _is_file(real):
                 return real
-    # bare base64 is data, not a path, though JPEG's starts '/9j/' and headerless
-    # MP3's '//u', both read as absolute: it passes through, nothing is read.
-    if allowed or _is_base64(src):
+    if allowed:
         return None
     raise PathEscapeError(f"{node_name}: {src!r} is outside the folders a graph may read "
                           f"files from ({_MEDIA_ROOTS_LABEL})")
 
 
 def _media_value(src: str, node_name: str, mimes: dict, fallback_mime: str) -> str:
-    """An Image / Audio source value. An http(s) URL or a data: URL passes straight
-    through (providers fetch a URL themselves); a local file inside the media roots
-    is read into a self-contained data: URL; anything else passes through."""
+    """An Image / Audio source value. An http(s) URL, a data: URL or bare base64
+    passes straight through (providers fetch a URL themselves); a local file inside
+    the media roots is read into a self-contained data: URL; anything else passes
+    through."""
     import base64
 
     s = (src or "").strip()
     if not s or s.lower().startswith(("http://", "https://", "data:")):
+        return s
+    # bare base64 is data, not a path, so it never reaches the file system: JPEG's
+    # starts '/9j/' and headerless MP3's '//u' (both read as absolute), and a long
+    # one is a name Linux refuses (ENAMETOOLONG). A path with an extension is never
+    # base64, since '.' is outside the alphabet.
+    if _is_base64(s):
         return s
     path = _media_file(s, node_name)
     if path is None:

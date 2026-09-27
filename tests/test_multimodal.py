@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import errno
+import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -152,6 +154,42 @@ def test_image_node_passes_data_urls_and_bare_base64_through(media_roots):
     assert _image(bare) == bare
     long_bare = base64.b64encode(bytes(range(256)) * 400).decode()  # too long to be a path
     assert _image(long_bare) == long_bare
+
+
+@pytest.fixture
+def name_too_long(monkeypatch):
+    """os.stat raises ENAMETOOLONG for any path longer than 255 characters, the
+    way Linux refuses a long file name, so every OS takes that branch. Returns
+    the list of paths stat was asked about."""
+    real_stat = os.stat
+    seen: list[str] = []
+
+    def stat(path, *args, **kwargs):
+        seen.append(os.fspath(path))
+        if len(seen[-1]) > 255:
+            raise OSError(errno.ENAMETOOLONG, "File name too long", seen[-1])
+        return real_stat(path, *args, **kwargs)
+
+    monkeypatch.setattr(os, "stat", stat)
+    return seen
+
+
+def test_media_nodes_never_stat_a_long_bare_base64_value(media_roots, name_too_long):
+    long_bare = base64.b64encode(bytes(range(256)) * 400).decode()
+    assert _image(long_bare) == long_bare
+    audio = NODE_REGISTRY["core.value.audio"].cls()
+    audio.src = long_bare
+    assert audio.value()["out"] == long_bare
+    assert not [p for p in name_too_long if long_bare[:64] in p]
+
+
+def test_image_node_treats_a_name_the_os_refuses_as_no_file(media_roots, name_too_long):
+    # URL-safe base64 ('-' and '_') is not bare base64, so it is looked up as a
+    # path; a name the OS refuses is no local file and passes through unchanged.
+    long_name = base64.urlsafe_b64encode(bytes(range(256)) * 4).decode()
+    assert "-" in long_name and "_" in long_name
+    assert _image(long_name) == long_name
+    assert any(long_name[:64] in p for p in name_too_long)  # it was looked up
 
 
 # the first bytes of a JPEG (SOI, then the JFIF header) and of an MP3 frame with
