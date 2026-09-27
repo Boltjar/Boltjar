@@ -728,3 +728,49 @@ def test_base_urls_take_the_sdk_shape():
     assert endpoints.normalise_base_url("https://api.groq.com/openai/v1/") == \
         "https://api.groq.com/openai/v1"
     assert endpoints.secret_name_for("my-vllm") == "MY_VLLM_API_KEY"
+
+
+# ------------------------------------------------------------- lookup cost
+
+def _big_endpoint_list(count: int = 200) -> None:
+    """One keyed custom endpoint that lists `count` chat models."""
+    endpoints.save("openrouter", "https://openrouter.ai/api/v1", "OPENROUTER_API_KEY")
+    secrets._store["OPENROUTER_API_KEY"] = "test-openrouter-key"
+    found = [md.openai_manifest("openrouter", {
+        "id": f"vendor/model-{i}", "architecture": {"output_modalities": ["text"]}})
+        for i in range(count)]
+    md.ensure_loaded()
+    now = md._iso(md._now())
+    md._state["openrouter"] = md.Listing(ok=True, checked=now, updated=now, models=found)
+    md._publish()
+
+
+def test_a_lookup_reads_the_endpoint_list_once(fresh, monkeypatch):
+    _big_endpoint_list()
+    calls: list[int] = []
+    real = endpoints.list_endpoints
+    monkeypatch.setattr(endpoints, "list_endpoints", lambda: calls.append(1) or real())
+    body = md.payload()
+    assert len(body["models"]) > 200
+    assert len(calls) == 1, "one read for the whole list, not one per row"
+    calls.clear()
+    graph = {"nodes": [{"id": "go", "type": "core.trigger.manual"}] + [
+        {"id": f"m{i}", "type": "core.ai.llm", "config": {"model": f"openrouter/vendor/gone-{i}"}}
+        for i in range(5)], "edges": []}
+    assert len(_model_problems(graph)) == 5
+    assert len(calls) == 1, "one snapshot serves every model widget of a graph"
+
+
+def test_the_endpoint_file_is_parsed_again_only_when_it_changes(fresh, monkeypatch):
+    endpoints.save("lmstudio", "http://localhost:1234")
+    reads: list[int] = []
+    real = endpoints._read
+    monkeypatch.setattr(endpoints, "_read", lambda: reads.append(1) or real())
+    assert [e.name for e in endpoints.list_endpoints()] == ["lmstudio"]
+    assert [e.name for e in endpoints.list_endpoints()] == ["lmstudio"]
+    assert len(reads) == 1
+    # an edit from outside (another size) is read on the next lookup.
+    endpoints.PATH.write_text(json.dumps({
+        "lmstudio": {"base_url": "http://localhost:1234/v1", "key_secret": ""},
+        "vllm": {"base_url": "http://localhost:8000/v1", "key_secret": ""}}), encoding="utf-8")
+    assert [e.name for e in endpoints.list_endpoints()] == ["lmstudio", "vllm"]

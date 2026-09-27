@@ -625,6 +625,8 @@ def validate_graph(graph: dict) -> list[dict]:
     # a model picker whose model vanished (no manifest names it and no provider
     # lists it any more), or that holds another family's model: name it and the
     # closest available one before On, instead of a mock reply or a failed call.
+    # One snapshot of the merged list serves every model widget of the graph.
+    snap: _discovery.Snapshot | None = None
     for n in graph.get("nodes", []):
         spec = NODE_REGISTRY.get(n["type"])
         if n.get("disabled") or spec is None:
@@ -633,7 +635,9 @@ def validate_graph(graph: dict) -> list[dict]:
         for w in spec.widgets:
             if w.kind != "model" or not _widget_in_use(n["id"], cfg, w, edges_in):
                 continue
-            message = _discovery.model_problem(str(cfg.get(w.name) or ""), w.model_kind or "llm")
+            snap = snap or _discovery.Snapshot.now()
+            message = _discovery.model_problem(str(cfg.get(w.name) or ""), w.model_kind or "llm",
+                                               snap)
             if message:
                 problems.append({"node": n["id"], "kind": "model-missing", "message": message})
     # every edge: src/dst ports exist (statically or as a legal dynamic port) and

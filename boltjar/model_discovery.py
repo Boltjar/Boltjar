@@ -447,16 +447,17 @@ async def _discover_openai(endpoint: endpoints.Endpoint,
 Discoverer = Callable[[httpx.AsyncClient], Awaitable[list[ModelManifest]]]
 
 
-def _discoverers() -> dict[str, Discoverer]:
+def _discoverers(listed: list[endpoints.Endpoint] | None = None) -> dict[str, Discoverer]:
     """The providers to ask now: Ollama always (answering is the test), a cloud
-    provider once its key exists, every usable OpenAI-compatible endpoint."""
+    provider once its key exists, every usable OpenAI-compatible endpoint
+    (`listed`: the custom endpoints, when the caller already read them)."""
     _secrets.ensure_loaded()
     out: dict[str, Discoverer] = {"ollama": _discover_ollama}
     if _secrets.get_secret("ANTHROPIC_API_KEY"):
         out["anthropic"] = _discover_anthropic
     if _secrets.get_secret("XAI_API_KEY"):
         out["xai"] = _discover_xai
-    for endpoint in endpoints.usable():
+    for endpoint in endpoints.usable(listed):
         out[endpoint.name] = functools.partial(_discover_openai, endpoint)
     return out
 
@@ -564,17 +565,39 @@ async def shutdown() -> None:
 
 # --------------------------------------------------------------- merged list
 
+@dataclass
+class View:
+    """What the merged list is read from, taken once per lookup: the custom
+    endpoints (one read of their file) and the providers discovery asks now. A
+    caller that looks up many rows (the picker payload, a graph's validation)
+    passes one View down instead of reading them again for every row."""
+    custom: dict[str, endpoints.Endpoint]
+    usable: tuple[str, ...]
+
+    @classmethod
+    def now(cls) -> "View":
+        _secrets.ensure_loaded()
+        listed = endpoints.list_endpoints()
+        return cls({e.name: e for e in listed}, tuple(_discoverers(listed)))
+
+    def has_key(self, provider: str) -> bool:
+        """A cloud provider whose key exists, or a usable OpenAI-compatible endpoint."""
+        env = _secrets.PROVIDERS.get(provider)
+        if env:
+            return bool(_secrets.get_secret(env))
+        endpoint = self.custom.get(provider)
+        return endpoint is not None and endpoint.ready()
+
+    def rank(self, provider: str) -> tuple[int, str]:
+        order = list(_secrets.PROVIDERS)
+        if provider in order:
+            return order.index(provider), provider
+        return len(order) + (0 if provider in self.custom else 1), provider
+
+
 def _usable_names() -> list[str]:
     """The providers discovery asks now, without calling any of them."""
     return list(_discoverers())
-
-
-def _has_key(provider: str) -> bool:
-    """A cloud provider whose key exists, or a usable OpenAI-compatible endpoint."""
-    env = _secrets.PROVIDERS.get(provider)
-    if env:
-        return bool(_secrets.get_secret(env))
-    return endpoints.resolve(provider) is not None
 
 
 def _provider_label(provider: str) -> str:
@@ -589,7 +612,7 @@ def _unlisted_reason(provider: str) -> str:
     return f"no longer offered by {_provider_label(provider)}"
 
 
-def _unlisted_availability(provider: str) -> tuple[bool, str | None]:
+def _unlisted_availability(provider: str, view: View) -> tuple[bool, str | None]:
     """Whether a model of a provider WITHOUT a known list can run, and why not."""
     if provider == "ollama":
         return False, "Ollama is not running"
@@ -597,7 +620,7 @@ def _unlisted_availability(provider: str) -> tuple[bool, str | None]:
     if env is not None:
         return (True, None) if _secrets.get_secret(env) else (
             False, f"no {_provider_label(provider)} key: add it in Connections")
-    endpoint = endpoints.get(provider)
+    endpoint = view.custom.get(provider)
     if endpoint is not None:
         return (True, None) if endpoint.ready() else (
             False, f"secret {endpoint.key_secret} is not defined: add it in Connections")
@@ -615,20 +638,13 @@ class Entry:
     installed: bool = False     # the provider listed it (discovered or both)
 
 
-def _provider_rank(provider: str) -> tuple[int, str]:
-    order = list(_secrets.PROVIDERS)
-    if provider in order:
-        return order.index(provider), provider
-    return len(order) + (0 if endpoints.get(provider) is not None else 1), provider
-
-
-def entries() -> list[Entry]:
+def entries(view: View | None = None) -> list[Entry]:
     """The merged list: every manifest and every listed model, once each. Per
     provider: listed models with a manifest first (curated), then listed models
     without one (in the provider's order), then manifests it does not list."""
     ensure_loaded()
-    _secrets.ensure_loaded()
-    usable = set(_usable_names())
+    view = view or View.now()
+    usable = set(view.usable)
     listings = {n: l for n, l in _state.items() if n in usable and l.known}
     listed: dict[str, ModelManifest] = {}      # manifest id -> the listed model
     extra: list[ModelManifest] = []
@@ -642,7 +658,7 @@ def entries() -> list[Entry]:
     rows: list[tuple[tuple, Entry]] = []
     for manifest in sorted(models.MODELS.values(), key=lambda m: m.id):
         found = listed.get(manifest.id)
-        rank = _provider_rank(manifest.provider)
+        rank = view.rank(manifest.provider)
         if found is not None:
             merged = dataclasses.replace(
                 manifest, context=manifest.context or found.context,
@@ -653,20 +669,34 @@ def entries() -> list[Entry]:
             rows.append(((rank, 2, 0), Entry(manifest, "manifest", False,
                                              _unlisted_reason(manifest.provider), unlisted=True)))
         else:
-            ok, reason = _unlisted_availability(manifest.provider)
+            ok, reason = _unlisted_availability(manifest.provider, view)
             rows.append(((rank, 2, 0), Entry(manifest, "manifest", ok, reason)))
     for index, found in enumerate(extra):
-        rows.append(((_provider_rank(found.provider), 1, index),
+        rows.append(((view.rank(found.provider), 1, index),
                      Entry(found, "discovered", True, installed=True)))
     rows.sort(key=lambda row: row[0])
     return [entry for _, entry in rows]
 
 
-def catalog() -> list[dict]:
+@dataclass
+class Snapshot:
+    """The merged list with the View it was built from, for a caller that looks
+    up several models at once (validation checks every model widget of a graph
+    against one Snapshot)."""
+    view: View
+    rows: list[Entry]
+
+    @classmethod
+    def now(cls) -> "Snapshot":
+        view = View.now()
+        return cls(view, entries(view))
+
+
+def catalog(rows: list[Entry] | None = None) -> list[dict]:
     """The merged list as the picker reads it: every manifest field plus `source`
     (manifest, discovered or both), `available` and, when unavailable, `reason`."""
     out = []
-    for entry in entries():
+    for entry in entries() if rows is None else rows:
         row = entry.manifest.as_dict(probe=False)
         row.update(source=entry.source, available=entry.available)
         if entry.reason:
@@ -679,26 +709,26 @@ def _chat(manifest: ModelManifest) -> bool:
     return manifest.kind == "llm" and "text" in manifest.outputs
 
 
-def resolve_auto() -> ModelManifest | None:
+def resolve_auto(snap: Snapshot | None = None) -> ModelManifest | None:
     """What an "auto" LLM runs: the first installed Ollama chat model (Ollama
     answered the last time it was asked), else the first chat model of a provider
     with a key, else None (the node replies with AUTO_MOCK_REPLY)."""
-    rows = entries()
+    snap = snap or Snapshot.now()
     ollama = _state.get("ollama")
     if ollama is not None and ollama.ok:
-        for entry in rows:
+        for entry in snap.rows:
             if entry.manifest.provider == "ollama" and entry.installed and _chat(entry.manifest):
                 return entry.manifest
-    for entry in rows:
+    for entry in snap.rows:
         m = entry.manifest
-        if m.provider != "ollama" and entry.available and _chat(m) and _has_key(m.provider):
+        if m.provider != "ollama" and entry.available and _chat(m) and snap.view.has_key(m.provider):
             return m
     return None
 
 
-def _lookup(model_id: str) -> Entry | None:
+def _lookup(model_id: str, rows: list[Entry]) -> Entry | None:
     target = models.ALIASES.get(model_id, model_id)
-    return next((e for e in entries() if e.manifest.id == target), None)
+    return next((e for e in rows if e.manifest.id == target), None)
 
 
 def _family(name: str) -> str:
@@ -709,7 +739,7 @@ def _family(name: str) -> str:
     return stem or base
 
 
-def closest(model_id: str, kind: str) -> str | None:
+def closest(model_id: str, kind: str, rows: list[Entry] | None = None) -> str | None:
     """The available model of `kind` nearest to `model_id`: same provider and
     family first, then same provider, then same family, then any; ties go to the
     most similar name."""
@@ -724,19 +754,21 @@ def closest(model_id: str, kind: str) -> str | None:
         ratio = difflib.SequenceMatcher(None, name.lower(), m.model.lower()).ratio()
         return tier, -ratio, m.id
 
-    candidates = [e for e in entries() if e.available and e.manifest.kind == kind
-                  and e.manifest.id != model_id]
+    candidates = [e for e in (entries() if rows is None else rows)
+                  if e.available and e.manifest.kind == kind and e.manifest.id != model_id]
     return min(candidates, key=score).manifest.id if candidates else None
 
 
-def model_problem(model_id: str, kind: str) -> str | None:
+def model_problem(model_id: str, kind: str, snap: Snapshot | None = None) -> str | None:
     """Why a saved graph cannot run `model_id` on a node that takes `kind` models:
     the model vanished (no manifest names it and no provider lists it, or its
     provider's list no longer has it) or it is another kind of model. None when
-    it can run, or when it is empty, "auto" or the offline mock."""
+    it can run, or when it is empty, "auto" or the offline mock. A caller that
+    checks several models passes one Snapshot."""
     if not model_id or model_id == AUTO or model_id.startswith("mock/"):
         return None
-    entry = _lookup(model_id)
+    snap = snap or Snapshot.now()
+    entry = _lookup(model_id, snap.rows)
     if entry is not None and entry.manifest.kind != kind:
         return f"model {model_id} is a {entry.manifest.kind} model; this node takes {kind} models"
     if entry is not None and not entry.unlisted:
@@ -744,13 +776,13 @@ def model_problem(model_id: str, kind: str) -> str | None:
     provider = model_id.split("/", 1)[0] if "/" in model_id else ""
     if entry is not None:
         why = _unlisted_reason(provider)
-    elif provider in _state and _state[provider].known and provider in _usable_names():
+    elif provider in _state and _state[provider].known and provider in snap.view.usable:
         why = _unlisted_reason(provider)
     else:
-        known = provider in _secrets.PROVIDERS or endpoints.get(provider) is not None
-        ok, reason = _unlisted_availability(provider) if known else (True, None)
+        known = provider in _secrets.PROVIDERS or provider in snap.view.custom
+        ok, reason = _unlisted_availability(provider, snap.view) if known else (True, None)
         why = "not in the model list" + (f" ({reason})" if not ok and reason else "")
-    nearest = closest(model_id, kind)
+    nearest = closest(model_id, kind, snap.rows)
     hint = (f"closest available: {nearest}" if nearest
             else f"pick another model, or connect a {kind} model in Connections")
     return f"model {model_id} is {why}; {hint}"
@@ -760,10 +792,9 @@ def payload() -> dict:
     """GET /api/models: the merged list, what "auto" resolves to (None = the
     mock), each asked provider's last answer, and whether a refresh is running.
     Times are ISO 8601 UTC."""
-    rows = catalog()
-    usable = _usable_names()
+    snap = Snapshot.now()
     providers = {}
-    for name in usable:
+    for name in snap.view.usable:
         listing = _state.get(name)
         if listing is None:
             continue
@@ -771,6 +802,6 @@ def payload() -> dict:
                            "updated": listing.updated, "error": listing.error,
                            "count": len(listing.models)}
     updated = max((p["updated"] for p in providers.values() if p["updated"]), default=None)
-    auto = resolve_auto()
-    return {"models": rows, "auto": auto.id if auto else None, "updated": updated,
-            "refreshing": refreshing(), "providers": providers}
+    auto = resolve_auto(snap)
+    return {"models": catalog(snap.rows), "auto": auto.id if auto else None,
+            "updated": updated, "refreshing": refreshing(), "providers": providers}
