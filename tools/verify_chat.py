@@ -3,10 +3,12 @@ import asyncio
 import json
 import pathlib
 
+from boltjar import secrets
 from boltjar.packs import load_all
 from boltjar.runtime import Runtime
 
 load_all()
+secrets.ensure_loaded()  # the chat graph's LLM reads its provider key from os.environ
 
 graph = json.loads(pathlib.Path("examples/chat.json").read_text(encoding="utf-8"))
 events: list[dict] = []

@@ -3,12 +3,14 @@
 A docs generator (or any offline tool) loads the registry (the SDK, the core
 pack, packs.load_all) to read node definitions. That must not copy the user's
 saved secrets into the environment nor reach the network (the Ollama
-availability ping). Secrets load on first use, and when the server starts."""
+availability ping). Secrets load on first use, when the server starts, and
+before a headless tool builds a graph whose nodes read provider keys."""
 from __future__ import annotations
 
 import json
 import os
 import pathlib
+import runpy
 import subprocess
 import sys
 import textwrap
@@ -96,6 +98,38 @@ def test_the_server_loads_the_secrets_when_it_starts(unread_secrets):
     assert "BOLTJAR_TEST_SAVED" not in os.environ
     with TestClient(server.app):
         assert os.environ["BOLTJAR_TEST_SAVED"] == "saved-value"
+
+
+def test_the_chat_check_tool_loads_the_saved_secrets_before_it_builds(monkeypatch):
+    # tools/verify_chat.py runs examples/chat.json, whose LLM reads its key from
+    # os.environ: without the saved keys it quietly takes the missing-key path.
+    import boltjar.packs as packs
+    import boltjar.runtime as runtime
+
+    calls: list[str] = []
+
+    class Runtime:
+        def __init__(self, observer):
+            pass
+
+        def build(self, graph):
+            calls.append("build")
+
+        async def run(self):
+            pass
+
+        def send_chat(self, node, text):
+            pass
+
+        async def stop(self):
+            pass
+
+    monkeypatch.setattr(packs, "load_all", lambda: calls.append("packs"))
+    monkeypatch.setattr(secrets, "ensure_loaded", lambda: calls.append("secrets"))
+    monkeypatch.setattr(runtime, "Runtime", Runtime)
+    monkeypatch.chdir(ROOT)
+    runpy.run_path(str(ROOT / "tools" / "verify_chat.py"), run_name="__main__")
+    assert calls == ["packs", "secrets", "build"]
 
 
 def test_a_catalog_without_probe_checks_no_provider(monkeypatch):
