@@ -134,7 +134,7 @@ export function paramPortType(type: ModelParam["type"]): string {
   }
 }
 
-/** Read the selected model id from an LLM node's config (config.model, else widget default). */
+/** Read the picked model id from an LLM node's config (config.model); "" when none is picked. */
 export function llmModelId(config: Record<string, unknown>): string {
   const id = config.model;
   return typeof id === "string" && id ? id : "";

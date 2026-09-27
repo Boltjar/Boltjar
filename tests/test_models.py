@@ -50,7 +50,7 @@ CURATED_MODEL_IDS = {
 
 
 def test_model_registry_loads_declared_models() -> None:
-    assert "ollama/gemma4:e4b" in models.MODELS, "the demo default model must load"
+    assert "ollama/gemma4:e4b" in models.MODELS, "a curated Ollama model must load"
     multimodal = models.get("ollama/gemma4:e4b")
     assert multimodal and "image" in multimodal.inputs, "the multimodal model declares an image input"
     assert multimodal and "audio" not in multimodal.inputs, "gemma4 does not have audio input over Ollama"

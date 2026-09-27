@@ -1,6 +1,6 @@
 # Boltjar
 
-Boltjar is a visual, node-based builder for always-on systems. Every trigger, model, store, transform, conditional and output is a typed node, and you build behaviour by wiring them together on one canvas: think **ComfyUI** (a typed node graph you can rewire) crossed with **n8n** (triggers and always-on automation). A workflow is a live server you turn **On / Off / Restart**, not a one-shot run: triggers push events, and the nodes they fire pull their data inputs on demand. A trigger input fires its node, so every trigger input must be wired before a graph turns On. The backend is Python (FastAPI + asyncio), the editor is React + React Flow, and the LLM node answers in mock mode until you add a provider key, so a chat graph works out of the box.
+Boltjar is a visual, node-based builder for always-on systems. Every trigger, model, store, transform, conditional and output is a typed node, and you build behaviour by wiring them together on one canvas: think **ComfyUI** (a typed node graph you can rewire) crossed with **n8n** (triggers and always-on automation). A workflow is a live server you turn **On / Off / Restart**, not a one-shot run: triggers push events, and the nodes they fire pull their data inputs on demand. A trigger input fires its node, so every trigger input must be wired before a graph turns On. The backend is Python (FastAPI + asyncio), the editor is React + React Flow, and an LLM node with no model picked answers in mock mode, so a chat graph works out of the box.
 
 ## Quick start
 
@@ -12,11 +12,11 @@ The start script creates `.venv`, installs `requirements.txt` whenever the file 
 
 **Startup settings:** the gear in the top bar opens Settings on its General tab, with three options that stay off until you turn them on. **Launch with system** starts Boltjar when you log in, without opening the browser, through one entry in your own account (a `Boltjar.cmd` in the Windows Startup folder, `~/Library/LaunchAgents/link.boltjar.plist` on macOS, `~/.config/autostart/boltjar.desktop` on Linux); turning it off deletes that file, and it can be changed only from this computer. **Start Ollama with Boltjar** starts an installed Ollama that is not running, and Boltjar stops it again when it exits; it too can be changed only from this computer. **Resume workflows after launch** turns back On the graphs that were On when Boltjar last stopped, as they ran; one that no longer validates stays Off, the editor says why, and each launch tries it again until you pick **Stop resuming** (the command palette, or the Problems panel).
 
-In the editor, hit **On** and type in the Chat Input node (the `chat` example graph loads by default).
+In the editor, hit **On** and type in the Chat Input node (the `chat` example graph loads by default). It answers in mock mode: Boltjar never picks a model for you, since a model can cost money. Its TTS and Audio Preview ship bypassed, so the chat runs text only; to hear the replies, pick a voice model in the TTS node, then right-click the TTS and the Audio Preview and choose **Enable**.
 
 **Updating:** `update.bat` or `./update.sh` pulls the latest code (fast-forward only), rebuilds the editor when it changed, and starts Boltjar.
 
-**Real models (optional):** copy `.env.example` to `.env` and fill in the keys you have (xAI, Anthropic, Fish Audio, ElevenLabs, ...), or point `OLLAMA_BASE_URL` at a local Ollama. Without a key the LLM node stays in mock mode, and a voice (TTS / STT) node fails with an error that names the missing key.
+**Real models (optional):** copy `.env.example` to `.env` and fill in the keys you have (xAI, Anthropic, Fish Audio, ElevenLabs, ...), or point `OLLAMA_BASE_URL` at a local Ollama, then pick a model in each model node's picker. A model node starts with none picked: the LLM answers in mock mode until you pick one, and a TTS, STT, Embed or Rerank node keeps its graph Off until you do. Without a key the LLM node stays in mock mode, and a voice (TTS / STT) node fails with an error that names the missing key.
 
 ### Server options
 

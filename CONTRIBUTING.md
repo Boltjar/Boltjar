@@ -53,7 +53,7 @@ The server serves the built editor from `editor/dist`, so rebuild after an edito
 npm run dev --prefix editor
 ```
 
-Provider keys are optional. Copy `.env.example` to `.env` and fill in the ones you have. Without a key, a cloud model in the LLM node answers with a mock reply, so chat graphs still run. Ollama models need a running Ollama instead of a key. TTS and STT nodes need a key for their provider and fail with an error that names the missing key.
+Provider keys are optional. Copy `.env.example` to `.env` and fill in the ones you have. No model is ever picked for you: an LLM node with none picked answers with a mock reply, and so does a cloud model without its key, so chat graphs still run. A TTS, STT, Embed or Rerank node with no model picked keeps its graph Off until one is picked. Ollama models need a running Ollama instead of a key. TTS and STT nodes need a key for their provider and fail with an error that names the missing key.
 
 ## Running the tests
 
@@ -128,7 +128,7 @@ A few things to know:
 
 A new model from a provider Boltjar already supports needs no code and no file: once the provider lists it (Ollama has it installed, or your key's account offers it), it shows up in the model picker with knobs from its reported capabilities. A TOML manifest in `boltjar/nodes/core/models/` is optional enrichment: copy the closest one to give a model its own label, knobs or capabilities, and restart the server. The LLM node reshapes its inputs, outputs and knobs to the selected model.
 
-A node that calls a model declares its picker as a widget, `model("tts", "xai/tts")` (the family it lists, then the default), and gets the same picker and per-model knobs as the LLM node.
+A node that calls a model declares its picker as a widget, `model("tts")` (the family it lists), and gets the same picker and per-model knobs as the LLM node. The picker starts empty, because a model can cost money and only the person picks one: `@node` refuses a picker that passes a default model or the old `auto=True`, naming the node, and the pack is skipped. A graph with the node turns On once a model is picked; `model("llm", optional=True)` declares a node that runs with none (the LLM answers with its offline mock).
 
 ### A node pack
 

@@ -1400,7 +1400,7 @@ async def _rerank_model(manifest, query: str, docs: list, endpoint: str) -> list
               "for the next node.",
       icon="finger-print-outline")
 class Embed:
-    # With nothing picked the graph does not turn On (the TTS/STT precedent).
+    # With nothing picked the graph does not turn On (like the TTS and STT).
     model: Widget = model("embed")
     inputs = [Port("trigger", "event", trigger=True),
               Port("text", "text")]
@@ -1424,7 +1424,7 @@ class Rerank:
     # manifest's `endpoint` param, the one field the editor shows for it, and
     # `keep` (how many to return) is a param too; either can be converted to an
     # input. The doc text is the memory-set's `text` key. With nothing picked the
-    # graph does not turn On (the TTS/STT precedent).
+    # graph does not turn On (like the TTS and STT).
     model: Widget = model("rerank")
     inputs = [Port("trigger", "event", trigger=True),
               Port("query", "text"),
