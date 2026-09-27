@@ -4,9 +4,12 @@ import pathlib
 
 from fastapi.testclient import TestClient
 
+from boltjar import security
 from boltjar.server import app
 
-client = TestClient(app)
+# the server's own checks apply in-process too: a loopback host and the token.
+client = TestClient(app, base_url="http://127.0.0.1:8770",
+                    headers={"Authorization": f"Bearer {security.get_token()}"})
 
 info = client.get("/api/object_info").json()
 print("nodes:", len(info["nodes"]), "| types:", len(info["types"]))
@@ -16,7 +19,7 @@ graph = json.loads(pathlib.Path("examples/demo.json").read_text(encoding="utf-8"
 print("validate:", client.post("/api/validate", json=graph).json()["problems"] or "ok")
 
 events = []
-with client.websocket_connect("/ws") as ws:
+with client.websocket_connect("ws://127.0.0.1:8770/ws") as ws:
     ws.send_json({"action": "on", "graph": graph})
     for _ in range(12):
         e = ws.receive_json()
