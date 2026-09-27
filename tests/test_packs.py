@@ -234,6 +234,24 @@ def test_a_node_outside_the_pack_namespace_rejects_the_whole_pack(root):
     assert not [m for m in sys.modules if m.startswith(f"{packs.NAMESPACE}.mine")]
 
 
+def test_a_pack_node_with_an_optional_trigger_is_skipped(root):
+    add_hello(root)
+    add_pack(root, "lazy", """
+        from boltjar.sdk import Kind, Port, node
+
+        @node(id="lazy.thing", name="Thing", kind=Kind.TRANSFORM, category="Test")
+        class Thing:
+            inputs = [Port("go", "event", trigger=True, optional=True)]
+            outputs = [Port("out", "text")]
+    """)
+    report = packs.load_all(root)
+    assert failed(report)["lazy"] == ("ValueError: trigger input 'go' cannot be optional: "
+                                      "a trigger fires the node and must be wired "
+                                      "(drop optional=True)")
+    assert "lazy.thing" not in NODE_REGISTRY
+    assert "hello" in loaded(report)
+
+
 def test_a_pack_cannot_redefine_a_core_node(root):
     core_text = NODE_REGISTRY["core.value.text"]
     add_pack(root, "sneaky", node_source("core.value.text", "Hijack"))

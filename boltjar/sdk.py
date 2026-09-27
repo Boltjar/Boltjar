@@ -17,6 +17,11 @@ editor renders as inspector widgets. Its execution surface is chosen by its
     Kind.STORE      async def open(self, ctx); read/write; async def close(self)
     Kind.OUTPUT     def deliver(self, value, ctx, inputs=None)
 
+A node that does work declares an input with ``trigger=True``: an event landing
+there fires it, and it pulls its other inputs at that moment. A trigger is the
+only way a node runs, so every trigger input must be wired (a graph with an
+unwired one does not turn On) and can never be ``optional``.
+
 Nothing here imports a runtime; the SDK is the pure contract so node packs and
 the server can be reasoned about in isolation.
 """
@@ -57,11 +62,18 @@ class Kind(str, enum.Enum):
 
 @dataclass
 class Port:
-    """A typed input or output socket. Inputs may be triggering or latching."""
+    """A typed input or output socket. Inputs may be triggering or latching.
+
+    A trigger input (`trigger=True`) fires the node, and a trigger is the only
+    way a node runs, so it must be wired: a graph with an unwired trigger does
+    not turn On, and declaring one `optional` raises here. A growable trigger
+    needs a wire on at least one of its sockets. Every other input latches data
+    and is pulled when the node fires; `optional` lets one of those stay
+    unwired."""
     name: str
     type: str
     growable: bool = False   # one socket per wire, an empty socket always ready
-    optional: bool = False
+    optional: bool = False   # a data input that may stay unwired (never a trigger)
     trigger: bool = False    # a triggering input fires the node; others latch
     default: Any = None
     # op-shaping: show this port only when the named config field equals one of
@@ -80,6 +92,11 @@ class Port:
     # e.g. a Tool's `call` output scaffolds its Tool Args body. Purely UX; the
     # runtime ignores it.
     scaffold: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        if self.trigger and self.optional:
+            raise ValueError(f"trigger input {self.name!r} cannot be optional: a trigger "
+                             f"fires the node and must be wired (drop optional=True)")
 
     def as_dict(self) -> dict:
         return {

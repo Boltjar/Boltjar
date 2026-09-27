@@ -4,11 +4,12 @@ Validation names each unwired trigger ("required trigger 'x' is not connected",
 the missing-input kind every unwired required input has), so the graph cannot
 turn On. A growable trigger (Sync's `in`, a Queue's `in`) needs a wire on at
 least one of its sockets. A bypassed node is skipped, and a graph with no
-trigger node is still refused."""
+trigger node is still refused. The SDK refuses a trigger declared optional, so
+no node can offer one."""
 import pytest
 
 import boltjar.nodes.core  # noqa: F401  (registers the core nodes)
-from boltjar.sdk import NODE_REGISTRY
+from boltjar.sdk import NODE_REGISTRY, Port
 from boltjar.server import validate_graph
 
 # the triggers that used to be declared optional: each is required like any other.
@@ -44,6 +45,20 @@ def _trigger_problems(graph: dict) -> list[dict]:
 
 def test_every_once_optional_trigger_is_checked():
     assert ONCE_OPTIONAL <= set(TRIGGERS)
+
+
+def test_the_sdk_refuses_an_optional_trigger():
+    with pytest.raises(ValueError, match="trigger input 'go' cannot be optional"):
+        Port("go", "event", trigger=True, optional=True)
+    with pytest.raises(ValueError, match="must be wired"):
+        Port("in", "event", growable=True, trigger=True, optional=True)
+    assert Port("name", "text", optional=True).optional, "a data input may be optional"
+
+
+def test_no_registered_node_serves_an_optional_trigger():
+    served = [(spec.id, p.name) for spec in NODE_REGISTRY.values()
+              for p in spec.inputs if p.trigger and p.optional]
+    assert served == []
 
 
 @pytest.mark.parametrize("node_type,port", TRIGGERS, ids=[f"{t}.{p}" for t, p in TRIGGERS])

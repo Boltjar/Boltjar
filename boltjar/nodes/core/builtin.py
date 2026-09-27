@@ -2338,9 +2338,10 @@ def _meter_f(cfg: dict, key: str, default: float) -> float:
 @node(id="core.state.meter", name="Meter", kind=Kind.TRANSFORM, category="State",
       summary="A float that persists across fires and drifts toward `rest` at "
               "`rate`/sec (lazy, no timer). Fire `nudge` to add `amount`; fire "
-              "`set` to overwrite with `to`; always clamped to [min,max]. Emits "
-              "`value` and a `crossed` event (with direction up/down) when a fire "
-              "moves it across `threshold`. A mood / energy / attention accumulator.")
+              "`set` to overwrite with `to` (both triggers must be wired); always "
+              "clamped to [min,max]. Emits `value` and a `crossed` event (with "
+              "direction up/down) when a fire moves it across `threshold`. A mood / "
+              "energy / attention accumulator.")
 class Meter:
     # every knob is promotable to a typed input. amount/to carry the two operations'
     # operands (pulled when the matching trigger fires), so any PULL-only source
@@ -2360,11 +2361,11 @@ class Meter:
                              label="persist across restart", port_type="bool")
     # `nudge` adds the `amount` knob; `set` overwrites with the `to` knob. Both are
     # triggering EVENT inputs (an event arriving fires the node), mirroring the
-    # settled idiom (STT/TTS/LLM fire on a dedicated trigger and PULL their data).
-    # `value` is the current level (readable by a downstream pull); `crossed` is an
-    # event carrying the direction.
-    inputs = [Port("nudge", "event", trigger=True, optional=True),
-              Port("set", "event", trigger=True, optional=True)]
+    # settled idiom (STT/TTS/LLM fire on a dedicated trigger and PULL their data),
+    # and both must be wired. `value` is the current level (readable by a
+    # downstream pull); `crossed` is an event carrying the direction.
+    inputs = [Port("nudge", "event", trigger=True),
+              Port("set", "event", trigger=True)]
     outputs = [Port("value", "number"), Port("crossed", "event")]
 
     def __init__(self):
@@ -2432,7 +2433,7 @@ class Meter:
         elif fired == "nudge":
             new = drifted + _meter_f(cfg, "amount", 1.0)  # add `amount`
         else:
-            new = drifted                # a bare read (no known trigger): drift only
+            new = drifted                # a direct call, no trigger named: drift only
         new = _meter_clamp(new, lo, hi)
         self._value = new
         if persist:
@@ -2960,13 +2961,15 @@ def _coerce_list(value) -> list:
 @node(id="core.flow.for_each", name="For-each", kind=Kind.TRANSFORM, category="Flow",
       opens_turn=True,
       summary="Dispense a list one item at a time. Fire `trigger` to start; wire the "
-              "body's done back into `loop` to release the next; `after_last` fires "
-              "when the list is exhausted. Type-agnostic (text, image, file, json).")
+              "body's done back into `loop` to release the next (both triggers must "
+              "be wired); `after_last` fires when the list is exhausted. "
+              "Type-agnostic (text, image, file, json).")
 class ForEach:
     # `trigger` starts the loop; `loop` is the back-edge ("body finished this item,
-    # release the next"), optional so the graph turns On before the body is wired.
+    # release the next"). Both must be wired: without the back-edge the loop would
+    # stop after its first item.
     inputs = [Port("trigger", "event", trigger=True),
-              Port("loop", "event", trigger=True, optional=True),
+              Port("loop", "event", trigger=True),
               Port("list", "any")]
     # `each` pulses per item, `item` carries the current element (the body pulls it),
     # `after_last` fires once when the list runs out.
@@ -3038,11 +3041,12 @@ class Changed:
 @node(id="core.flow.sync", name="Sync", kind=Kind.TRANSFORM, category="Flow",
       opens_turn=True,
       summary="A control barrier: emits one trigger out only when every wired input "
-              "has fired once, then resets. Waits for the slowest branch. Touches no "
-              "data - data rides its own wires.")
+              "has fired once, then resets. Waits for the slowest branch. `in` needs "
+              "at least one wire. Touches no data: data rides its own wires.")
 class Sync:
-    # growable trigger inputs; emits `out` once all wired `in_*` have arrived.
-    inputs = [Port("in", "event", growable=True, trigger=True, optional=True)]
+    # growable trigger inputs; emits `out` once every wired socket has arrived.
+    # A trigger, so at least one socket must be wired.
+    inputs = [Port("in", "event", growable=True, trigger=True)]
     outputs = [Port("out", "event")]
 
     def __init__(self):
@@ -3096,7 +3100,8 @@ class Wait:
       summary="Serialize many producers into ONE lane: buffer each arrival on `in`, "
               "release ONE item on `out`, and release the next only when `ack` fires. "
               "So a user turn and a proactive turn never collide on the shared LLM. "
-              "Wire the end of the turn (e.g. the Avatar's trigger) into `ack`.")
+              "Both triggers must be wired: the producers into `in`, the end of the "
+              "turn (e.g. the Avatar's trigger) into `ack`.")
 class Queue:
     # a watchdog so a job whose `ack` never fires (a tool body that raised, a broken
     # chain) cannot wedge the lane forever: if the current job has been outstanding
@@ -3104,10 +3109,11 @@ class Queue:
     # forever (strict backpressure). A real turn finishes well under the default.
     timeout: Widget = Widget(kind="number", default=300, min=0, max=86400, step=10,
                              label="ack timeout (s, 0 = wait forever)")
-    # growable trigger `in`: every producer pushes here (Chat, Audio, Interval, ...).
-    # `ack` is the back-edge: 'the current job finished, release the next'.
-    inputs = [Port("in", "any", growable=True, trigger=True, optional=True, ghost_base="in"),
-              Port("ack", "event", trigger=True, optional=True)]
+    # growable trigger `in`: every producer pushes here (Chat, Audio, Interval, ...),
+    # each on a socket named after it. `ack` is the back-edge: 'the current job
+    # finished, release the next'. Both must be wired.
+    inputs = [Port("in", "any", growable=True, trigger=True, ghost_base="in"),
+              Port("ack", "event", trigger=True)]
     # `out` is the released item (same shape in as out); `count` is the pending depth.
     outputs = [Port("out", "any"), Port("count", "int")]
 
@@ -3127,7 +3133,7 @@ class Queue:
         if fired == "ack":
             self._busy = False               # the lane is free again
         elif fired:
-            self._buf.append(ins.get(fired))  # an in_* socket fired: buffer its payload
+            self._buf.append(ins.get(fired))  # a socket of `in` fired: buffer its payload
         # release the FIFO head only when the lane is free; opens_turn means the
         # released job runs on a fresh epoch (re-pulls / the LLM re-runs per item).
         if not self._busy and self._buf:
@@ -3140,18 +3146,20 @@ class Queue:
 
 @node(id="core.output.chat", name="Chat", kind=Kind.OUTPUT, category="Inspect",
       summary="Show the running conversation: your message and the model's reply. "
-              "A live viewer, like Preview, that keeps history.",
+              "A live viewer, like Preview, that keeps history. Each side commits "
+              "when its trigger fires, so both triggers must be wired.",
       icon="chatbubbles-outline")
 class ChatOutput:
     # a viewer with TWO sides, each its own DATA + TRIGGER: `user`/`user_trigger`
     # commit your turn, `reply`/`reply_trigger` commit the model's turn. Each run
     # fires its own trigger, so turns are explicit and never aggregated onto a data
-    # port. A pure sink: no output (it is the end of the flow).
+    # port. Both triggers must be wired. A pure sink: no output (it is the end of
+    # the flow).
     # each side keeps its trigger ABOVE its data (trigger, text, trigger, text),
     # matching the "trigger on top" standard applied per side.
-    inputs = [Port("user_trigger", "event", trigger=True, optional=True),
+    inputs = [Port("user_trigger", "event", trigger=True),
               Port("user", "text", optional=True),
-              Port("reply_trigger", "event", trigger=True, optional=True),
+              Port("reply_trigger", "event", trigger=True),
               Port("reply", "text", optional=True)]
     outputs: list = []
 
