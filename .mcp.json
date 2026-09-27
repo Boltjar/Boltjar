@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "boltjar": {
+      "command": ".venv\\Scripts\\python.exe",
+      "args": ["-m", "boltjar.mcp_server"],
+      "env": {
+        "BOLTJAR_URL": "http://127.0.0.1:8770"
+      }
+    }
+  }
+}

@@ -1,0 +1,240 @@
+/* ============================================================================
+   BOLTJAR: DESIGN TOKENS
+   Single source of truth for the React editor. Import this file and consume the
+   CSS custom properties; do not hard-code hex anywhere downstream.
+
+   Aesthetic: warm near-black shell, restrained ink, one calm teal accent.
+   Color comes from OBJECTS (nodes, wires, status pills), never from the shell.
+   The base ramp carries zero chroma; warmth comes only from the slight yellow
+   bias of the near-black steps.
+
+   Conventions
+   - Colour ramps go DARKER -> LIGHTER as the numeric suffix increases
+     (--bg is the void; --bg-3 is the lightest base step).
+   - --t-<type> are the typed-pipe / port colours. Exactly one per data type.
+   - rgba mirrors of key colours are provided as channel triples (--*-rgb) so
+     downstream code can build translucent fills: rgba(var(--accent-rgb), .14).
+   ========================================================================== */
+
+:root {
+
+  /* ---------------------------------------------------------------------------
+     1. BASE RAMP: warm near-black at zero chroma.
+     Never pure #000 (kills depth + OLED smear).
+     --------------------------------------------------------------------------- */
+  --bg:        #030303;   /* 0: barely-not-black (a hair above OLED true black)   */
+  --bg-1:      #030303;   /* 1: canvas base; same as --bg                         */
+  --bg-2:      #0a0a0a;   /* 2: sunken wells, input fields                        */
+  --bg-3:      #111111;   /* 3: raised base / hover floor                         */
+
+  /* Surfaces: where panels, rails and cards sit above the base ramp. */
+  --panel:     #131313;   /* primary panel fill (rails, inspector, library)       */
+  --panel-2:   #181818;   /* raised panel / header strips / node headers          */
+  --panel-3:   #1e1e1e;   /* hover / active panel, selected rows, menu hover      */
+  --surface-glass: rgba(13, 13, 13, 0.88); /* command bar / overlays (backdrop-blur) */
+
+  /* ---------------------------------------------------------------------------
+     2. LINES & BORDERS: structural dividers.
+     --------------------------------------------------------------------------- */
+  --line:      #33322F;   /* hairline divider, default 1px border                 */
+  --line-2:    #3D3C38;   /* stronger border, panel edges, focused frames         */
+  --line-3:    #4A4845;   /* brightest structural line, dividers under emphasis   */
+  --grid:      rgba(255, 255, 255, 0.025); /* pure neutral white, zero chroma      */
+  --grid-major:rgba(255, 255, 255, 0.045); /* every-5th heavier grid line          */
+  --crosshair: rgba(255, 255, 255, 0.06);  /* grid-intersection ticks (off below)  */
+
+  /* ---------------------------------------------------------------------------
+     3. INK: text on the warm dark substrate.
+     --------------------------------------------------------------------------- */
+  --ink-bright:#F0EFEA;   /* headings, emphasised values, hover-lifted titles     */
+  --ink:       #D6D4CE;   /* primary text                                         */
+  --ink-dim:   #9A9893;   /* secondary text, labels, descriptions                 */
+  --ink-faint: #75736E;   /* tertiary text, metadata, units, citations            */
+  --ink-ghost: #5A5854;   /* disabled, watermark, placeholder grid labels         */
+
+  /* ---------------------------------------------------------------------------
+     4. ACCENTS: calm, low-saturation signal palette.
+     --accent  : primary action / focus / live signal (calm teal)
+     --accent-2: secondary / structural highlight (antique brass)
+     --------------------------------------------------------------------------- */
+  --accent:      #6EC6C0;   /* calm teal: primary action, focus, RUN-armed        */
+  --accent-2:    #CC785C;   /* antique brass: selection, links, secondary         */
+  --accent-rgb:    110, 198, 192;
+  --accent-2-rgb:  204, 120, 92;
+  --accent-dim:  #4E908C;   /* pressed / muted accent                              */
+  --accent-glow: rgba(110, 198, 192, 0.20);  /* focus ring / armed bloom           */
+
+  /* ---------------------------------------------------------------------------
+     5. SEMANTIC: status. Reused for node state, console levels, run-state.
+     Desaturated for premium calm on the warm bg.
+     --------------------------------------------------------------------------- */
+  --good:      #4ADE80;   /* success / running-ok / connected (vivid green) */
+  --warn:      #EAB308;   /* warning / pending / throttled (vivid amber)    */
+  --bad:       #EF4444;   /* error / failed / disconnected (vivid red)      */
+  --info:      #60A5FA;   /* info / neutral notice (vivid blue)             */
+  --good-rgb:  74, 222, 128;
+  --warn-rgb:  234, 179, 8;
+  --bad-rgb:   239, 68, 68;
+  --info-rgb:  96, 165, 250;
+
+  /* ---------------------------------------------------------------------------
+     6. TYPED PIPES: one colour per data type carried on a wire/port.
+     Tuned on a single perceptual wheel. Chroma multiplied ~0.7 vs the old
+     cool palette to sit calmly on the warm near-black bg while remaining
+     clearly distinguishable from each other.
+     --------------------------------------------------------------------------- */
+  --t-event:       #D8554C;   /* event:        trigger pulse (vivid but calmer)  */
+  --t-text:        #60A5FA;   /* text:         utf-8 string (vivid sky)          */
+  --t-int:         #3B82F6;   /* int:          integer (vivid blue)              */
+  --t-float:       #06B6D4;   /* float:        real number (vivid cyan)          */
+  --t-bool:        #14B8A6;   /* bool:         true/false (vivid mint)           */
+  --t-json:        #94A3B8;   /* json:         structured object (slate)         */
+  --t-image:       #A855F7;   /* image:        base64 raster (vivid violet)      */
+  --t-audio:       #4ADE80;   /* audio:        wav/clip bytes (vivid green)      */
+  --t-pcm-audio:   #F97316;   /* pcm-audio:    raw PCM (vivid orange)            */
+  --t-embedding:   #14B8A6;   /* embedding:    float32 vector (vivid teal)       */
+  --t-memory-set:  #A855F7;   /* memory-set:   recalled bundle (vivid violet)    */
+  --t-state:       #C084FC;   /* state:        agent state (vivid lilac)         */
+  --t-message:     #38BDF8;   /* message:      chat unit (vivid sky)             */
+  --t-tool:        #22D3EE;   /* tool:         definition (vivid cyan)           */
+  --t-tool-call:   #06B6D4;   /* tool-call:    invocation (vivid bright cyan)    */
+  --t-tool-result: #14B8A6;   /* tool-result:  returned payload (vivid teal)     */
+  --t-mood:        #EAB308;   /* mood:         affect enum (vivid amber)         */
+  --t-action:      #4ADE80;   /* action:       actuator cue (vivid green)        */
+  --t-schedule:    #67E8F9;   /* schedule:     due reminder (vivid pale ice)     */
+  --t-observation: #FCD34D;   /* observation:  markdown bullets (vivid parchment) */
+  --t-secret:      #F472B6;   /* secret:       masked credential (vivid rose)    */
+  --t-db:          #14B8A6;   /* db:           connection handle (vivid teal)    */
+  --t-kv:          #4ADE80;   /* kv:           store handle (vivid sea green)    */
+  --t-any:         #94A3B8;   /* any:          untyped wildcard (slate)          */
+
+  /* ---------------------------------------------------------------------------
+     7. NODE-KIND ACCENTS: the header/identity colour per node category.
+     Chroma multiplied ~0.7 to harmonize with the warm near-black bg.
+     --------------------------------------------------------------------------- */
+  --kind-trigger:   #D8554C;   /* Source / Trigger  (vivid but calmer red) */
+  --kind-transform: #3B82F6;   /* Transform         (vivid blue)           */
+  --kind-service:   #14B8A6;   /* Service / Store   (vivid teal)           */
+  --kind-logic:     #EAB308;   /* Logic / Condition (vivid amber)          */
+  --kind-output:    #4ADE80;   /* Output / Sink     (vivid green)          */
+  --kind-subgraph:  #A855F7;   /* Subgraph          (vivid violet)         */
+
+  /* Function colours: one per LIBRARY FUNCTION. Vivid, not pastel.
+     AI = vivid purple, Inspect = quiet grey. */
+  --fn-source:    #D8554C;   /* Sources: triggers + sensors (vivid but calmer red) */
+  --fn-value:     #F59E0B;   /* Values: literals / constants (vivid sand)        */
+  --fn-transform: #3B82F6;   /* Transforms: template / compute (vivid blue)      */
+  --fn-logic:     #EAB308;   /* Logic: condition / branch (vivid amber)          */
+  --fn-ai:        #A855F7;   /* AI: llm / stt / tts (vivid purple)               */
+  --fn-service:   #14B8A6;   /* Services + Store: external I/O (vivid teal)      */
+  --fn-files:     #F97316;   /* Files: filesystem I/O (vivid orange)             */
+  --fn-output:    #4ADE80;   /* Outputs: deliver / chat (vivid green)            */
+  --fn-inspect:   #94A3B8;   /* Inspect: preview / log (slate)                   */
+  --fn-subgraph:  #D946EF;   /* Subgraphs: nested graph (vivid orchid)           */
+
+  /* ---------------------------------------------------------------------------
+     8. TYPOGRAPHY
+     --------------------------------------------------------------------------- */
+  --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+
+  /* Type scale */
+  --fs-micro: 10.5px;   /* port labels, units, chips, telemetry                   */
+  --fs-xs:    11.5px;   /* metadata, table cells, console                         */
+  --fs-sm:    13px;     /* body-dim, node body, inspector fields                  */
+  --fs-base:  14.5px;   /* base UI text (alias for --fs-md below)                 */
+  --fs-md:    14.5px;   /* node titles, lead paragraphs                           */
+  --fs-lg:    17px;     /* panel/section headings                                 */
+  --fs-xl:    1.4375rem; /* 23px: view titles                                     */
+  --fs-2xl:   1.875rem;  /* 30px: hero / display                                  */
+
+  /* Weights */
+  --fw-regular: 400;
+  --fw-medium:  500;
+  --fw-semibold:600;
+  --fw-bold:    700;
+
+  /* Tracking */
+  --tr-display: -0.02em;
+  --tr-tight:   -0.01em;
+  --tr-normal:   0em;
+  --tr-mono:     0.04em;   /* mono body                                           */
+  --tr-label:    0.06em;   /* UPPERCASE labels, kind tags, eyebrows               */
+  --tr-caps:     0.14em;   /* wide UPPERCASE micro-eyebrows                       */
+
+  /* Line-heights */
+  --lh-body:   1.55;
+  --lh-tight:  1.25;
+  --lh-snug:   1.35;
+  --lh-base:   1.55;
+
+  /* ---------------------------------------------------------------------------
+     9. SPACING: 4px base unit.
+     --------------------------------------------------------------------------- */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  24px;
+  --space-6:  32px;
+  --space-7:  48px;
+  --space-8:  64px;
+
+  /* Canvas grid geometry */
+  --grid-cell:      24px;
+  --grid-major-mul: 5;
+  --grid-snap:      12px;
+
+  /* Fixed chrome dimensions */
+  --bar-h:       46px;
+  --status-h:    28px;
+  --rail-left:   272px;
+  --rail-right:  320px;
+  --port-size:   11px;
+  --port-pitch:  24px;
+
+  /* ---------------------------------------------------------------------------
+     10. RADII
+     --------------------------------------------------------------------------- */
+  --radius-xs: 3px;
+  --radius-sm: 5px;
+  --radius-md: 7px;
+  --radius-lg: 10px;
+  --radius-pill: 999px;
+
+  /* ---------------------------------------------------------------------------
+     11. ELEVATION
+     --------------------------------------------------------------------------- */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --shadow-2: 0 4px 14px rgba(0, 0, 0, 0.40);
+  --shadow-3: 0 14px 40px rgba(0, 0, 0, 0.50);
+  --shadow-node:    0 2px 6px rgba(0, 0, 0, 0.45);
+  --shadow-node-sel:0 0 0 1px var(--accent),
+                    0 0 0 4px var(--accent-glow),
+                    0 10px 30px rgba(0, 0, 0, 0.55);
+  --shadow-pop:     0 18px 50px rgba(0, 0, 0, 0.60);
+  --highlight-top:  inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --focus-ring:     0 0 0 2px var(--bg-1), 0 0 0 4px var(--accent);
+
+  /* ---------------------------------------------------------------------------
+     12. MOTION
+     --------------------------------------------------------------------------- */
+  --ease-out:   cubic-bezier(0.22, 0.61, 0.36, 1);
+  --ease-inout: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-snap:  cubic-bezier(0.32, 0.72, 0, 1);
+  --dur-1: 90ms;
+  --dur-2: 160ms;
+  --dur-3: 240ms;
+  --dur-4: 420ms;
+
+  /* Z-index ladder */
+  --z-canvas:   0;
+  --z-wires:    1;
+  --z-nodes:    2;
+  --z-rail:     20;
+  --z-bar:      30;
+  --z-status:   30;
+  --z-overlay:  40;
+  --z-palette:  50;
+  --z-tooltip:  60;
+}

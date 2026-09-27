@@ -1,0 +1,4 @@
+/* Global resets; the design tokens live in tokens.css (next to this file)
+   and are imported by editor.css. */
+* { box-sizing: border-box; }
+html, body, #root { margin: 0; height: 100%; }

@@ -1,0 +1,441 @@
+{
+  "name": "chat",
+  "nodes": [
+    {
+      "id": "chat",
+      "type": "core.trigger.chat",
+      "config": {
+        "placeholder": "Type a message..."
+      },
+      "pos": [
+        -872,
+        -100
+      ]
+    },
+    {
+      "id": "Prompt Template",
+      "type": "core.data.template",
+      "config": {
+        "template": "You are a helpful voice assistant talking with {username}.\n\n- Reply naturally in one short sentence.\n- No emojis (the reply is spoken by TTS); start with an [expression] tag, e.g. [happy] Hello! [curious] How are you?\n\n## Time now\n{clock}\n\n## Recent chat\n{chat_history}\n\n## User's last message\n{clock} - {username}: {chat}"
+      },
+      "pos": [
+        556,
+        -100
+      ],
+      "size": [
+        374,
+        640
+      ]
+    },
+    {
+      "id": "LLM",
+      "type": "core.ai.llm",
+      "config": {
+        "model": "xai/grok-4.20",
+        "params": {
+          "temperature": 0.6,
+          "top_p": 1,
+          "max_completion_tokens": 2048,
+          "json": false
+        },
+        "promoted": []
+      },
+      "pos": [
+        1728,
+        -36
+      ]
+    },
+    {
+      "id": "Response Preview",
+      "type": "core.output.preview",
+      "config": {},
+      "pos": [
+        2184,
+        -36
+      ],
+      "size": [
+        290,
+        280
+      ]
+    },
+    {
+      "id": "clock",
+      "type": "core.sensor.clock",
+      "config": {
+        "format": "08 Jun 2026, 02:30 PM",
+        "timezone": "Local"
+      },
+      "pos": [
+        148,
+        -280
+      ]
+    },
+    {
+      "id": "database",
+      "type": "core.store.database",
+      "config": {
+        "db_key": "chat"
+      },
+      "pos": [
+        -884,
+        -556
+      ]
+    },
+    {
+      "id": "Chat Append (Assistant)",
+      "type": "core.db",
+      "config": {
+        "operation": "insert",
+        "sql": "",
+        "table": "chat_history",
+        "fields": "time = {tag1}\nsender = Assistant\nmessage = {tag0}",
+        "where": ""
+      },
+      "pos": [
+        2412,
+        -516
+      ],
+      "size": [
+        290,
+        404
+      ]
+    },
+    {
+      "id": "Chat Setup",
+      "type": "core.db",
+      "config": {
+        "operation": "exec",
+        "sql": "CREATE TABLE IF NOT EXISTS chat_history (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  time TEXT,\n  sender TEXT,\n  message TEXT\n)",
+        "table": "",
+        "fields": "",
+        "where": ""
+      },
+      "pos": [
+        -356,
+        -556
+      ],
+      "size": [
+        353,
+        306
+      ]
+    },
+    {
+      "id": "Chat History",
+      "type": "core.db",
+      "config": {
+        "operation": "query",
+        "sql": "SELECT time, sender, message FROM (\n  SELECT id, time, sender, message FROM chat_history ORDER BY id DESC LIMIT 60\n) ORDER BY id",
+        "table": "",
+        "fields": "",
+        "where": ""
+      },
+      "pos": [
+        -356,
+        -100
+      ],
+      "size": [
+        353,
+        306
+      ]
+    },
+    {
+      "id": "Chat Append (User)",
+      "type": "core.db",
+      "config": {
+        "operation": "insert",
+        "sql": "",
+        "table": "chat_history",
+        "fields": "time = {tag1}\nsender = {username}\nmessage = {tag0}",
+        "where": ""
+      },
+      "pos": [
+        640,
+        -580
+      ],
+      "size": [
+        290,
+        430
+      ]
+    },
+    {
+      "id": "TTS",
+      "type": "core.ai.tts",
+      "config": {
+        "model": "xai/tts",
+        "params": {
+          "voice": "eve",
+          "language": "auto"
+        }
+      },
+      "pos": [
+        2568,
+        -36
+      ]
+    },
+    {
+      "id": "Context",
+      "type": "core.output.preview",
+      "config": {},
+      "pos": [
+        1224,
+        -36
+      ],
+      "size": [
+        386,
+        640
+      ]
+    },
+    {
+      "id": "format_list",
+      "type": "core.data.format_list",
+      "config": {
+        "item": "{time} - {sender}: {message}",
+        "separator": "\\n\\n"
+      },
+      "pos": [
+        136,
+        -28
+      ]
+    },
+    {
+      "id": "Username",
+      "type": "core.value.text",
+      "config": {
+        "text": "User"
+      },
+      "pos": [
+        -872,
+        116
+      ],
+      "size": [
+        290,
+        248
+      ]
+    },
+    {
+      "id": "Audio Preview",
+      "type": "core.output.preview",
+      "config": {
+        "autoplay": true
+      },
+      "pos": [
+        2952,
+        -36
+      ],
+      "size": [
+        290,
+        280
+      ]
+    },
+    {
+      "id": "wireless_in",
+      "type": "core.flow.wireless_in",
+      "config": {
+        "channel": "1"
+      },
+      "pos": [
+        1080,
+        -252
+      ]
+    },
+    {
+      "id": "wireless_out",
+      "type": "core.flow.wireless_out",
+      "config": {
+        "channel": "1"
+      },
+      "pos": [
+        876,
+        72
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "src": "chat",
+      "src_port": "text",
+      "dst": "Prompt Template",
+      "dst_port": "chat"
+    },
+    {
+      "src": "database",
+      "src_port": "db",
+      "dst": "Chat Setup",
+      "dst_port": "db"
+    },
+    {
+      "src": "database",
+      "src_port": "db",
+      "dst": "Chat History",
+      "dst_port": "db"
+    },
+    {
+      "src": "chat",
+      "src_port": "trigger",
+      "dst": "Chat Setup",
+      "dst_port": "trigger"
+    },
+    {
+      "src": "Chat Setup",
+      "src_port": "trigger",
+      "dst": "Chat History",
+      "dst_port": "trigger"
+    },
+    {
+      "src": "clock",
+      "src_port": "out",
+      "dst": "Prompt Template",
+      "dst_port": "clock"
+    },
+    {
+      "src": "chat",
+      "src_port": "text",
+      "dst": "Chat Append (User)",
+      "dst_port": "tag0"
+    },
+    {
+      "src": "LLM",
+      "src_port": "response",
+      "dst": "Chat Append (Assistant)",
+      "dst_port": "tag0"
+    },
+    {
+      "src": "LLM",
+      "src_port": "trigger",
+      "dst": "Chat Append (Assistant)",
+      "dst_port": "trigger"
+    },
+    {
+      "src": "database",
+      "src_port": "db",
+      "dst": "Chat Append (User)",
+      "dst_port": "db"
+    },
+    {
+      "src": "database",
+      "src_port": "db",
+      "dst": "Chat Append (Assistant)",
+      "dst_port": "db"
+    },
+    {
+      "src": "clock",
+      "src_port": "out",
+      "dst": "Chat Append (User)",
+      "dst_port": "tag1"
+    },
+    {
+      "src": "clock",
+      "src_port": "out",
+      "dst": "Chat Append (Assistant)",
+      "dst_port": "tag1"
+    },
+    {
+      "src": "Response Preview",
+      "src_port": "trigger",
+      "dst": "TTS",
+      "dst_port": "trigger"
+    },
+    {
+      "src": "Chat History",
+      "src_port": "rows",
+      "dst": "format_list",
+      "dst_port": "list"
+    },
+    {
+      "src": "format_list",
+      "src_port": "out",
+      "dst": "Prompt Template",
+      "dst_port": "chat_history"
+    },
+    {
+      "src": "Username",
+      "src_port": "out",
+      "dst": "Prompt Template",
+      "dst_port": "username"
+    },
+    {
+      "src": "Username",
+      "src_port": "out",
+      "dst": "Chat Append (User)",
+      "dst_port": "username"
+    },
+    {
+      "src": "Response Preview",
+      "src_port": "out",
+      "dst": "TTS",
+      "dst_port": "text"
+    },
+    {
+      "src": "TTS",
+      "src_port": "trigger",
+      "dst": "Audio Preview",
+      "dst_port": "trigger"
+    },
+    {
+      "src": "TTS",
+      "src_port": "audio",
+      "dst": "Audio Preview",
+      "dst_port": "in"
+    },
+    {
+      "src": "Context",
+      "src_port": "trigger",
+      "dst": "LLM",
+      "dst_port": "trigger"
+    },
+    {
+      "src": "Context",
+      "src_port": "out",
+      "dst": "LLM",
+      "dst_port": "prompt"
+    },
+    {
+      "src": "LLM",
+      "src_port": "response",
+      "dst": "Response Preview",
+      "dst_port": "in"
+    },
+    {
+      "src": "LLM",
+      "src_port": "trigger",
+      "dst": "Response Preview",
+      "dst_port": "trigger"
+    },
+    {
+      "src": "Chat History",
+      "src_port": "trigger",
+      "dst": "Prompt Template",
+      "dst_port": "trigger"
+    },
+    {
+      "src": "Chat History",
+      "src_port": "trigger",
+      "dst": "Chat Append (User)",
+      "dst_port": "trigger"
+    },
+    {
+      "src": "Prompt Template",
+      "src_port": "trigger",
+      "dst": "wireless_in",
+      "dst_port": "prompt_template.trigger"
+    },
+    {
+      "src": "Prompt Template",
+      "src_port": "out",
+      "dst": "wireless_in",
+      "dst_port": "prompt_template.out"
+    },
+    {
+      "src": "wireless_out",
+      "src_port": "prompt_template.trigger",
+      "dst": "Context",
+      "dst_port": "trigger"
+    },
+    {
+      "src": "wireless_out",
+      "src_port": "prompt_template.out",
+      "dst": "Context",
+      "dst_port": "in"
+    }
+  ]
+}

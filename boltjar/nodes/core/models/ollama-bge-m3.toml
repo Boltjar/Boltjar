@@ -1,0 +1,20 @@
+# Local embeddings via Ollama. bge-m3: multilingual dense embeddings, 1024-d.
+# Matches in-process bge-m3 output (verified cosine 1.0000). No torch in the
+# Boltjar venv: Ollama serves it over POST /api/embed.
+# Needs Ollama running with `bge-m3` pulled (`ollama pull bge-m3`).
+id = "ollama/bge-m3"
+provider = "ollama"
+model = "bge-m3"
+label = "bge-m3 (Ollama)"
+summary = "Local multilingual embeddings, 1024-d. No torch. Needs Ollama + bge-m3."
+kind = "embed"
+context = 8192
+# NB: inputs/outputs modalities are only load-bearing for the LLM node (it reshapes
+# its ports from them). Embed/Rerank own their ports, so this manifest does not
+# declare them; the node's declared embedding/trigger ports are the truth.
+
+[[params]]
+name = "dim"
+type = "int"
+default = 1024
+label = "dimensions"

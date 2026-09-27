@@ -1,0 +1,35 @@
+# Fish Audio TTS (s2 model). Needs FISH_API_KEY. Endpoint api.fish.audio/v1/tts.
+# Voice is your reference id from fish.audio (or a friendly name mapped in
+# builtin._FISH_VOICES, empty by default); an empty voice fails with a clear
+# error. Format is the output audio container. Fish rejects a chunk_length outside
+# [100, 300] with a 400 (confirmed live 2026-09-23), so the knob is bounded to it
+# and builtin._fish_tts clamps whatever arrives.
+id = "fish/s2"
+provider = "fish"
+model = "fish-audio"
+label = "Fish Audio (s2)"
+summary = "High-quality multilingual TTS, voice cloning. Needs FISH_API_KEY."
+kind = "tts"
+inputs = ["text"]
+outputs = ["audio"]
+
+[[params]]
+name = "voice"
+type = "text"
+default = ""
+label = "voice reference_id (from fish.audio)"
+
+[[params]]
+name = "format"
+type = "select"
+default = "wav"
+options = ["wav", "mp3", "opus"]
+
+[[params]]
+name = "chunk_length"
+type = "int"
+default = 100
+min = 100
+max = 300
+step = 10
+label = "chunk length"

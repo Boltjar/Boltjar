@@ -1,0 +1,9 @@
+# Fish Audio STT. Needs FISH_API_KEY. Endpoint api.fish.audio/v1/asr.
+id = "fish/asr"
+provider = "fish"
+model = "fish-audio"
+label = "Fish Audio ASR"
+summary = "Multilingual speech-to-text. Needs FISH_API_KEY."
+kind = "stt"
+inputs = ["audio"]
+outputs = ["text"]

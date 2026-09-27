@@ -1,0 +1,190 @@
+// ============================================================================
+// ContextMenu: the right-click menu (node / canvas / edge), suppressing the
+// browser menu. Two flavours over one shell:
+//   • a plain list of actions (with icons, shortcut hints, separators, danger);
+//   • a node-search submenu (canvas "Add node", edge "Insert node") that filters
+//     the catalog and adds at the click point.
+// Positions itself within the viewport and closes on outside-click / Escape.
+// ============================================================================
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { NodeDef } from "../types/protocol";
+import { Icon } from "../lib/icons";
+import { functionColorVar, nodeIcon } from "../lib/kinds";
+import { capabilityHint } from "../lib/nodeMeta";
+
+export interface MenuItem {
+  id: string;
+  label: string;
+  icon?: string;
+  kbd?: string;
+  danger?: boolean;
+  disabled?: boolean;
+  separatorBefore?: boolean;
+  /** a coloured swatch shown in place of the icon (group recolour items). */
+  swatch?: string;
+  /** marks the current choice with a trailing check (group's active colour). */
+  active?: boolean;
+  run: () => void;
+}
+
+export type ContextMenuKind = "node" | "canvas" | "edge" | "group";
+
+interface ContextMenuProps {
+  x: number;
+  y: number;
+  /** plain action items (node + edge menus, and the canvas non-search items). */
+  items: MenuItem[];
+  /** when set, render a node-search section titled by `searchTitle`. */
+  defs?: NodeDef[];
+  searchTitle?: string;
+  onPickNode?: (typeId: string) => void;
+  onClose: () => void;
+}
+
+export function ContextMenu({ x, y, items, defs, searchTitle, onPickNode, onClose }: ContextMenuProps) {
+  const ref = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const [pos, setPos] = useState({ x, y });
+  const [query, setQuery] = useState("");
+  const [active, setActive] = useState(0);
+
+  const searchable = !!defs && !!onPickNode;
+
+  // clamp into the viewport once measured.
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    let nx = x;
+    let ny = y;
+    if (x + r.width > window.innerWidth - 8) nx = window.innerWidth - r.width - 8;
+    if (y + r.height > window.innerHeight - 8) ny = window.innerHeight - r.height - 8;
+    setPos({ x: Math.max(8, nx), y: Math.max(8, ny) });
+  }, [x, y]);
+
+  useEffect(() => {
+    if (searchable) searchRef.current?.focus();
+  }, [searchable]);
+
+  useEffect(() => {
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("mousedown", onDown);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("mousedown", onDown);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
+
+  const matches = useMemo(() => {
+    if (!defs) return [];
+    const q = query.trim().toLowerCase();
+    const list = q
+      ? defs.filter((d) => `${d.name} ${d.id} ${d.category} ${d.summary}`.toLowerCase().includes(q))
+      : defs;
+    return list.slice(0, 9);
+  }, [defs, query]);
+
+  useEffect(() => {
+    setActive((a) => Math.min(a, Math.max(0, matches.length - 1)));
+  }, [matches.length]);
+
+  const pickActive = () => {
+    const d = matches[active];
+    if (d && onPickNode) {
+      onPickNode(d.id);
+      onClose();
+    }
+  };
+
+  return (
+    <div
+      ref={ref}
+      className="ctxmenu"
+      style={{ left: pos.x, top: pos.y }}
+      onContextMenu={(e) => e.preventDefault()}
+    >
+      {items.map((it) => (
+        <div key={it.id}>
+          {it.separatorBefore && <div className="ctx-sep" />}
+          <button
+            className={`ctx-item ${it.danger ? "danger" : ""} ${it.disabled ? "disabled" : ""}`}
+            disabled={it.disabled}
+            onClick={() => {
+              if (it.disabled) return;
+              it.run();
+              onClose();
+            }}
+          >
+            {it.swatch
+              ? <span className="ctx-swatch" style={{ background: it.swatch }} />
+              : it.icon && <Icon name={it.icon} className="ctx-ico" />}
+            <span className="ctx-lbl">{it.label}</span>
+            {it.active && <Icon name="checkmark-outline" className="ctx-check" />}
+            {it.kbd && <span className="ctx-kbd">{it.kbd}</span>}
+          </button>
+        </div>
+      ))}
+
+      {searchable && (
+        <div className="ctx-search-sec">
+          {items.length > 0 && <div className="ctx-sep" />}
+          <div className="ctx-search-title">{searchTitle ?? "Add node"}</div>
+          <div className="ctx-search">
+            <Icon name="search-outline" />
+            <input
+              ref={searchRef}
+              value={query}
+              placeholder="search nodes…"
+              spellCheck={false}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  setActive((a) => Math.min(matches.length - 1, a + 1));
+                } else if (e.key === "ArrowUp") {
+                  e.preventDefault();
+                  setActive((a) => Math.max(0, a - 1));
+                } else if (e.key === "Enter") {
+                  e.preventDefault();
+                  pickActive();
+                }
+              }}
+            />
+          </div>
+          <div className="ctx-results">
+            {matches.length === 0 ? (
+              <div className="ctx-empty">no match</div>
+            ) : (
+              matches.map((d, i) => {
+                const fc = functionColorVar(d);
+                return (
+                  <button
+                    key={d.id}
+                    className={`ctx-node ${i === active ? "active" : ""}`}
+                    onMouseEnter={() => setActive(i)}
+                    onClick={() => {
+                      onPickNode!(d.id);
+                      onClose();
+                    }}
+                  >
+                    <span className="ctx-node-ico" style={{ color: fc }}>
+                      <Icon name={nodeIcon(d)} />
+                    </span>
+                    <span className="ctx-node-name">{d.name}</span>
+                    <span className="ctx-node-cap">{capabilityHint(d)}</span>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

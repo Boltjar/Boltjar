@@ -1,0 +1,12 @@
+# xAI speech-to-text. Needs XAI_API_KEY. POST api.x.ai/v1/stt, multipart with the
+# `model` field first and `file` LAST (xAI ignores any field sent after the file).
+# Returns {text, language, duration, words}; the language rides the STT `lang` out.
+# Docs: https://docs.x.ai/developers/model-capabilities/audio/speech-to-text
+id = "xai/stt"
+provider = "xai"
+model = "grok-voice-transcribe-2.0"
+label = "xAI STT (grok-voice-transcribe 2.0)"
+summary = "Multilingual speech-to-text with the detected language. Needs XAI_API_KEY. $0.10 per hour."
+kind = "stt"
+inputs = ["audio"]
+outputs = ["text"]

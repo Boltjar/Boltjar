@@ -1,0 +1,185 @@
+{
+  "name": "chat",
+  "nodes": [
+    {
+      "id": "chat",
+      "type": "core.trigger.chat",
+      "config": {
+        "placeholder": "Type a message..."
+      },
+      "pos": [
+        36,
+        120
+      ]
+    },
+    {
+      "id": "persona",
+      "type": "core.value.text",
+      "config": {
+        "text": "You are a helpful assistant. Reply in short sentences."
+      },
+      "pos": [
+        48,
+        456
+      ],
+      "size": [
+        290,
+        238
+      ]
+    },
+    {
+      "id": "tpl",
+      "type": "core.data.template",
+      "config": {
+        "template": "{persona}\n\nUser: {chat}\nAssistant:"
+      },
+      "pos": [
+        456,
+        300
+      ],
+      "size": [
+        290,
+        268
+      ]
+    },
+    {
+      "id": "llm",
+      "type": "core.ai.llm",
+      "config": {
+        "model": "ollama/gemma4:e4b",
+        "params": {
+          "temperature": 0.8,
+          "top_p": 0.9,
+          "num_ctx": 8192,
+          "keep_alive": "5m",
+          "think": false,
+          "json": false
+        }
+      },
+      "pos": [
+        864,
+        -12
+      ]
+    },
+    {
+      "id": "convo",
+      "type": "core.output.chat",
+      "config": {},
+      "pos": [
+        1272,
+        -156
+      ],
+      "size": [
+        290,
+        528
+      ]
+    },
+    {
+      "id": "pv_prompt",
+      "type": "core.output.preview",
+      "config": {},
+      "pos": [
+        864,
+        576
+      ],
+      "size": [
+        290,
+        220
+      ]
+    },
+    {
+      "id": "tts1",
+      "type": "core.ai.tts",
+      "config": {
+        "voice": "default",
+        "model": "fish-audio",
+        "promoted": []
+      },
+      "pos": [
+        1284,
+        432
+      ]
+    },
+    {
+      "id": "preview1",
+      "type": "core.output.preview",
+      "config": {},
+      "pos": [
+        1668,
+        456
+      ],
+      "size": [
+        290,
+        190
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "src": "persona",
+      "src_port": "out",
+      "dst": "tpl",
+      "dst_port": "persona"
+    },
+    {
+      "src": "tpl",
+      "src_port": "out",
+      "dst": "llm",
+      "dst_port": "prompt"
+    },
+    {
+      "src": "chat",
+      "src_port": "trigger",
+      "dst": "llm",
+      "dst_port": "trigger"
+    },
+    {
+      "src": "chat",
+      "src_port": "trigger",
+      "dst": "convo",
+      "dst_port": "user_trigger"
+    },
+    {
+      "src": "chat",
+      "src_port": "text",
+      "dst": "convo",
+      "dst_port": "user"
+    },
+    {
+      "src": "llm",
+      "src_port": "response",
+      "dst": "convo",
+      "dst_port": "reply"
+    },
+    {
+      "src": "tpl",
+      "src_port": "out",
+      "dst": "pv_prompt",
+      "dst_port": "in"
+    },
+    {
+      "src": "chat",
+      "src_port": "text",
+      "dst": "tpl",
+      "dst_port": "chat"
+    },
+    {
+      "src": "llm",
+      "src_port": "response",
+      "dst": "tts1",
+      "dst_port": "text"
+    },
+    {
+      "src": "tts1",
+      "src_port": "audio",
+      "dst": "preview1",
+      "dst_port": "in"
+    },
+    {
+      "src": "llm",
+      "src_port": "trigger",
+      "dst": "tts1",
+      "dst_port": "trigger"
+    }
+  ]
+}

@@ -1,0 +1,50 @@
+# Agent tooling notes (never published)
+CLAUDE.md
+MEMORY.md
+.claude/
+
+# Secrets
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+
+# Runtime data (saved graphs, snapshots, stores)
+user/
+
+# Third-party node packs (only the README is tracked)
+packs/*
+!packs/README.md
+
+# Python
+.python/
+.venv/
+venv/
+*.egg-info/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+npm-debug.log*
+
+# Browser automation output
+.playwright-mcp/
+/*.png
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Editors
+.vscode/
+.idea/
+*.swp

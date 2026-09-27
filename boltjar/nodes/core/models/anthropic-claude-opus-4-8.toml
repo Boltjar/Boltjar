@@ -1,0 +1,29 @@
+# Anthropic Claude Opus 4.8 over the Messages API. Needs ANTHROPIC_API_KEY.
+# Docs: https://platform.claude.com/docs/en/api/messages
+#       https://platform.claude.com/docs/en/build-with-claude/extended-thinking
+# NOTE: Opus 4.7+ does NOT support temperature / top_p / top_k (HTTP 400 if set),
+# so those knobs are omitted here. Thinking is adaptive-only (no budget_tokens).
+id = "anthropic/claude-opus-4-8"
+provider = "anthropic"
+model = "claude-opus-4-8"
+label = "Claude Opus 4.8"
+summary = "Top-tier reasoning, reads images, tool-calls, adaptive thinking, JSON output. Needs ANTHROPIC_API_KEY."
+context = 1000000
+inputs = ["text", "image"]
+outputs = ["text"]
+tools = true
+thinking = true
+thinking_style = "level"
+json = true
+
+[[params]]
+name = "max_tokens"
+type = "int"
+default = 4096
+min = 1
+max = 64000
+
+[[params]]
+name = "stop_sequences"
+type = "text"
+default = ""

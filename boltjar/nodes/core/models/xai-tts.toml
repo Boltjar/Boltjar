@@ -1,0 +1,53 @@
+# xAI text-to-speech (Grok voices). Needs XAI_API_KEY. POST api.x.ai/v1/tts with
+# JSON {text, voice_id, language, output_format {codec, sample_rate}, speed}.
+# Docs: https://docs.x.ai/developers/model-capabilities/audio/text-to-speech
+# `language` is REQUIRED by xAI; a wired `lang` input on the TTS node overrides
+# this knob (builtin._xai_language maps it onto xAI's list). The 28 voices are
+# the multilingual presets from GET /v1/tts/voices (verified 2026-09-23).
+# mp3 is about 10x smaller than wav on the websocket and plays inline.
+id = "xai/tts"
+provider = "xai"
+model = "tts"   # the endpoint takes no model name; this only names the entry
+label = "xAI TTS (Grok voices)"
+summary = "28 multilingual Grok voices, 20 languages. Needs XAI_API_KEY. $15 per 1M characters."
+kind = "tts"
+inputs = ["text"]
+outputs = ["audio"]
+
+[[params]]
+name = "voice"
+type = "select"
+default = "eve"
+# female: ara .. ursa, then male: altair .. zenith
+options = ["ara", "aurora", "carina", "celeste", "eve", "iris", "liora", "luna", "ursa",
+           "altair", "atlas", "castor", "cosmo", "helios", "helix", "kepler", "leo",
+           "lumen", "lux", "naksh", "orion", "perseus", "rex", "rigel", "sal", "sirius",
+           "zagan", "zenith"]
+
+[[params]]
+name = "language"
+type = "select"
+default = "auto"
+options = ["auto", "en", "ar-EG", "ar-SA", "ar-AE", "bn", "zh", "fr", "de", "hi", "id",
+           "it", "ja", "ko", "pt-BR", "pt-PT", "ru", "es-MX", "es-ES", "tr", "vi"]
+
+[[params]]
+name = "speed"
+type = "float"
+default = 1.0
+min = 0.7
+max = 1.5
+step = 0.05
+
+[[params]]
+name = "codec"
+type = "select"
+default = "mp3"
+options = ["mp3", "wav"]
+
+[[params]]
+name = "sample_rate"
+type = "select"
+default = 44100
+options = [8000, 16000, 22050, 24000, 44100, 48000]
+label = "sample rate"

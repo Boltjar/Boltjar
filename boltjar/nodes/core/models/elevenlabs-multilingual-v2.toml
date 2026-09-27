@@ -1,0 +1,40 @@
+# ElevenLabs Multilingual v2 (TTS). Needs ELEVENLABS_API_KEY. The API default
+# model_id; 29 languages, long-form quality. Voice id comes from /v2/voices.
+id = "elevenlabs/multilingual_v2"
+provider = "elevenlabs"
+model = "eleven_multilingual_v2"
+label = "ElevenLabs Multilingual v2"
+summary = "Long-form quality TTS, 29 languages. Needs ELEVENLABS_API_KEY."
+kind = "tts"
+inputs = ["text"]
+outputs = ["audio"]
+
+[[params]]
+name = "voice_id"
+type = "text"
+default = "21m00Tcm4TlvDq8ikWAM"
+label = "voice id (from /v2/voices)"
+
+[[params]]
+name = "stability"
+type = "float"
+default = 0.5
+min = 0.0
+max = 1.0
+step = 0.05
+
+[[params]]
+name = "similarity_boost"
+type = "float"
+default = 0.75
+min = 0.0
+max = 1.0
+step = 0.05
+
+[[params]]
+name = "speed"
+type = "float"
+default = 1.0
+min = 0.7
+max = 1.2
+step = 0.05

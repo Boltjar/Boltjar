@@ -1,0 +1,42 @@
+# Local via Ollama. Multimodal e-series: text + image in. The smaller, faster
+# variant. Needs Ollama running with this model pulled.
+id = "ollama/gemma4:e2b"
+provider = "ollama"
+model = "gemma4:e2b"
+label = "Gemma 4 e2b (Ollama)"
+summary = "Local multimodal model: reads text and images, thinking + tools. The smaller, faster e-series variant."
+context = 131072
+inputs = ["text", "image"]
+outputs = ["text"]
+tools = true
+thinking = true
+thinking_style = "bool"
+json = true
+
+[[params]]
+name = "temperature"
+type = "float"
+default = 0.8
+min = 0.0
+max = 2.0
+step = 0.05
+
+[[params]]
+name = "top_p"
+type = "float"
+default = 0.9
+min = 0.0
+max = 1.0
+step = 0.05
+
+[[params]]
+name = "num_ctx"
+type = "int"
+default = 8192
+min = 256
+max = 131072
+
+[[params]]
+name = "keep_alive"
+type = "text"
+default = "5m"

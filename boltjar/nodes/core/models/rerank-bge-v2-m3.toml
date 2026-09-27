@@ -1,0 +1,28 @@
+# Cross-encoder reranker over an HTTP /rerank endpoint (bge-reranker-v2-m3, the
+# same family as bge-m3, multilingual). Kept out-of-process (HTTP) so no torch
+# lands in the Boltjar venv; point `endpoint` at a local rerank service or a cloud
+# reranker (the localhost:8181 default is only an example address). The Rerank
+# node fails loud (a red node naming the url) if the service is down.
+id = "rerank/bge-v2-m3"
+provider = "http"
+model = "bge-reranker-v2-m3"
+label = "bge-reranker v2 m3 (HTTP)"
+summary = "Cross-encoder precision rerank over HTTP. No torch in this process."
+kind = "rerank"
+# inputs/outputs modalities are only load-bearing for the LLM node; the Rerank node
+# owns its ports (query + candidates -> results memory-set), so they are omitted here
+# rather than declared wrongly (the node emits a memory-set, not text).
+
+[[params]]
+name = "endpoint"
+type = "text"
+default = "http://localhost:8181/rerank"
+label = "rerank endpoint"
+
+[[params]]
+name = "keep"
+type = "int"
+default = 5
+min = 1
+max = 100
+label = "keep"
