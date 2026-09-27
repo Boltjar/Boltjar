@@ -554,19 +554,7 @@
   "icon": "recording-outline",
   "subline": "",
   "inputs": [],
-  "widgets": [
-   {
-    "name": "placeholder",
-    "kind": "text",
-    "label": "Placeholder",
-    "default": "Hold to talk...",
-    "surface": "body",
-    "promotable": true,
-    "op_field": null,
-    "op_values": [],
-    "model_kind": null
-   }
-  ]
+  "widgets": []
  },
  {
   "id": "core.trigger.webhook",

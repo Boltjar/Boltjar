@@ -820,7 +820,6 @@ class ChatInput:
               "STT node to transcribe it.",
       icon="recording-outline")
 class AudioInput:
-    placeholder: str = "Hold to talk..."
     outputs = [Port("trigger", "event"), Port("audio", "audio"), Port("lang", "lang", optional=True)]
 
     async def start(self, ctx):
