@@ -53,6 +53,7 @@ from boltjar.sqlite_store import SqliteStore
 from boltjar.file_store import FileStore
 from boltjar.kv_store import KvStore
 from boltjar.vector_store import VectorStore
+from boltjar.graph_format import GraphFormatError, migrate
 from boltjar import models
 from boltjar import packs as _packs
 import boltjar.secrets as _secrets
@@ -185,6 +186,10 @@ class Hub:
 
     async def power_on(self, graph: dict) -> list[dict] | None:
         """Start the graph live. Returns validation problems if the graph is broken."""
+        try:
+            graph = migrate(graph)
+        except GraphFormatError as exc:
+            return [_format_problem(exc)]
         problems = validate_graph(graph)
         if problems:
             return problems
@@ -447,6 +452,11 @@ def _edge_problems(graph: dict) -> list[dict]:
     return problems
 
 
+def _format_problem(exc: GraphFormatError) -> dict:
+    """A graph whose format this Boltjar cannot read, as a graph-level problem."""
+    return {"node": None, "kind": "format", "message": str(exc)}
+
+
 def validate_graph(graph: dict) -> list[dict]:
     """Pre-run validation: a graph cannot turn On if any node is broken."""
     problems: list[dict] = []
@@ -546,12 +556,22 @@ def list_graphs() -> dict:
     return {"graphs": sorted(slugs)}
 
 
+def _load_graph_file(path: pathlib.Path):
+    """A saved graph file in the current format (migrated on the way out; the
+    file itself is rewritten only by the next save), or a 422 when this Boltjar
+    cannot read its format."""
+    try:
+        return migrate(json.loads(path.read_text(encoding="utf-8")))
+    except GraphFormatError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=422)
+
+
 @app.get("/api/graphs/{name}")
 def get_graph(name: str):
     path = _graph_path(name)
     if path is None:
         return JSONResponse({"error": "not found"}, status_code=404)
-    return json.loads(path.read_text(encoding="utf-8"))
+    return _load_graph_file(path)
 
 
 def _snapshot_graph(name: str, graph: dict) -> None:
@@ -576,7 +596,13 @@ def _snapshot_graph(name: str, graph: dict) -> None:
 
 
 @app.put("/api/graphs/{name}")
-async def put_graph(name: str, graph: dict) -> dict:
+async def put_graph(name: str, graph: dict):
+    # every save is stamped with the current format (a graph from an older
+    # editor is migrated first; one from a newer Boltjar is refused, not truncated).
+    try:
+        graph = migrate(graph)
+    except GraphFormatError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=422)
     # always a user copy: an example is never overwritten, only overridden.
     GRAPHS_DIR.mkdir(parents=True, exist_ok=True)
     (GRAPHS_DIR / f"{_safe(name)}.json").write_text(json.dumps(graph, indent=2), encoding="utf-8")
@@ -607,7 +633,7 @@ def get_version(name: str, version: str):
     path = AUTOSAVE_DIR / _safe(name) / f"{_safe(version)}.json"
     if not path.exists():
         return JSONResponse({"error": "not found"}, status_code=404)
-    return json.loads(path.read_text(encoding="utf-8"))
+    return _load_graph_file(path)
 
 
 @app.delete("/api/graphs/{name}")
@@ -668,6 +694,10 @@ async def kv_destroy(key: str) -> dict:
 
 @app.post("/api/validate")
 async def validate(graph: dict) -> dict:
+    try:
+        graph = migrate(graph)
+    except GraphFormatError as exc:
+        return {"problems": [_format_problem(exc)]}
     return {"problems": validate_graph(graph)}
 
 
