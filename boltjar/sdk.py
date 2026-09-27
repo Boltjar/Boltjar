@@ -192,6 +192,12 @@ class Widget:
                     pass
         return value
 
+    def __post_init__(self) -> None:
+        # a model picker reshapes its node (the picked model's knobs and inputs
+        # follow it), so a wire can never drive it: it always stays a knob.
+        if self.kind == "model":
+            self.promotable = False
+
 
 # the strings a bool knob reads as on (mirrors the editor's knobBool); every
 # other string reads as off.

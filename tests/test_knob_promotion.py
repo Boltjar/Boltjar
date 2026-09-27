@@ -145,3 +145,17 @@ def test_llm_promoted_param_still_overrides_at_runtime() -> None:
     done = [e for e in events if e["kind"] == "value" and e.get("port") == "trigger" and e["node"] == "llm"]
     assert done, "the LLM with a promoted+wired param must still fire and complete"
     assert any(e["node"] == "out" for e in logs(events)), "the LLM response must reach the sink"
+
+
+def test_a_model_picker_always_stays_a_knob() -> None:
+    # the picked model reshapes its node (its knobs and inputs follow the pick),
+    # so no declaration can make a model picker an input, a pack's included.
+    from boltjar.sdk import NODE_REGISTRY, Widget
+
+    assert Widget(kind="model", promotable=True).promotable is False
+    pickers = {(s.id, w.name): w for s in NODE_REGISTRY.values() for w in s.widgets if w.kind == "model"}
+    assert {nid for nid, _ in pickers} >= {"core.ai.llm", "core.ai.tts", "core.ai.stt",
+                                           "core.ai.embed", "core.ai.rerank"}
+    assert not any(w.promotable for w in pickers.values())
+    (llm_model,) = [w for w in NODE_REGISTRY["core.ai.llm"].definition()["widgets"] if w["name"] == "model"]
+    assert llm_model["promotable"] is False  # what the editor reads
