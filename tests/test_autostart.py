@@ -163,8 +163,35 @@ def test_the_linux_entry_quotes_the_path_for_the_desktop(tmp_path):
     assert lines[0] == "[Desktop Entry]"
     assert "Type=Application" in lines and "Terminal=false" in lines
     exec_line = next(line for line in lines if line.startswith("Exec="))
-    assert _desktop_exec_args(exec_line) == ["/bin/sh", f"{root}/start.sh", "--no-browser"]
+    # start.sh --no-browser, its output appended to the log: both paths reach sh
+    # as $0 and $1, never inside the script
+    assert _desktop_exec_args(exec_line) == [
+        "/bin/sh", "-c", 'exec /bin/sh "$0" --no-browser >>"$1" 2>&1',
+        f"{root}/start.sh", f"{root}/user/logs/boltjar.log"]
     assert autostart.target_of("linux", text.encode("utf-8")) == str(root)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="runs /bin/sh")
+def test_sh_runs_the_linux_entry_with_its_output_in_the_log(tmp_path):
+    """The Exec line as a desktop reads it, run by sh itself against a stub
+    start.sh in a folder with a nasty name."""
+    root = install(tmp_path)
+    (root / "start.sh").write_text('echo "args: $*"\necho "to stderr" >&2\n', encoding="utf-8")
+    (root / "user" / "logs").mkdir(parents=True)
+    text = autostart.entry_bytes("linux", root).decode("utf-8")
+    args = _desktop_exec_args(next(line for line in text.splitlines() if line.startswith("Exec=")))
+    run = subprocess.run(args, capture_output=True, timeout=30, cwd=root)
+    assert run.returncode == 0, run.stderr
+    assert run.stdout == b"" and run.stderr == b""
+    log = (root / "user" / "logs" / "boltjar.log").read_text(encoding="utf-8")
+    assert "args: --no-browser" in log and "to stderr" in log
+
+
+def test_turning_it_on_on_linux_makes_the_log_folder(monkeypatch, tmp_path):
+    account(monkeypatch, tmp_path, "linux")
+    root = install(tmp_path)
+    autostart.enable(root)
+    assert (root / "user" / "logs").is_dir()  # the redirect cannot create it
 
 
 # ---------------------------------------------------------------- the API

@@ -10,7 +10,8 @@ never the registry, never administrator rights:
   - macOS: ~/Library/LaunchAgents/link.boltjar.plist (RunAtLoad), running
     start.sh --no-browser, its output in user/logs/boltjar.log.
   - Linux and other XDG desktops: ~/.config/autostart/boltjar.desktop
-    ($XDG_CONFIG_HOME/autostart when that is set), running start.sh --no-browser.
+    ($XDG_CONFIG_HOME/autostart when that is set), running start.sh
+    --no-browser, its output in user/logs/boltjar.log.
 
 Whether it is on is read from disk each time: the entry exists and starts THIS
 install. Turning it off deletes exactly that one file, and only when it starts
@@ -151,8 +152,15 @@ def _exec_quote(arg: str) -> str:
     return '"' + re.sub(r'(["`$\\])', r"\\\1", arg).replace("%", "%%") + '"'
 
 
+# What the desktop runs at login: start.sh, its output appended to the log (a
+# desktop session has no terminal to show it). Both paths reach sh as $0 and
+# $1, never inside the script, so no folder name can change what runs.
+_XDG_SCRIPT = 'exec /bin/sh "$0" --no-browser >>"$1" 2>&1'
+
+
 def desktop_entry(root: pathlib.PurePath) -> str:
-    command = f"/bin/sh {_exec_quote(str(root / 'start.sh'))} --no-browser"
+    start, log = str(root / "start.sh"), str(root / "user" / "logs" / "boltjar.log")
+    command = f"/bin/sh -c {_exec_quote(_XDG_SCRIPT)} {_exec_quote(start)} {_exec_quote(log)}"
     return "\n".join([
         "[Desktop Entry]",
         "Type=Application",
@@ -227,8 +235,9 @@ def enable(root: pathlib.Path = ROOT) -> dict:
     at the same path: an account starts one Boltjar at login). Returns status()."""
     platform, env, home = _account()
     path = entry_path(platform, env, home)
-    if family(platform) == MACOS:
-        (root / "user" / "logs").mkdir(parents=True, exist_ok=True)  # launchd will not
+    if family(platform) in (MACOS, XDG):
+        # neither launchd nor a shell redirect creates the log's folder
+        (root / "user" / "logs").mkdir(parents=True, exist_ok=True)
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=path.parent)
     try:
