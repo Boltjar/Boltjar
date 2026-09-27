@@ -3,7 +3,8 @@ names, even in a module with `from __future__ import annotations` (this one),
 where every annotation is a string. The core pack is such a module: before the
 hints were resolved, Boolean, Integer, Float and Interval all rendered as text
 boxes, and a Boolean saved as "false" ran as True. Saved strings from those
-graphs are read as the widget's kind, so they keep working.
+graphs are read as the widget's kind, so they keep working. A text wire into
+one of those knobs, promoted, does not: the port takes the knob's own type.
 """
 from __future__ import annotations
 
@@ -210,3 +211,34 @@ def test_validation_and_the_runtime_read_the_same_coerced_config():
     spec = NODE_REGISTRY["core.value.boolean"]
     assert node_config(spec, {"on": "false"})["on"] is False
     assert _built("core.value.boolean", {"on": "false"})._node_cfg["on"] is False
+
+
+# --------------------------------------------------------------- promoted ports
+
+def _wired_into(source: str, node_type: str, knob: str) -> list[str]:
+    """The edge problems of a graph that wires `source`'s output into `knob` of a
+    `node_type` node, the knob promoted to an input."""
+    import boltjar.server as server
+
+    graph = {
+        "nodes": [{"id": "src", "type": source, "config": {}},
+                  {"id": "n", "type": node_type, "config": {"promoted": [knob]}}],
+        "edges": [{"src": "src", "src_port": "out", "dst": "n", "dst_port": knob}],
+    }
+    return [p["message"] for p in server.validate_graph(graph) if p["message"].startswith("edge ")]
+
+
+@pytest.mark.parametrize("node_type, knob, own", [
+    ("core.trigger.interval", "seconds", ("core.value.float", "float")),
+    ("core.value.integer", "number", ("core.value.float", "float")),
+    ("core.value.float", "number", ("core.value.float", "float")),
+    ("core.value.boolean", "on", ("core.value.boolean", "bool")),
+])
+def test_a_promoted_number_or_bool_knob_takes_its_type_not_text(node_type, knob, own):
+    # while these knobs were text boxes their promoted port was `text`, so a text
+    # wire passed. A wired value reaches the node as sent (a wired "false" would
+    # run a Boolean as on), so the port takes what every number and bool knob takes.
+    source, port_type = own
+    assert _wired_into("core.value.text", node_type, knob) == [
+        f"edge src.out -> n.{knob}: text output cannot feed {port_type} input"]
+    assert _wired_into(source, node_type, knob) == []
