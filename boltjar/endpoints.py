@@ -37,6 +37,8 @@ OPENAI_KEY = "OPENAI_API_KEY"
 # lowercase and never one a built-in provider or the model picker already uses.
 _NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}$")
 RESERVED = frozenset(_secrets.PROVIDERS) | {"mock", "auto", "rerank"}
+# the secrets that hold a built-in provider's key (XAI_API_KEY, OPENAI_API_KEY...).
+BUILTIN_KEYS = frozenset(v for v in _secrets.PROVIDERS.values() if v)
 
 
 @dataclass(frozen=True)
@@ -110,14 +112,31 @@ def get(name: str) -> Endpoint | None:
     return next((e for e in list_endpoints() if e.name == name), None)
 
 
-def save(name: str, base_url: str, key_secret: str = "") -> Endpoint:
-    """Add or replace custom endpoint `name`. Raises ValueError on a bad name or
-    URL; the key itself is stored separately, as the secret `key_secret`."""
+def check(name: str, base_url: str, key_secret: str = "", *, with_key: bool = False) -> Endpoint:
+    """The endpoint `save` would write, checked, with nothing written: the name,
+    the base URL and the secret its key lives in. With `with_key` (a key value
+    comes with it) the secret defaults to <NAME>_API_KEY and may not be a
+    built-in provider's key, which the new value would overwrite; without a key,
+    naming one reuses it (an OpenAI proxy on OPENAI_API_KEY). Raises ValueError."""
     if not _NAME_RE.match(name or ""):
         raise ValueError(f"endpoint name {name!r} must be lowercase letters, digits, - or _")
     if name in RESERVED:
         raise ValueError(f"endpoint name {name!r} is taken by a built-in provider")
-    endpoint = Endpoint(name, normalise_base_url(base_url), str(key_secret or ""))
+    base = normalise_base_url(base_url)
+    secret = str(key_secret or "") or (secret_name_for(name) if with_key else "")
+    if secret and not _secrets.valid_name(secret):
+        raise ValueError(f"secret name {secret!r} must be uppercase letters, digits or _")
+    if with_key and secret in BUILTIN_KEYS:
+        raise ValueError(f"secret {secret} holds a built-in provider's key; store this "
+                         "endpoint's key under another name, or send no key to reuse it")
+    return Endpoint(name, base, secret)
+
+
+def save(name: str, base_url: str, key_secret: str = "") -> Endpoint:
+    """Add or replace custom endpoint `name`. Raises ValueError on a bad name,
+    URL or secret name (see `check`); the key itself is stored separately, as
+    the secret `key_secret`."""
+    endpoint = check(name, base_url, key_secret)
     data = _read()
     data[name] = {"base_url": endpoint.base_url, "key_secret": endpoint.key_secret}
     _write(data)

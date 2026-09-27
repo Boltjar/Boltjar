@@ -1056,14 +1056,16 @@ def api_list_endpoints() -> dict:
 @app.put("/api/connections/endpoints/{name}")
 async def api_put_endpoint(name: str, body: dict = Body(...)) -> dict:
     """Body: {"base_url": ..., "key_secret": "NAME"} to use an existing secret,
-    or {"base_url": ..., "key": "..."} to store the key as <NAME>_API_KEY."""
+    or {"base_url": ..., "key": "..."} to store the key as <NAME>_API_KEY (or
+    as `key_secret`, never a built-in provider's key). Everything is checked
+    before anything is stored, so a refused request changes no secret."""
     key = str(body.get("key") or "")
-    key_secret = str(body.get("key_secret") or "")
     try:
+        endpoint = _endpoints.check(name, str(body.get("base_url") or ""),
+                                    str(body.get("key_secret") or ""), with_key=bool(key))
         if key:
-            key_secret = key_secret or _endpoints.secret_name_for(name)
-            _secrets.set_secret(key_secret, key)
-        endpoint = _endpoints.save(name, str(body.get("base_url") or ""), key_secret)
+            _secrets.set_secret(endpoint.key_secret, key)
+        endpoint = _endpoints.save(endpoint.name, endpoint.base_url, endpoint.key_secret)
     except ValueError as exc:
         return JSONResponse({"error": str(exc)}, status_code=400)
     _discovery.schedule_refresh()

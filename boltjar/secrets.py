@@ -148,12 +148,17 @@ def get_secret(name: str) -> str | None:
     return None
 
 
+def valid_name(name: str) -> bool:
+    """A name a secret can be stored under: uppercase letters, digits, _."""
+    return bool(_NAME_RE.match(name or ""))
+
+
 def set_secret(name: str, value: str) -> None:
     """Store a user secret and mirror it into os.environ immediately.
 
     Raises ValueError if the name does not match ^[A-Z0-9_]+$.
     """
-    if not _NAME_RE.match(name):
+    if not valid_name(name):
         raise ValueError(
             f"Secret name {name!r} is invalid: only uppercase letters, digits, "
             "and underscores are allowed (^[A-Z0-9_]+$)"

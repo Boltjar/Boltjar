@@ -633,6 +633,43 @@ def test_endpoint_routes_refuse_bad_input(fresh, name, body):
     assert res.status_code == 400 and res.json()["error"]
 
 
+@pytest.mark.parametrize("name, body", [
+    # a built-in provider's name: its secret would be XAI_API_KEY and so on.
+    ("xai", {"base_url": "https://api.x.ai/v1", "key": "replaced-key"}),
+    ("anthropic", {"base_url": "https://api.anthropic.com/v1", "key": "replaced-key"}),
+    ("openai", {"base_url": "https://api.openai.com/v1", "key": "replaced-key"}),
+    ("Bad Name", {"base_url": "http://localhost:1234/v1", "key": "replaced-key"}),
+    ("lmstudio", {"base_url": "localhost:1234", "key": "replaced-key"}),
+    ("lmstudio", {"base_url": "http://localhost:1234/v1?x=1", "key": "replaced-key"}),
+    # a valid endpoint that would write its key over a built-in provider's.
+    ("proxy", {"base_url": "https://proxy.example/v1", "key": "replaced-key",
+               "key_secret": "OPENAI_API_KEY"}),
+    ("proxy", {"base_url": "https://proxy.example/v1", "key": "replaced-key",
+               "key_secret": "not a name"}),
+])
+def test_a_refused_endpoint_stores_no_key(fresh, monkeypatch, name, body):
+    for env in ("XAI_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY"):
+        monkeypatch.setenv(env, "original-key")
+    before = dict(secrets._store)
+    res = client.put(f"/api/connections/endpoints/{name}", json=body)
+    assert res.status_code == 400 and res.json()["error"]
+    assert secrets._store == before, "a refused request wrote a secret"
+    for env in ("XAI_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY"):
+        assert secrets.get_secret(env) == "original-key"
+    assert secrets.get_secret("LMSTUDIO_API_KEY") is None
+    assert client.get("/api/connections/endpoints").json()["endpoints"] == []
+
+
+def test_an_endpoint_without_a_key_may_reuse_a_provider_key(fresh, monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "original-key")
+    res = client.put("/api/connections/endpoints/proxy",
+                     json={"base_url": "https://proxy.example/v1", "key_secret": "OPENAI_API_KEY"})
+    assert res.status_code == 200
+    assert res.json()["endpoint"]["key_secret"] == "OPENAI_API_KEY"
+    assert res.json()["endpoint"]["has_key"] is True
+    assert secrets.get_secret("OPENAI_API_KEY") == "original-key"
+
+
 def test_base_urls_take_the_sdk_shape():
     assert endpoints.normalise_base_url("http://localhost:1234") == "http://localhost:1234/v1"
     assert endpoints.normalise_base_url("https://api.groq.com/openai/v1/") == \
