@@ -11,6 +11,7 @@ temp SQLite store with an offline LLM and a faked TTS vendor."""
 import asyncio
 import json
 import pathlib
+import time
 
 import httpx
 import pytest
@@ -176,3 +177,47 @@ def test_chat_example_first_turn_on_a_fresh_install(tmp_path, monkeypatch, vendo
     assert [r["sender"] for r in rows] == ["User", "Assistant"]
     assert rows[0]["message"] == "hi"
     assert str(vendor_http.last.url) == "https://api.x.ai/v1/tts"
+
+
+def test_chat_example_stores_the_message_before_the_reply(tmp_path, monkeypatch, vendor_http):
+    """The reply is written after the message it answers, however slow the
+    message's own write is, so the history the next turn reads is in order."""
+
+    class SlowUserWrites(SqliteStore):
+        def execute(self, key, sql, params=None):
+            if (params or {}).get("sender") == "User":
+                time.sleep(0.3)  # the message's write is slow; the reply's is not
+            return super().execute(key, sql, params)
+
+    store = SlowUserWrites(root=tmp_path)
+    monkeypatch.setattr(server, "STORE", store)
+    monkeypatch.setenv("XAI_API_KEY", "test-xai-key")  # the TTS call is faked below
+    vendor_http.reply = lambda r: httpx.Response(200, content=b"ID3mp3")
+    graph = json.loads((SHIPPED / "chat.json").read_text(encoding="utf-8"))
+    for n in graph["nodes"]:
+        if n["type"] == "core.ai.llm":
+            n["config"]["model"] = "mock/echo"  # offline: no real model is called
+    db_key = next(n["config"]["db_key"] for n in graph["nodes"]
+                  if n["type"] == "core.store.database")
+
+    hub = server.Hub()
+    events: asyncio.Queue = asyncio.Queue()
+    hub.subscribers.add(events)
+    seen: list[dict] = []
+
+    async def drive() -> None:
+        assert await hub.power_on(graph) is None
+        hub.send_chat("chat", "hi")
+        for _ in range(60):  # until the spoken reply reaches the audio preview
+            await asyncio.sleep(0.05)
+            while not events.empty():
+                seen.append(events.get_nowait())
+            if any(e["kind"] == "value" and e["node"] == "Audio Preview" for e in seen):
+                break
+        await hub.power_off()
+
+    asyncio.run(drive())
+    assert not [e for e in seen if e["kind"] in ("node_error", "error")], seen
+    rows = store.query(db_key, "SELECT sender, message FROM chat_history ORDER BY id")
+    assert [r["sender"] for r in rows] == ["User", "Assistant"]
+    assert rows[0]["message"] == "hi"

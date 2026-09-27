@@ -399,7 +399,7 @@
       "dst_port": "trigger"
     },
     {
-      "src": "Chat History",
+      "src": "Chat Append (User)",
       "src_port": "trigger",
       "dst": "Prompt Template",
       "dst_port": "trigger"
