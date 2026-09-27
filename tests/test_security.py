@@ -208,3 +208,15 @@ def test_empty_token_file_is_replaced(token_path):
 def test_token_file_is_owner_only(token_path):
     security.get_token()
     assert stat.S_IMODE(token_path.stat().st_mode) == 0o600
+
+
+# ---------------------------------------------------------------- content type
+
+def test_json_routes_refuse_a_text_plain_body(client, tmp_path, monkeypatch):
+    from boltjar import secrets
+    monkeypatch.setattr(secrets, "_PATH", tmp_path / "secrets.json")  # never the real file
+    # what a cross-site form or no-preflight fetch can send; FastAPI 0.132+ refuses it.
+    r = client.post("/api/secrets", content=b'{"name": "PLANTED", "value": "x"}',
+                    headers={"content-type": "text/plain"})
+    assert r.status_code == 422
+    assert "PLANTED" not in client.get("/api/secrets").text
