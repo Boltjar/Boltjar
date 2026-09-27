@@ -96,7 +96,7 @@ const PROVIDER_META: Record<string, ProviderMeta> = {
     label: "OpenAI",
     icon: "logo-electron",
     colorVar: "--good",
-    modality: "LLM + TTS + STT · cloud",
+    modality: "LLM · cloud",
     isLocal: false,
     siteUrl: "https://platform.openai.com",
     keyUrl: "https://platform.openai.com/api-keys",
