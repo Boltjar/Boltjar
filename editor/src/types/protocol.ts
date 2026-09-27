@@ -278,7 +278,7 @@ export interface Problem {
 
 // ------------------------------------------------------------------ ws events
 
-/** A single value emitted on a port during a live run (lights ports + wires). */
+/** A single value emitted on a port during a live run (lights its port). */
 export interface ValueEvent {
   kind: "value";
   node: string;
@@ -349,6 +349,15 @@ export interface LiveGraphEvent {
   edges: [string, string, string, string][];
 }
 
+/** The drawn wires a value just travelled, each [src, src_port, dst, dst_port]:
+ *  a push names the trigger wires it fired, a read names the one wire into the
+ *  node that read it (the chain through a Router or a Wireless pair included).
+ *  Only these wires light; the source's other wires carried nothing. */
+export interface CarryEvent {
+  kind: "carry";
+  wires: [string, string, string, string][];
+}
+
 /** A tool hop the model made: which Tool node, with what args (`tool_call`) and
  *  the value handed back (`tool_result`). Surfaced in the console so the agentic
  *  loop is visible hop by hop. */
@@ -375,7 +384,8 @@ export type RunEvent =
   | ErrorEvent
   | ToolCallEvent
   | ToolResultEvent
-  | LiveGraphEvent;
+  | LiveGraphEvent
+  | CarryEvent;
 
 /** A client->server command over /ws. */
 export type RunCommand =

@@ -6,7 +6,8 @@
 //   - `connected`    : the ws transport is open
 //   - `log`          : a bounded console feed (value / log / error lines)
 //   - `nodeStatus`   : per-node lifecycle (running | ok | error | idle)
-//   - `liveValues`   : latest value per `node:port` (lights ports + wires)
+//   - `liveValues`   : latest value per `node:port` (lights ports)
+//   - a `carry` lights the wires it names (lib/wirePulse), with no React state
 //   - `valueHistory` : recent values per `node:port` (Preview sparklines/terminal)
 //   - `chats`        : per-Chat-Input local message history
 //   - `problems`     : the last `invalid` payload (broken-node badges)
@@ -20,6 +21,7 @@ import type { Graph, Problem, RunEvent } from "../types/protocol";
 import { liveEdgeKey, type Power } from "../lib/liveClassify";
 import { consoleText } from "../lib/mediaSummary";
 import { resumeNoticeAfter } from "../lib/resumeNotice";
+import { pulseWires } from "../lib/wirePulse";
 
 export type NodeRunStatus = "idle" | "running" | "ok" | "warn" | "error";
 export type { Power };
@@ -160,6 +162,10 @@ export function useRunSocket(slug: string = "_default"): RunSocketState {
           });
           break;
         }
+        case "carry":
+          // only the wires that carried the value light, each on its own
+          pulseWires(evt.wires);
+          break;
         case "node_status":
           setNodeStatus((p) => ({ ...p, [evt.node]: evt.status }));
           break;

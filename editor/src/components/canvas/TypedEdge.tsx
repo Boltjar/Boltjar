@@ -2,7 +2,8 @@
 // TypedEdge: a typed bezier wire. Coloured by the SOURCE
 // port's data type. Layers: a dark under-stroke (machined channel), the main
 // type-coloured stroke, an accent selection glow, and a flow-pulse overlay that
-// animates while the source port is live.
+// animates when THIS wire carries a value (a `carry` event names it, see
+// lib/wirePulse), never because its source has other wires that did.
 // ============================================================================
 import { memo, useEffect, useRef, useState, type CSSProperties } from "react";
 import { getBezierPath, type EdgeProps } from "@xyflow/react";
@@ -10,6 +11,7 @@ import type { WFEdgeData } from "../../lib/graphAdapter";
 import { typeColorVar } from "../../lib/types";
 import { useEditor } from "../../lib/editorContext";
 import { liveGatePasses } from "../../lib/liveClassify";
+import { onWirePulse } from "../../lib/wirePulse";
 
 function TypedEdgeImpl({
   id,
@@ -24,7 +26,7 @@ function TypedEdgeImpl({
   selected,
   data,
 }: EdgeProps) {
-  const { liveValues, effectiveOutput, power, liveEdges } = useEditor();
+  const { effectiveOutput, power, liveEdges } = useEditor();
   // a wire FROM a Wireless Out (real source elsewhere) or a passthrough's `out`
   // (Preview/Chat: type follows `in`) gets its colour + live pulse from the
   // effective source/type, not the stale declared edge type.
@@ -45,23 +47,27 @@ function TypedEdgeImpl({
   const ed = data as WFEdgeData | undefined;
   const color = typeColorVar(wl ? wl.type : ed?.type);
 
-  // a clean ~1s flow pulse, fired ONLY when the source emits a fresh value; it
-  // then clears itself, so the wire never animates perpetually and a pan never
-  // resets it mid-stroke.
-  const liveKey = wl ? `${wl.src}:${wl.srcPort}` : `${source}:${sourceHandleId ?? ""}`;
-  const live = liveValues[liveKey];
-  // while power is on, only a wire in the live set may pulse: a draft wire drawn
-  // onto a still-live source must NOT appear to carry live data.
-  const mayPulse = liveGatePasses(power, liveEdges.has(id));
+  // a clean ~1s flow pulse, fired ONLY when this wire carries a value; it then
+  // clears itself, so the wire never animates perpetually and a pan never
+  // resets it mid-stroke. While power is on, only a wire in the live set may
+  // pulse: a draft wire drawn onto a still-live source must NOT appear to carry
+  // live data.
+  const mayPulse = useRef(false);
+  mayPulse.current = liveGatePasses(power, liveEdges.has(id));
   const [active, setActive] = useState(false);
-  const lastAt = useRef(0);
   useEffect(() => {
-    if (!live || live.at === lastAt.current || !mayPulse) return;
-    lastAt.current = live.at;
-    setActive(true);
-    const t = window.setTimeout(() => setActive(false), 1000);
-    return () => window.clearTimeout(t);
-  }, [live, mayPulse]);
+    let t = 0;
+    const off = onWirePulse(id, () => {
+      if (!mayPulse.current) return;
+      setActive(true);
+      window.clearTimeout(t);
+      t = window.setTimeout(() => setActive(false), 1000);
+    });
+    return () => {
+      off();
+      window.clearTimeout(t);
+    };
+  }, [id]);
 
   return (
     <g className="wf-edge-group">
