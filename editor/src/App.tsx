@@ -22,6 +22,7 @@ import { deadWireNotice, healDeadWires } from "./lib/deadWires";
 import { notifyStoreChanged } from "./lib/storeEvents";
 import { changedStores, declarationSignature, ensureDeclaredStores, ensureNotices } from "./lib/storeSchema";
 import { fetchSavedSlugs, fetchServerGraph, serverError, unreadableNotice } from "./lib/serverGraph";
+import { asideWords, parseAside, serializeAside, swapped, type Aside, type AsideWords } from "./lib/aside";
 import { exportFileName, exportText, openedSlug, openFailedNotice, parseWorkflowFile, saveAsName } from "./lib/workflowFile";
 import {
   draftRecord, freeSlug, graphSource, openPlan, parseDraft, parseTabs, sameGraph,
@@ -90,15 +91,11 @@ function readDraft(slug: string): StoredDraft | null {
 function asideKey(slug: string): string {
   return `boltjar:aside:${slug}`;
 }
-function readAside(slug: string): Graph | null {
-  try {
-    const raw = localStorage.getItem(asideKey(slug));
-    const g = raw ? (JSON.parse(raw) as Graph) : null;
-    return g && Array.isArray(g.nodes) ? g : null;
-  } catch { return null; }
+function readAside(slug: string): Aside | null {
+  try { return parseAside(localStorage.getItem(asideKey(slug))); } catch { return null; }
 }
-function writeAside(slug: string, g: Graph) {
-  try { localStorage.setItem(asideKey(slug), JSON.stringify(g)); } catch { /* storage full / unavailable */ }
+function writeAside(slug: string, a: Aside) {
+  try { localStorage.setItem(asideKey(slug), serializeAside({ ...a, graph: { ...a.graph, name: slug } })); } catch { /* storage full / unavailable */ }
 }
 function dropAside(slug: string) {
   try { localStorage.removeItem(asideKey(slug)); } catch { /* storage unavailable */ }
@@ -326,20 +323,26 @@ export default function App() {
     } catch { /* storage full / unavailable: drop */ }
   }, []);
   // the slug on the canvas whose unsaved edits are kept aside, while they are
-  const [asideSlug, setAsideSlug] = useState<string | null>(null);
-  const restoreAsideRef = useRef<(slug: string) => void>(() => {});
-  const discardAsideRef = useRef<(slug: string) => void>(() => {});
-  // One console notice, with the two answers as its buttons (also in the palette).
-  const offerAside = useCallback((slug: string, message: string) => {
-    setAsideSlug(slug);
-    socket.notice(message, "warn", {
+  const [asideOfferState, setAsideOfferState] = useState<{ slug: string; words: AsideWords } | null>(null);
+  const setAsideSlug = useCallback((s: null) => setAsideOfferState(s), []);
+  const swapAsideRef = useRef<(slug: string) => void>(() => {});
+  const endAsideRef = useRef<(slug: string) => void>(() => {});
+  // One console notice naming both copies, with the two answers as its buttons
+  // (also in the palette). `canvasNodes` is the size of what the canvas shows.
+  const offerAside = useCallback((slug: string, canvasNodes: number) => {
+    const kept = readAside(slug);
+    socket.settleNotice(asideOffer(slug));
+    if (!kept) { setAsideOfferState(null); return; }
+    const words = asideWords(slug, kept, canvasNodes);
+    setAsideOfferState({ slug, words });
+    socket.notice(words.message, "warn", {
       id: asideOffer(slug),
       actions: [
-        { label: "Restore my unsaved edits", run: () => restoreAsideRef.current(slug) },
-        { label: "Discard them", run: () => discardAsideRef.current(slug) },
+        { label: words.swap, run: () => swapAsideRef.current(slug) },
+        { label: words.end, run: () => endAsideRef.current(slug) },
       ],
     });
-  }, [socket.notice]);
+  }, [socket.notice, socket.settleNotice]);
 
   // ── slug-switch effect: when the active tab changes, save the outgoing
   //    slug's draft into localStorage, then load the new slug's draft (or
@@ -438,13 +441,15 @@ export default function App() {
       else show({ ...EMPTY_GRAPH, name: target });
       loadedSlugRef.current = target;
       setGraphLoading(false);
+      const shownNodes = (plan === "draft" && draft ? draft.graph : saved?.graph)?.nodes.length ?? 0;
       if (plan === "server-offer" && draft) {
-        writeAside(target, { ...draft.graph, name: target });
-        offerAside(target, draft.dirty === undefined
-          ? `this browser held other unsaved edits of ${target}: kept aside`
-          : `${target} was saved elsewhere: your unsaved edits are kept aside`);
-      } else if (readAside(target)) {
-        offerAside(target, `your unsaved edits of ${target} are still kept aside`);
+        writeAside(target, { role: draft.dirty === undefined ? "older" : "edits", graph: draft.graph });
+        offerAside(target, shownNodes);
+      } else {
+        const kept = readAside(target);
+        // the saved file kept aside only makes sense while another copy is shown
+        if (kept?.role === "saved" && plan !== "draft") dropAside(target);
+        else if (kept) offerAside(target, shownNodes);
       }
     })();
   // intentionally narrow deps: re-run only when slug or catalog readiness flips.
@@ -711,40 +716,59 @@ export default function App() {
     if (loaded.kind !== "graph" || loadedSlugRef.current !== slug || savingRef.current.has(slug)) return;
     if (loaded.version !== null && loaded.version === versionRef.current.get(slug)) return;
     const kept = dirtyRef.current ? latestToGraph.current() : null;
+    const prior = readAside(slug);
     versionRef.current.set(slug, loaded.version);
     const { graph: current, changed } = migrateGraph({ ...loaded.graph, name: slug });
     const { graph: clean, removed } = healDeadWires(current, defs, models);
     loadGraph(clean, { dirty: changed || removed.length > 0 });
     for (const w of removed) socket.notice(deadWireNotice(w), "warn");
     if (kept) {
-      writeAside(slug, { ...kept, name: slug });
-      offerAside(slug, `${slug} was saved elsewhere: your unsaved edits are kept aside`);
+      // what the canvas held: the older copy when that was the one shown
+      writeAside(slug, { role: prior?.role === "saved" ? prior.shown ?? "edits" : "edits", graph: kept });
+      offerAside(slug, clean.nodes.length);
     } else {
       socket.notice(`${slug} was saved elsewhere: showing the saved copy`, "info");
+      if (prior && prior.role !== "saved") offerAside(slug, clean.nodes.length);
+      else if (prior) dropAside(slug);
     }
   }, [defs, models, loadGraph, socket.notice, offerAside]);
   followSaveRef.current = (slug, version) => { void followSave(slug, version); };
 
-  // the two answers to the offer: the kept edits back on the canvas (unsaved,
-  // on top of the saved copy now open), or gone.
-  restoreAsideRef.current = (slug: string) => {
+  // the two answers to the offer. Swap: the kept copy onto the canvas and the
+  // canvas copy aside in its place, so the choice can always be taken back
+  // (the saved file is fetched fresh from the server when it comes back).
+  // End: with a copy aside, delete it; with the saved file aside, keep the
+  // canvas as it is, unsaved (the file on disk is untouched either way).
+  swapAsideRef.current = async (slug: string) => {
     if (loadedSlugRef.current !== slug) return;
     const kept = readAside(slug);
+    if (!kept) return;
+    const canvas = latestToGraph.current();
+    let incoming = kept.graph;
+    if (kept.role === "saved") {
+      const loaded = await fetchServerGraph(slug);
+      if (loadedSlugRef.current !== slug) return;
+      if (loaded.kind === "graph") {
+        incoming = loaded.graph;
+        versionRef.current.set(slug, loaded.version);
+      }
+    }
+    writeAside(slug, swapped(kept, canvas));
+    const { graph: current, changed } = migrateGraph({ ...incoming, name: slug });
+    const { graph: clean, removed } = healDeadWires(current, defs, models);
+    loadGraph(clean, { dirty: kept.role !== "saved" || changed || removed.length > 0 });
+    for (const w of removed) socket.notice(deadWireNotice(w), "warn");
+    offerAside(slug, clean.nodes.length);
+  };
+  endAsideRef.current = (slug: string) => {
+    const kept = readAside(slug);
     dropAside(slug);
-    setAsideSlug(null);
+    setAsideOfferState((s) => (s?.slug === slug ? null : s));
     socket.settleNotice(asideOffer(slug));
     if (!kept) return;
-    const { graph: current } = migrateGraph({ ...kept, name: slug });
-    const { graph: clean, removed } = healDeadWires(current, defs, models);
-    loadGraph(clean, { dirty: true });
-    for (const w of removed) socket.notice(deadWireNotice(w), "warn");
-    socket.notice(`restored your unsaved edits of ${slug}`, "ok");
-  };
-  discardAsideRef.current = (slug: string) => {
-    dropAside(slug);
-    setAsideSlug((s) => (s === slug ? null : s));
-    socket.settleNotice(asideOffer(slug));
-    socket.notice(`discarded your unsaved edits of ${slug}`, "info");
+    socket.notice(kept.role === "saved"
+      ? `${slug}: kept what is on the canvas, unsaved; the saved file is unchanged`
+      : `${slug}: deleted ${kept.role === "older" ? "the older copy" : "the unsaved changes"} (${kept.graph.nodes.length} nodes); the saved file is unchanged`, "info");
   };
 
   // ── the file menu (the brand logo) and its palette twins ──
@@ -1297,7 +1321,7 @@ export default function App() {
     try { localStorage.removeItem(draftKey(slug)); } catch { /* storage unavailable */ }
     // edits kept aside for it move with it
     const kept = readAside(slug);
-    if (kept) writeAside(fresh, { ...kept, name: fresh });
+    if (kept) writeAside(fresh, kept);
     dropAside(slug);
     if (g && loadedSlugRef.current === slug) {
       // the canvas already shows what was saved: hand it the new slug
@@ -1502,16 +1526,18 @@ export default function App() {
         ? [{ id: "stop-resuming", label: STOP_RESUMING.label, hint: STOP_RESUMING.hint, icon: STOP_RESUMING.icon, run: stopResuming }]
         : []),
       ...(socket.power === "on" ? [{ id: "restart", label: "Save & Restart", hint: "apply live edits", icon: "refresh-outline", run: () => void restart() }] : []),
-      // the console offer for edits kept aside (the saved copy changed elsewhere)
-      ...(asideSlug && asideSlug === activeSlug
+      // the console offer for a second copy kept aside (lib/aside), same words
+      ...(asideOfferState && asideOfferState.slug === activeSlug
         ? [
-          { id: "aside-restore", label: "Restore my unsaved edits", hint: `put your kept edits of ${asideSlug} back on the canvas`, icon: "arrow-undo-outline", run: () => restoreAsideRef.current(asideSlug) },
-          { id: "aside-discard", label: "Discard my unsaved edits", hint: `keep the saved ${asideSlug}`, icon: "trash-outline", run: () => discardAsideRef.current(asideSlug) },
+          { id: "aside-swap", label: asideOfferState.words.swap, hint: asideOfferState.words.message, icon: "swap-horizontal-outline", run: () => swapAsideRef.current(asideOfferState.slug) },
+          { id: "aside-end", label: asideOfferState.words.end, hint: asideOfferState.words.message, icon: "checkmark-outline", run: () => endAsideRef.current(asideOfferState.slug) },
         ]
         : []),
       { id: "settings", label: "Open Settings", hint: "startup, providers and secrets", icon: "settings-outline", run: () => setSettingsTab(SETTINGS_LINKS.openSettings) },
       { id: "connections", label: "Open AI Providers", hint: "provider keys, endpoints and local models", icon: "git-network-outline", run: () => setSettingsTab(SETTINGS_LINKS.openConnections) },
-      { id: "reset", label: "Reset to default graph", hint: "discard local edits", icon: "refresh-outline", run: () => { try { if (activeSlug) localStorage.removeItem(draftKey(activeSlug)); } catch { /* ignore */ } if (activeSlug) dropAside(activeSlug); window.location.reload(); } },
+      // Revert: the saved file back on the canvas. Unsaved changes are kept
+      // aside (lib/aside), never dropped, so the console offers them back.
+      { id: "reset", label: "Revert to the saved file", hint: "show the saved file; unsaved changes are kept aside", icon: "refresh-outline", run: () => { if (activeSlug) { if (dirty) writeAside(activeSlug, { role: "edits", graph: toGraph() }); try { localStorage.removeItem(draftKey(activeSlug)); } catch { /* ignore */ } } window.location.reload(); } },
       ...(nodes.length >= 2
         ? [{
             id: "tidy",
@@ -1528,7 +1554,7 @@ export default function App() {
       ...fileActions,
       ...helpActions,
     ],
-    [socket.power, socket.resumeNotice, socket.clearLog, powerOn, powerOff, stopResuming, restart, undo, redo, activeSlug, asideSlug, fileActions, helpActions, nodes.length, selectedIds.length, tidyUp],
+    [socket.power, socket.resumeNotice, socket.clearLog, powerOn, powerOff, stopResuming, restart, undo, redo, activeSlug, asideOfferState, dirty, toGraph, fileActions, helpActions, nodes.length, selectedIds.length, tidyUp],
   );
 
   const selectedNode = nodes.find((n) => n.id === selectedId) ?? null;
