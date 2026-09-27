@@ -258,20 +258,38 @@ def _end_process_tree(proc: subprocess.Popen, grace: float) -> None:
 _end_tree = _end_process_tree
 
 
-async def stop_if_started(grace: float = STOP_GRACE) -> bool:
-    """Stop the Ollama this process started, if it still runs. Returns whether
-    one was stopped. An Ollama started anywhere else is never touched."""
+def _take_started() -> subprocess.Popen | None:
+    """The Ollama this process started, if it still runs, now no longer ours
+    to stop again (so two ways out never end it twice)."""
     global _started
     proc, _started = _started, None
-    if proc is None or proc.poll() is not None:
-        return False
+    return proc if proc is not None and proc.poll() is None else None
+
+
+def _end(proc: subprocess.Popen, grace: float) -> bool:
     try:
-        await asyncio.to_thread(_end_tree, proc, grace)
+        _end_tree(proc, grace)
     except Exception:
         _log.warning("could not stop the Ollama Boltjar started (pid %s)", proc.pid, exc_info=True)
         return False
     _log.info("stopped the Ollama Boltjar started", extra={"tone": "ok"})
     return True
+
+
+async def stop_if_started(grace: float = STOP_GRACE) -> bool:
+    """Stop the Ollama this process started, if it still runs. Returns whether
+    one was stopped. An Ollama started anywhere else is never touched."""
+    proc = _take_started()
+    return proc is not None and await asyncio.to_thread(_end, proc, grace)
+
+
+def stop_started_now(grace: float = STOP_GRACE) -> bool:
+    """stop_if_started with no event loop: `python -m boltjar serve` calls it
+    once the server has returned, on every way out, so an exit that stopped
+    waiting on the graphs (one ran late, or a second Ctrl+C) still ends the
+    Ollama it started. A no-op when the exit already did."""
+    proc = _take_started()
+    return proc is not None and _end(proc, grace)
 
 
 async def launch_start() -> tuple[str, str]:

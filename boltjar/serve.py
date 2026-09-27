@@ -448,6 +448,11 @@ def _serve(out: console.Console, host: str, port: int, open_browser: bool,
         return exc.code if isinstance(exc.code, int) else 1
     finally:
         sock.close()
+        # every way out: an exit that stopped waiting on the graphs (one ran
+        # late, a second Ctrl+C) may never have reached the Ollama it started
+        from boltjar import ollama
+
+        ollama.stop_started_now()
     # each graph's own Off line (the graph lines) says it stopped
     editors, streams = server.connections_closed
     if editors or streams:

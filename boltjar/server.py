@@ -438,12 +438,14 @@ async def shutdown_all() -> int:
     every live connection, the editors' /ws and the /stream media clients, so
     the server exits on one Ctrl+C. The graphs stop side by side: one whose
     stop hangs holds up none of the others. An exit is not an Off: the graphs
-    stay recorded as On for the next launch. Then the Ollama this process
-    started, if any, stops too. Safe to call twice. Returns how many graphs
-    were stopped."""
+    stay recorded as On for the next launch. The Ollama this process started,
+    if any, stops alongside them, in a task of its own: an exit that stops
+    waiting on a graph (and cancels this) never leaves it running. Safe to
+    call twice. Returns how many graphs were stopped."""
     await _cancel_launch()
+    ollama_stop = asyncio.ensure_future(_ollama.stop_if_started())
     stopped = await asyncio.gather(*(_stop_for_exit(hub) for hub in list(HUBS.values())))
-    await _ollama.stop_if_started()  # only the Ollama this process started
+    await ollama_stop
     return sum(stopped)
 
 

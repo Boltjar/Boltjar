@@ -263,3 +263,62 @@ def test_the_launch_step_prints_one_line_either_way(fake_ollama, monkeypatch, se
         monkeypatch.setattr(ollama, "find", lambda *a, **k: None)
     got_tone, text = asyncio.run(ollama.launch_start())
     assert got_tone == tone and words in text
+
+
+# ---------------------------------------------------------------- every way out
+def test_an_exit_whose_graph_stop_runs_late_still_stops_ollama(fake_ollama, monkeypatch):
+    import uvicorn
+
+    from boltjar import serve
+
+    monkeypatch.setattr(server, "HUBS", {})
+    asyncio.run(ollama.start())
+    assert ollama.started_here()
+
+    class HangingRuntime:
+        async def stop(self):
+            await asyncio.Event().wait()
+
+    server.get_hub("slow").runtime = HangingRuntime()
+    monkeypatch.setattr(serve, "GRACEFUL_SECONDS", 0.3)
+    exiting = serve.make_server(uvicorn.Config(app=server.app), server.shutdown_all,
+                                on_ready=lambda: None, on_stop=lambda: None,
+                                running=server.running_graphs)
+    asyncio.run(exiting.stop_app())
+    assert exiting.force_exit  # uvicorn skips the lifespan shutdown after this
+    assert fake_ollama.ended == [4242]
+    assert not ollama.started_here()
+
+
+def test_the_serve_command_stops_ollama_however_the_server_returns(fake_ollama, monkeypatch):
+    """A second Ctrl+C cancels the stop before it began: the serve command
+    stops the Ollama it started once the server has returned, whatever ran."""
+    import logging.config
+    import socket
+
+    from boltjar import console, serve
+
+    asyncio.run(ollama.start())
+
+    class Server:
+        graphs_stopped = 0
+        connections_closed = (0, 0)
+
+        def __init__(self, on_ready):
+            self.on_ready = on_ready
+
+        def run(self, sockets=None):
+            pass  # returns as a forced exit does, with nothing stopped
+
+    monkeypatch.setattr(logging.config, "dictConfig", lambda config: None)
+    monkeypatch.setattr(console, "prepare_streams", lambda: None)
+    monkeypatch.setattr(console, "detect", lambda stream=None, **kw: console.Caps(unicode=True))
+    monkeypatch.setattr(console, "terminal_width", lambda stream=None: 80)
+    monkeypatch.setattr(console, "_zone_shown", None)
+    monkeypatch.setattr(serve, "bind", lambda host, port: socket.socket())
+    monkeypatch.setattr(serve, "make_server",
+                        lambda config, shutdown_app, on_ready, **kw: Server(on_ready))
+    monkeypatch.setenv("BOLTJAR_ALLOWED_HOSTS", "")
+    monkeypatch.setenv("BOLTJAR_PORT", "")
+    assert serve.serve(port=9001, open_browser=False) == 0
+    assert fake_ollama.ended == [4242]
