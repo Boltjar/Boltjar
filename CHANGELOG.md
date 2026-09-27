@@ -53,9 +53,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/).
 - Start scripts: `start.bat` and `start.sh` find Python 3.11 to 3.13 (or download a portable 3.12 and check it against its SHA-256 sums), create `.venv`, install `requirements.txt` whenever it changes and build the editor when it is missing, then start Boltjar.
 - Update scripts: `update.bat` and `update.sh` pull the latest code (fast-forward only), rebuild the editor when it changed and start Boltjar.
 - `python -m boltjar serve` starts the server with a boot checklist (Python, editor, port, node packs), reports a busy port before anything starts and opens the editor in a browser, except over SSH or on a machine without a desktop. A host other machines can reach is refused without `--allow-remote`.
-- One Ctrl+C stops every running graph and closes the editor connections and media streams. A graph that does not stop within 5 seconds, or by a second Ctrl+C, is left behind.
+- One Ctrl+C stops every running graph and closes the editor connections. A graph that does not stop within 5 seconds, or by a second Ctrl+C, is left behind.
 - The terminal follows the live graphs: a line when a graph turns On or Off, is refused by validation, fails to start or hits a node error, plus each value a Log node writes, summarized to one line (a clip or an image as its type, size and length). Other wire values never print there; a known key shows as its `{{secret.NAME}}` token and a control character as its escape.
 - Wires to ports that no longer exist are dropped when a graph loads, with a notice in the console.
 - Two example graphs: `chat` and `demo`.
+
+### Removed
+
+- The Avatar node and the /stream endpoint are removed; compose a client with Webhook and HTTP Request.
 
 [Unreleased]: https://github.com/Boltjar/Boltjar/commits/main
