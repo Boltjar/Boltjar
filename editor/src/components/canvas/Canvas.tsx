@@ -453,8 +453,8 @@ export function Canvas(props: CanvasProps) {
           onOpenPalette();
         }}
         defaultEdgeOptions={{ type: "typed" }}
-        // React Flow is credited in Help > About with its licence; the canvas
-        // corner carries the Boltjar credit instead (.canvas-credit below).
+        // React Flow is named inside the minimap (.minimap-credit below) and
+        // Help > About carries its licence; the corner credit is Boltjar's.
         proOptions={{ hideAttribution: true }}
         // App owns Delete/Backspace (App.requestDelete) so store-node deletes get
         // the confirm. Disabling RF's built-in delete avoids it wiping nodes first.
@@ -534,6 +534,7 @@ export function Canvas(props: CanvasProps) {
       )}
 
       <div className="canvas-credit">Designed by DKLRD</div>
+      <a className="minimap-credit" href="https://reactflow.dev" target="_blank" rel="noreferrer">React Flow</a>
 
       <div
         ref={hintRef}

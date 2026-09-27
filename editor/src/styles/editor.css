@@ -422,12 +422,20 @@ button{font-family:inherit;}
 
 /* The canvas credit: bottom-left on the minimap's 16px inset, so it lines up
    with the minimap and zoom cluster on the other side and overlaps neither.
-   Ghost ink. (React Flow is credited in Help > About with its licence.) */
+   Ghost ink. */
 .canvas .canvas-credit{
   position:absolute; left:var(--space-4); bottom:var(--space-4); z-index:5; pointer-events:none;
   font-family:var(--font-mono); font-size:var(--fs-micro); letter-spacing:var(--tr-mono); line-height:1;
   color:var(--ink-ghost); user-select:none;
 }
+/* React Flow's name, tucked inside the minimap's bottom-right corner (the
+   minimap sits at right/bottom var(--space-4), 1px border). */
+.canvas .minimap-credit{
+  position:absolute; right:calc(var(--space-4) + 7px); bottom:calc(var(--space-4) + 5px); z-index:6;
+  font-family:var(--font-mono); font-size:9px; letter-spacing:var(--tr-mono); line-height:1;
+  color:var(--ink-ghost); text-decoration:none; opacity:.8; transition:color var(--dur-1) var(--ease-out), opacity var(--dur-1) var(--ease-out);
+}
+.canvas .minimap-credit:hover{ color:var(--ink-dim); opacity:1; }
 
 /* ============================================================================
    RIGHT: INSPECTOR
