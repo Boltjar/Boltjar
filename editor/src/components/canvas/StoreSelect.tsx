@@ -2,12 +2,15 @@
 // StoreSelect: the store-aware dropdown for a widget that declares
 // `options_from` ("db.tables" -> the wired db's tables, "kv.keys" -> the wired
 // kv's keys). It renders the shared `Select` (dark popup, the one dropdown
-// template), with a "new" action that flips to a one-off text input for a value
-// that does not exist yet (a `set` on an empty kv) or a custom / {tag} value.
-// When no store is wired it shows a disabled hint.
+// template). A saved value the list lacks stays the selection, marked "not
+// found"; it is never cleared. The text box is only for a kv "new key" or a
+// {tag} value, and its back button returns to the list with the value kept. The
+// decisions live in lib/storeSelect.ts. When no store is wired it shows a
+// disabled hint.
 // ============================================================================
 import { useEffect, useState } from "react";
 import { Icon } from "../../lib/icons";
+import { isMissing, storeListFrom, storeSelectMode, type StoreKind, type StoreList } from "../../lib/storeSelect";
 import { Select } from "./Select";
 
 interface StoreSelectProps {
@@ -21,23 +24,24 @@ interface StoreSelectProps {
 }
 
 export function StoreSelect({ source, storeKey, value, placeholder, onChange }: StoreSelectProps) {
-  const [kind, listName] = source.split(".") as ["db" | "kv", string];
-  const [names, setNames] = useState<string[]>([]);
-  const [typing, setTyping] = useState(false);
+  const [kind, listName] = source.split(".") as [StoreKind, string];
+  // null until the first read of this store lands: nothing is "not found" before.
+  const [list, setList] = useState<StoreList | null>(null);
+  // what the picker's own controls chose: "new key" -> true, back -> false,
+  // null while neither has been used (the value decides).
+  const [typingOverride, setTypingOverride] = useState<boolean | null>(null);
 
   useEffect(() => {
-    if (!storeKey) { setNames([]); return; }
+    setList(null);
+    if (!storeKey) return;
     let cancelled = false;
     fetch(`/api/store/${kind}/${encodeURIComponent(storeKey)}/info`)
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
-        if (cancelled || !data) return;
-        const list: string[] = listName === "tables"
-          ? (data.tables ?? []).map((t: { name: string }) => t.name)
-          : (data.sample ?? data.keys ?? []);
-        setNames(list);
+        if (!cancelled && data) setList(storeListFrom(listName, data));
       })
-      .catch(() => { if (!cancelled) setNames([]); });
+      // a failed read says nothing about the value: nothing is marked missing
+      .catch(() => {});
     return () => { cancelled = true; };
   }, [kind, listName, storeKey]);
 
@@ -49,14 +53,14 @@ export function StoreSelect({ source, storeKey, value, placeholder, onChange }: 
     );
   }
 
-  // type mode: a custom / {tag} value, or the user chose "new". A one-off text
-  // input with a back-to-the-list affordance.
-  if (typing || (value !== "" && !names.includes(value))) {
+  // type mode: a {tag} value, or the user chose "new key". A text input with a
+  // back-to-the-list button that keeps whatever was typed.
+  if (storeSelectMode(value, typingOverride) === "typing") {
     return (
       <span className="store-select typing nodrag">
         <input
           type="text"
-          autoFocus={typing}
+          autoFocus={typingOverride === true}
           value={value}
           placeholder={placeholder}
           spellCheck={false}
@@ -67,7 +71,7 @@ export function StoreSelect({ source, storeKey, value, placeholder, onChange }: 
           type="button"
           className="store-select-back"
           title="back to the list"
-          onClick={() => { onChange(""); setTyping(false); }}
+          onClick={() => setTypingOverride(false)}
         >
           <Icon name="chevron-expand-outline" />
         </button>
@@ -78,12 +82,13 @@ export function StoreSelect({ source, storeKey, value, placeholder, onChange }: 
   return (
     <Select
       value={value}
-      options={names}
+      options={list?.names ?? []}
       placeholder={placeholder}
       onChange={onChange}
+      missing={isMissing(value, list)}
       // tables are created/managed in the schema editor, so the table picker is
       // pick-only. kv keys can be created on the fly (a `set`), so keys allow it.
-      onNew={listName === "keys" ? () => setTyping(true) : undefined}
+      onNew={listName === "keys" ? () => setTypingOverride(true) : undefined}
       newLabel="new key"
     />
   );

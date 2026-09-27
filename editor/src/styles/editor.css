@@ -2396,9 +2396,13 @@ button{font-family:inherit;}
 }
 .wf-select-trigger:hover{ border-color:var(--line-3); }
 .wf-select-trigger:focus-visible{ outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-glow); }
-.wf-select-trigger .wf-select-val{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.wf-select-trigger .wf-select-val{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
 .wf-select-trigger.placeholder .wf-select-val{ color:var(--ink-ghost); }
 .wf-select-trigger svg{ width:12px; height:12px; color:var(--ink-faint); flex:none; margin-left:auto; }
+/* a saved value the list lacks: still the selection, dimmed, with a quiet mark */
+.wf-select-trigger.missing .wf-select-val{ color:var(--ink-dim); }
+.wf-select-note{ flex:none; margin-left:auto; color:var(--warn); font-size:9.5px; font-weight:400; }
+.wf-select-note + svg{ margin-left:0; }
 /* the portaled dark popup */
 .wf-select-pop{
   z-index:var(--z-modal, 200);

@@ -5,7 +5,9 @@
 // OPERATION knob, the store table/key picker. Change it once, it changes
 // everywhere. The popup is portaled to <body> and positioned under the trigger
 // so a node's overflow:hidden never clips it. Placeholder is the trigger's empty
-// label, NOT a selectable row. An optional "＋ new…" action sits at the bottom.
+// label, NOT a selectable row: a value the options lack still shows as itself
+// (hiding a saved value behind the placeholder reads as if it were gone). An
+// optional "＋ new…" action sits at the bottom.
 // ============================================================================
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -21,12 +23,16 @@ interface SelectProps {
   /** when given, a "＋ <newLabel>" row appears at the bottom and calls this. */
   onNew?: () => void;
   newLabel?: string;
+  /** the value is known to be absent from a fully read list: the trigger still
+   *  shows it, with a quiet "not found" mark. */
+  missing?: boolean;
   className?: string;
 }
 
-export function Select({ value, options, placeholder, onChange, onNew, newLabel = "new…", className }: SelectProps) {
+export function Select({ value, options, placeholder, onChange, onNew, newLabel = "new…", missing = false, className }: SelectProps) {
   const opts: SelectOption[] = options.map((o) => (typeof o === "string" ? { value: o, label: o } : o));
   const current = opts.find((o) => o.value === value);
+  const shown = current ? current.label : value;
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
@@ -58,10 +64,12 @@ export function Select({ value, options, placeholder, onChange, onNew, newLabel 
       <button
         type="button"
         ref={triggerRef}
-        className={`wf-select-trigger nodrag ${current ? "" : "placeholder"}`}
+        className={`wf-select-trigger nodrag ${shown ? "" : "placeholder"} ${missing ? "missing" : ""}`}
+        title={missing ? `${value} is not in the list` : undefined}
         onClick={() => setOpen((o) => !o)}
       >
-        <span className="wf-select-val">{current ? current.label : (placeholder || "pick…")}</span>
+        <span className="wf-select-val">{shown || placeholder || "pick…"}</span>
+        {missing && <span className="wf-select-note">not found</span>}
         <Icon name="chevron-expand-outline" />
       </button>
       {open && rect && createPortal(
