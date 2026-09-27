@@ -1,6 +1,7 @@
 id = "hello"
 name = "Hello"
 version = "0.1.0"
-author = "Boltjar"
+author = "Your Name"
 description = "A minimal example pack: one pulled node and one fired node."
 min_boltjar = "0.1.0"
+license = "MIT-0"

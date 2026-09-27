@@ -28,6 +28,12 @@ modified version of it, which remain covered by the GNU AGPL version 3 or later.
 Boltjar, you may extend this exception to your version, but you are not obligated to do so; if you
 do not wish to, delete this exception statement from your version.
 
+## Examples are free to copy
+
+Everything under `examples/` (the example graphs and the example pack) is also available under
+MIT No Attribution ([examples/LICENSE](examples/LICENSE)). Start a pack or a graph from them and
+license the result however you want, with no notice to keep.
+
 ## What this means in practice
 
 - You can use Boltjar for anything, including at work and commercially.
