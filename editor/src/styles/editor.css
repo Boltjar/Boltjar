@@ -6,9 +6,18 @@
    ========================================================================== */
 
 /* Design tokens (single source of truth) + the two webfonts. The tokens file
-   sits next to this stylesheet. */
+   sits next to this stylesheet. The fonts are bundled from @fontsource (OFL),
+   one file per weight the styles use, so loading the editor never reaches
+   the network. */
 @import url("./tokens.css");
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap");
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/inter/700.css";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/500.css";
+@import "@fontsource/jetbrains-mono/600.css";
+@import "@fontsource/jetbrains-mono/700.css";
 
 /* React Flow base styles (we override the visual layer heavily). */
 @import "@xyflow/react/dist/style.css";
