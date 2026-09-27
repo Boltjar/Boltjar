@@ -1264,6 +1264,9 @@ async def post_audio(slug: str, node: str, request: Request):
     hub = HUBS.get(slug)
     if hub is None or hub.runtime is None:
         return JSONResponse({"error": "graph not running"}, status_code=404)
+    # JSON only: a browser can send text/plain cross-site without a preflight.
+    if not _is_json(request.headers.get("content-type")):
+        return JSONResponse({"error": "send the clip as application/json"}, status_code=415)
     # cap the body (audio clips are MB-scale; reject an absurd payload up front).
     raw = await _read_capped(request, AUDIO_POST_MAX_BYTES)
     if raw is None:
@@ -1276,6 +1279,11 @@ async def post_audio(slug: str, node: str, request: Request):
         return JSONResponse({"error": "body must be a JSON object"}, status_code=400)
     hub.send_audio(node, body.get("audio", ""), body.get("lang", ""))
     return {"ok": True}
+
+
+def _is_json(content_type: str | None) -> bool:
+    media = (content_type or "").split(";", 1)[0].strip().lower()
+    return media == "application/json" or (media.startswith("application/") and media.endswith("+json"))
 
 
 async def _read_capped(request: Request, limit: int) -> bytes | None:

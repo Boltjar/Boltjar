@@ -63,6 +63,10 @@ def test_audio_post_needs_a_json_object():
     hub.runtime = object()
     hub.send_audio = lambda *a, **k: None
     try:
+        # text/plain is what a cross-site form or fetch can send without a preflight.
+        r = client.post("/audio/audio-json/ain", content=b'{"audio": "x"}',
+                        headers={"content-type": "text/plain"})
+        assert r.status_code == 415
         r = client.post("/audio/audio-json/ain", content=b'["x"]',
                         headers={"content-type": "application/json"})
         assert r.status_code == 400
