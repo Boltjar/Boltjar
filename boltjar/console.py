@@ -29,6 +29,7 @@ import textwrap
 import threading
 import time
 import traceback
+import urllib.parse
 from dataclasses import dataclass
 from typing import Callable, Iterator, Mapping, Sequence, TextIO
 
@@ -686,7 +687,8 @@ class LogFormatter(logging.Formatter):
 
 class AccessFormatter(LogFormatter):
     """uvicorn's access lines (shown with --verbose): the status coloured by its
-    class, the method and the path."""
+    class, the method and the path. The editor's one-time link carries the
+    install token in its query, so the path shows it as `<token>`."""
 
     @staticmethod
     def _status(record: logging.LogRecord) -> int | None:
@@ -707,7 +709,26 @@ class AccessFormatter(LogFormatter):
             return super().text(record)
         _client, method, path = record.args[:3]
         shown = self.style(str(status), TONES[self.tone(record)])
-        return f"{shown} {_terminal_safe(str(method))} {_terminal_safe(str(path))}"
+        return f"{shown} {_terminal_safe(str(method))} {_terminal_safe(_mask_token(str(path)))}"
+
+
+# The query parameter of the editor's one-time link: boltjar.security.LINK_PARAM,
+# named again here because security imports starlette.
+_LINK_PARAM = "token"
+
+
+def _mask_token(path: str) -> str:
+    """`path` with the value of its token parameter replaced by `<token>`. The
+    parameter is matched by its decoded name, as the server reads it."""
+    base, sep, query = path.partition("?")
+    if not sep:
+        return path
+    parts = []
+    for part in query.split("&"):
+        name, eq, _value = part.partition("=")
+        is_token = eq and urllib.parse.unquote_plus(name) == _LINK_PARAM
+        parts.append(f"{name}=<token>" if is_token else part)
+    return f"{base}?{'&'.join(parts)}"
 
 
 def error_location(tb) -> str:

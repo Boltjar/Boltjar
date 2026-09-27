@@ -469,6 +469,27 @@ def test_an_access_line_never_drives_the_terminal():
     assert not RAW_CONTROL.search(out) and out.endswith(" 404 GET /x\\x1b[2J")
 
 
+def test_an_access_line_hides_the_token_of_the_editor_link():
+    fmt = console.AccessFormatter(stream=FakeStream(tty=False))
+    rec = logging.LogRecord("uvicorn.access", logging.INFO, __file__, 1, '%s - "%s %s HTTP/%s" %d',
+                            ("192.168.1.30:5000", "GET", "/?token=abcDEF123_-xyz", "1.1", 303), None)
+    out = fmt.format(rec)
+    assert "abcDEF123" not in out and out.endswith(" 303 GET /?token=<token>")
+
+
+@pytest.mark.parametrize("path, shown", [
+    ("/api/graphs", "/api/graphs"),
+    ("/?a=1&token=abc&b=2", "/?a=1&token=<token>&b=2"),
+    ("/?%74oken=abc", "/?%74oken=<token>"),  # the server decodes the name too
+    ("/?tokens=abc&token", "/?tokens=abc&token"),
+])
+def test_the_token_is_found_by_the_name_the_server_reads(path, shown):
+    from boltjar import security
+
+    assert console._LINK_PARAM == security.LINK_PARAM
+    assert console._mask_token(path) == shown
+
+
 @pytest.mark.parametrize("verbose", [False, True])
 def test_a_log_line_shows_a_known_secret_as_its_token(monkeypatch, verbose):
     key = "sk-test-0123456789abcdef"
