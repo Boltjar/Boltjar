@@ -4,11 +4,13 @@ left for the server to wait on."""
 from __future__ import annotations
 
 import asyncio
+import io
+import logging
 
 import pytest
 from starlette.websockets import WebSocketDisconnect
 
-from boltjar import server
+from boltjar import console, server
 import boltjar.nodes.core  # noqa: F401  (registers the core nodes)
 from local_client import local_client
 
@@ -95,6 +97,34 @@ def test_a_graph_whose_stop_hangs_holds_up_none_of_the_others(hubs):
         await stuck.runtime.stop()
 
     asyncio.run(scenario())
+
+
+def test_a_stop_that_fails_shows_no_key_in_the_terminal(hubs, monkeypatch):
+    # a pack's store whose close raises with a resolved key in its message (an
+    # httpx error URL, say): the terminal prints its token, never the key
+    key = "sk-test-0123456789abcdef"
+    monkeypatch.setitem(server._secrets._store, "SHUTDOWN_TEST_KEY", key)
+    stream = io.StringIO()
+    handler = logging.StreamHandler(stream)
+    handler.setFormatter(console.LogFormatter(verbose=True, stream=stream))
+    monkeypatch.setattr(server._log, "handlers", [handler])
+    monkeypatch.setattr(server._log, "propagate", False)
+
+    async def scenario():
+        hub = server.get_hub("sd-key")
+        assert await hub.power_on(MANUAL_LOG) is None
+
+        async def refuses():
+            raise RuntimeError(f"401 for https://api.example.com/v1/close?key={key}")
+
+        hub.power_off = refuses
+        assert await server.shutdown_all() == 0
+        await hub.runtime.stop()
+
+    asyncio.run(scenario())
+    out = stream.getvalue()
+    assert "could not stop graph sd-key cleanly" in out
+    assert key not in out and "key={{secret.SHUTDOWN_TEST_KEY}}" in out
 
 
 def test_leaving_the_app_lifespan_stops_the_graphs(hubs):

@@ -11,7 +11,7 @@ import time
 
 import pytest
 
-from boltjar import banner_art, console
+from boltjar import banner_art, console, secrets
 from boltjar.console import Caps, Console, GraphLines, LogFormatter, Row, Style
 
 SGR = re.compile(r"\x1b\[([0-9;]*)m")
@@ -467,6 +467,18 @@ def test_an_access_line_never_drives_the_terminal():
                             ("127.0.0.1:5000", "GET", "/x\x1b[2J", "1.1", 404), None)
     out = fmt.format(rec)
     assert not RAW_CONTROL.search(out) and out.endswith(" 404 GET /x\\x1b[2J")
+
+
+@pytest.mark.parametrize("verbose", [False, True])
+def test_a_log_line_shows_a_known_secret_as_its_token(monkeypatch, verbose):
+    key = "sk-test-0123456789abcdef"
+    monkeypatch.setitem(secrets._store, "CONSOLE_TEST_KEY", key)
+    try:
+        raise RuntimeError(f"401 for https://api.example.com/v1?key={key}")
+    except RuntimeError:
+        rec = record(f"sent {key}", logging.ERROR, exc_info=sys.exc_info())
+    out = plain_formatter(verbose).format(rec)
+    assert key not in out and out.count("{{secret.CONSOLE_TEST_KEY}}") == 2
 
 
 def test_log_config_is_quiet_unless_verbose():

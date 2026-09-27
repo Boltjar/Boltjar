@@ -34,6 +34,7 @@ from typing import Callable, Iterator, Mapping, Sequence, TextIO
 
 from boltjar import banner_art
 from boltjar.media import printable, summarize
+from boltjar.secrets import redact
 
 # ---------------------------------------------------------------- palette
 RGB = tuple[int, int, int]
@@ -608,6 +609,13 @@ _TONE_LEVELS = {"ok": logging.INFO, "info": logging.INFO, "warn": logging.WARNIN
 _MESSAGE_INDENT = " " * 12
 
 
+def _terminal_safe(text: str) -> str:
+    """Text the formatter did not write, as the terminal may show it: a known
+    secret as its {{secret.NAME}} token (the same redaction the editor's live
+    events get) and every control character as its escape."""
+    return printable(redact(text))
+
+
 class LogFormatter(logging.Formatter):
     """`▌ HH:MM:SS  ✓ message`: a bar on the open block, a dim local time, a
     glyph coloured by tone (the editor's ok/info/warn/bad), then the message. A
@@ -615,9 +623,9 @@ class LogFormatter(logging.Formatter):
     also carries `tag` (the graph), `event`, `detail` and `hints`, and lines up
     in columns. An exception prints as one line plus a dim location and hint;
     the full traceback only when verbose. Text the formatter did not write (a
-    message, an exception, a graph line's fields) can come from anywhere, so
-    its control characters print as escapes (media.printable); a line break in
-    a message starts a new line under it."""
+    message, an exception, a graph line's fields) can come from anywhere, so it
+    shows a known secret as its token and its control characters as escapes
+    (_terminal_safe); a line break in a message starts a new line under it."""
 
     def __init__(self, verbose: bool = False, stream: TextIO | None = None) -> None:
         super().__init__()
@@ -632,7 +640,7 @@ class LogFormatter(logging.Formatter):
 
     def text(self, record: logging.LogRecord) -> str:
         """The message as the terminal shows it, one line of it per line."""
-        return "\n".join(printable(line) for line in record.getMessage().splitlines())
+        return "\n".join(_terminal_safe(line) for line in record.getMessage().splitlines())
 
     def format(self, record: logging.LogRecord) -> str:
         s = self.style
@@ -652,22 +660,22 @@ class LogFormatter(logging.Formatter):
         """`chat        On   17 nodes`: the graph bold, the event, the detail (dim
         unless it is the problem itself), and each hint dim under the event."""
         s = self.style
-        name = printable(str(getattr(record, "tag", "") or ""))
-        event = printable(str(record.event))
-        detail = printable(str(getattr(record, "detail", "") or ""))
+        name = _terminal_safe(str(getattr(record, "tag", "") or ""))
+        event = _terminal_safe(str(record.event))
+        detail = _terminal_safe(str(getattr(record, "detail", "") or ""))
         name_col = s(name, bold=True) + " " * max(1, NAME_WIDTH - len(name))
         event_col = event + " " * max(1, EVENT_WIDTH - len(event)) if detail else event
         quiet = self.tone(record) not in ("warn", "bad")
         line = head + name_col + event_col + (s(detail, dim=True) if quiet else detail)
         indent = _MESSAGE_INDENT + " " * NAME_WIDTH
-        hints = [printable(str(hint)) for hint in getattr(record, "hints", ())]
+        hints = [_terminal_safe(str(hint)) for hint in getattr(record, "hints", ())]
         return [line.rstrip()] + [indent + s(hint, dim=True) for hint in hints]
 
     def _exception(self, lines: list[str], exc_info) -> list[str]:
         if self.verbose:
-            return lines + [printable(line) for line in self.formatException(exc_info).splitlines()]
+            return lines + [_terminal_safe(line) for line in self.formatException(exc_info).splitlines()]
         exc = exc_info[1]
-        reason = printable(" ".join(str(exc).split()))
+        reason = _terminal_safe(" ".join(str(exc).split()))
         lines = list(lines)
         lines[0] += f": {type(exc).__name__}: {reason}" if reason else f": {type(exc).__name__}"
         where = error_location(exc_info[2])
@@ -699,7 +707,7 @@ class AccessFormatter(LogFormatter):
             return super().text(record)
         _client, method, path = record.args[:3]
         shown = self.style(str(status), TONES[self.tone(record)])
-        return f"{shown} {printable(str(method))} {printable(str(path))}"
+        return f"{shown} {_terminal_safe(str(method))} {_terminal_safe(str(path))}"
 
 
 def error_location(tb) -> str:
