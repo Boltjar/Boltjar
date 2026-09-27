@@ -191,7 +191,7 @@ _AUDIO_MIME = {
 @node(id="core.value.audio", name="Audio", kind=Kind.VALUE, category="Values",
       pulled=True, summary="An audio source: an https URL, or a local file in "
                            "user/data/files or examples/ (read into a data: URL). "
-                           "Mirror of Image.")
+                           "It works like Image.")
 class Audio:
     src: Widget = Widget(kind="text", default="", label="URL or path")
     outputs = [Port("out", "audio")]
@@ -373,10 +373,10 @@ def _strip_text(s: str, emoji: bool, markdown: bool, tags: bool,
 
 
 @node(id="core.text.strip", name="Strip", kind=Kind.TRANSFORM, category="Text",
-      pulled=True, summary="Clean text for TTS and beyond: drop emoji, markdown "
-                           "markers, [bracket] tags, *action* stage directions, and "
-                           "URLs. Each cleaner is an independent toggle. Collapses "
-                           "the leftover whitespace. (Fixes 'TTS speaks the emoji'.)")
+      pulled=True, summary="Clean text for TTS and more: drop emoji, markdown "
+                           "markers, [bracket] tags, *action* stage directions and "
+                           "URLs. Each cleaner has its own toggle, and the leftover "
+                           "whitespace collapses.")
 class Strip:
     # every cleaner defaults ON and is promotable to a bool input (drive it from
     # the graph). Reuses Tag Parse's tag regex, so the tag syntax has one owner.
@@ -741,10 +741,12 @@ def _schedule_tick(now, last_minute, cron: str):
 
 
 @node(id="core.trigger.schedule", name="Schedule", kind=Kind.TRIGGER, category="Triggers",
-      summary="Fire on a cron schedule: 'min hour day month weekday'. e.g. '0 9 * * *' "
-              "fires daily at 09:00, '*/15 * * * *' every 15 minutes, '0 9 * * 1' Mondays "
-              "at 9am. Standard cron OR for day-of-month vs day-of-week. Checks each "
-              "minute; emits a trigger + the firing time, once per matching minute.")
+      summary="Fire on a cron schedule: 'min hour day month weekday', in the zone "
+              "its timezone knob picks. '0 9 * * *' fires daily at 09:00, "
+              "'*/15 * * * *' every 15 minutes, '0 9 * * 1' on Mondays at 09:00. When "
+              "both day fields are set, either one matches, as in standard cron. It "
+              "checks each minute and emits a trigger and the firing time once per "
+              "matching minute.")
 class Schedule:
     cron: Widget = Widget(kind="text", default="0 * * * *",
                           label="cron (min hour day month weekday)")
@@ -951,8 +953,9 @@ def _dynamic_sorted(ins: dict, base: str) -> list:
 
 
 @node(id="core.data.list", name="List", kind=Kind.TRANSFORM, category="Data",
-      pulled=True, summary="Assemble N wired values into one list (the inverse of "
-                           "For-each). Grows a socket per wire; None is dropped.")
+      pulled=True, summary="Assemble wired values into one list (the reverse of "
+                           "For-each). A socket grows per wire, and a null value "
+                           "is left out.")
 class List:
     # type-agnostic: text, an image data-URL, a file path, json, all ride `any`.
     inputs = [Port("item", "any", growable=True)]
@@ -963,7 +966,8 @@ class List:
 
 
 @node(id="core.data.compute", name="Compute", kind=Kind.TRANSFORM, category="Data",
-      pulled=True, summary="Derive a value from a pure expression (the dual of Logic).",
+      pulled=True, summary="Derive a value from a pure expression over the wired "
+                           "inputs. Compute calculates; Logic routes.",
       icon="calculator-outline", subline="compute · {expression|clip:14}")
 class Compute:
     expression: Widget = code("value", expand=True)
@@ -1174,9 +1178,10 @@ class LLM:
 
 
 @node(id="core.ai.tool", name="Tool", kind=Kind.TRANSFORM, category="AI",
-      summary="A callable tool the LLM can invoke. Declares a name + description + "
-              "JSON-schema params; when invoked, fires `call(args)` and waits for "
-              "the wired `result` to come back, then returns it to the LLM.")
+      summary="A tool the LLM can call. It declares a name, a description and its "
+              "parameters. When the model calls it, `call` carries the arguments into "
+              "the body you wired, and the answer that comes back on `result` goes "
+              "back to the model.")
 class Tool:
     name: Widget = Widget(kind="text", default="my_tool", label="name")
     description: Widget = code("Describe what this tool does for the model.")
@@ -1204,11 +1209,11 @@ class Tool:
 
 
 @node(id="core.ai.tool_args", name="Tool Args", kind=Kind.TRANSFORM, category="AI",
-      summary="The body entry for a tool. FIRES when the model calls the tool: it "
-              "splits the `call` into one typed output per argument AND emits a "
-              "`trigger` to drive the rest of the body. The field names are also the "
-              "tool's declared params (the schema is generated from them in auto "
-              "mode). Wire the body's answer back into the Tool's `result`.")
+      summary="Where a tool's body starts. It runs when the model calls the tool: "
+              "it splits `call` into one typed output per argument and fires `trigger` "
+              "to run the rest of the body. Its field names are also the tool's "
+              "parameters (in auto mode the Tool builds its schema from them). Wire "
+              "the body's answer back into the Tool's `result`.")
 class ToolArgs:
     fields: Widget = Widget(kind="text", default="", label="Arguments",
                             placeholder="location, unit")
@@ -1402,10 +1407,10 @@ class Embed:
 
 
 @node(id="core.ai.rerank", name="Rerank", kind=Kind.TRANSFORM, category="AI",
-      summary="Cross-encoder precision pass: score each candidate against the query "
-              "and keep the best. Picks a rerank model (HTTP service at the `url` "
-              "knob). FAILS LOUD (red node) if no rerank backend answers, rather "
-              "than silently passing the candidates through unranked.")
+      summary="A cross-encoder precision pass: score each candidate against the "
+              "query and keep the best. Picks a rerank model (an HTTP service at the "
+              "`url` knob). When no rerank service answers, the node fails with an "
+              "error instead of passing the candidates on unranked.")
 class Rerank:
     # a model node like the LLM: the picker + the manifest's params (keep) render in
     # the body. `keep` (how many to return) is a manifest param; the doc text is the
@@ -1501,10 +1506,11 @@ class VectorStoreNode:
 
 
 @node(id="core.vectors", name="Vectors", kind=Kind.TRANSFORM, category="Store",
-      summary="Index/search an embedded vector store. The 'operation' knob reshapes "
-              "the knobs and outputs. Search takes one or more query embeddings "
-              "(multi-probe union) and returns top-k with scores. Brute-force "
-              "cosine over a namespaced sqlite store; thousands of items, no torch.")
+      summary="Index and search an embedded vector store. The operation knob "
+              "reshapes the knobs and outputs. Search takes one or more query "
+              "embeddings, keeps each item's best score across them and returns the "
+              "top k. It compares every stored vector by cosine similarity, which "
+              "suits thousands of items.")
 class VectorsNode:
     operation: Widget = select(["search", "index", "delete", "clear"], default="search")
     namespace: Widget = tmpl("default", kind="text", port_type="text",
@@ -1830,11 +1836,11 @@ def _bind_sql_tags(sql: str, tags: dict) -> tuple[str, dict]:
 
 
 @node(id="core.db", name="DB", kind=Kind.TRANSFORM, category="Store",
-      summary="Read/write a SQLite store. The 'operation' knob reshapes the "
+      summary="Read and write a SQLite store. The operation knob reshapes the "
               "knobs and outputs. Knobs are templates: {tag} pulls from a "
-              "wired source, {{secret.X}} resolves a secret. In SQL a wired "
-              "{tag} is bound as a parameter: always a value, never SQL. "
-              "INSERT/UPDATE with a data: URL value saves the data URL as TEXT (V1).")
+              "wired source and {{secret.X}} resolves a secret. In SQL a wired "
+              "{tag} is bound as a parameter, so it is always a value, never SQL. "
+              "An insert or update stores a data: URL value as text.")
 class DBNode:
     # op-shaped: each field declares which operations it belongs to (replaces the
     # frontend dbKnobNamesFor table). The editor reads op_field/op_values.
@@ -1997,8 +2003,8 @@ class Stringify:
 
 
 @node(id="core.data.build", name="Build JSON", kind=Kind.TRANSFORM, category="Data",
-      pulled=True, summary="Build a json object from wired inputs: each named "
-                           "input becomes a key (the port name) -> value.")
+      pulled=True, summary="Build a JSON object from wired inputs: each input's "
+                           "port name becomes a key holding that input's value.")
 class BuildJson:
     # ghost_base="field": a minted socket is named after the wired source node
     # (a meaningful json key), not auto-numbered. Declared on the port so the
@@ -2044,8 +2050,8 @@ def _walk_path(value, path: str):
 
 
 @node(id="core.data.get", name="Get", kind=Kind.TRANSFORM, category="Data",
-      pulled=True, summary="Read the value at a dotted/bracket path "
-                           "(user.name, items.0.id). Missing path -> null.")
+      pulled=True, summary="Read the value at a dotted or bracket path "
+                           "(user.name, items.0.id). A missing path gives null.")
 class Get:
     path: Widget = Widget(kind="text", default="", label="Path")
     inputs = [Port("json", "json")]
@@ -2514,12 +2520,11 @@ def _maybe_json(value):
 
 
 @node(id="core.trigger.agenda", name="Agenda", kind=Kind.TRIGGER, category="Triggers",
-      summary="Fire from DATA, not a static clock: poll a wired store table of "
+      summary="Fire from data instead of a fixed clock: poll a wired store table of "
               "{when, payload} rows and fire each row when its `when` is due. `when` "
-              "is an ISO datetime or epoch seconds (liberal parsing). Fires `due` "
-              "(carrying the payload) and emits `payload`; marks the row done (or "
-              "deletes it) so it never double-fires. Multiple due rows fire one at a "
-              "time, earliest first.")
+              "is an ISO datetime or epoch seconds. It fires `due` with the payload "
+              "and emits `payload`, then marks the row done (or deletes it) so it "
+              "never fires twice. Several due rows fire one at a time, earliest first.")
 class Agenda:
     poll: Widget = Widget(kind="number", default=60, min=1, max=86400, step=1,
                           label="poll (seconds)", port_type="number")
@@ -2921,7 +2926,7 @@ _WIRELESS_CHANNELS = [str(i) for i in range(1, 101)]
 
 @node(id="core.flow.wireless_in", name="Wireless In", kind=Kind.TRANSFORM, category="Flow",
       summary="Broadcast any wires on a channel (1 to 100). A Wireless Out on the "
-              "same channel mirrors them - a virtual wire across the canvas.")
+              "same channel mirrors them, like a virtual wire across the canvas.")
 class WirelessIn:
     channel: Widget = select(_WIRELESS_CHANNELS, default="1")
     # any wire of any kind; each socket is named after its source (like a tag).
@@ -2940,8 +2945,8 @@ class WirelessOut:
 
 @node(id="core.flow.router", name="Router", kind=Kind.TRANSFORM, category="Flow",
       summary="Reroute a wire anywhere on the canvas: one in, one out, no change. "
-              "A pure bypass - the wire keeps its source name/type even through "
-              "routers in series. Optional centred label.")
+              "It is a pure bypass, so the wire keeps its source name and type even "
+              "through several routers in a row. Optional centred label.")
 class Router:
     # a free-text label shown centred in the pill (empty by default; duplicates are
     # fine - it never affects the wire). The runtime ALWAYS flattens the router away
@@ -3027,9 +3032,9 @@ _CHANGED_UNSET = object()  # sentinel so a Changed node's first value always cou
 
 
 @node(id="core.flow.changed", name="Changed", kind=Kind.TRANSFORM, category="Flow",
-      summary="Forward a value ONLY when it differs from the last one seen (a dedup "
-              "gate). Interval -> HTTP -> Changed -> LLM polls a source but fires the "
-              "downstream only on a real change. The first value always counts.")
+      summary="Pass a value on only when it differs from the last one (a dedup "
+              "gate). Interval, HTTP Request, Changed and LLM in a row poll a source "
+              "and run the LLM only on a real change. The first value always passes.")
 class Changed:
     inputs = [Port("trigger", "event", trigger=True),
               Port("value", "any")]
@@ -3055,9 +3060,9 @@ class Changed:
 
 @node(id="core.flow.sync", name="Sync", kind=Kind.TRANSFORM, category="Flow",
       opens_turn=True,
-      summary="A control barrier: emits one trigger out only when every wired input "
-              "has fired once, then resets. Waits for the slowest branch. `in` needs "
-              "at least one wire. Touches no data: data rides its own wires.")
+      summary="A control barrier: it fires one trigger once every wired input has "
+              "fired, then resets. It waits for the slowest branch, and `in` needs at "
+              "least one wire. It touches no data; data rides its own wires.")
 class Sync:
     # growable trigger inputs; emits `out` once every wired socket has arrived.
     # A trigger, so at least one socket must be wired.
@@ -3113,11 +3118,11 @@ class Wait:
 
 @node(id="core.flow.queue", name="Queue", kind=Kind.TRANSFORM, category="Flow",
       opens_turn=True,
-      summary="Serialize many producers into ONE lane: buffer each arrival on `in`, "
-              "release ONE item on `out`, and release the next only when `ack` fires. "
-              "So a user turn and a proactive turn never collide on the shared LLM. "
-              "Both triggers must be wired: the producers into `in`, the end of the "
-              "turn (e.g. the Avatar's trigger) into `ack`.")
+      summary="Run many producers through one lane. Each arrival on `in` waits in "
+              "a buffer, `out` releases one item, and the next goes only when `ack` "
+              "fires, so two turns reach a shared LLM one after the other. Both "
+              "triggers must be wired: the producers into `in`, and the node that ends "
+              "the turn into `ack`.")
 class Queue:
     # a watchdog so a job whose `ack` never fires (a tool body that raised, a broken
     # chain) cannot wedge the lane forever: if the current job has been outstanding
@@ -3186,11 +3191,11 @@ class ChatOutput:
 
 
 @node(id="core.output.avatar", name="Avatar", kind=Kind.OUTPUT, category="Output",
-      summary="Stream ONE avatar chunk per fire (text + audio + mood + action + lang) "
-              "to an avatar client (for example a VRM renderer) over the /stream SSE. "
-              "For per-sentence delivery, drive it once per sentence (e.g. a For-each "
-              "over split sentences). Wire the separate ports, or one combined "
-              "`utterance` json (explicit ports win). Lip-sync stays client-side.")
+      summary="Stream one avatar chunk per fire (text, audio, mood, action and lang) "
+              "to an avatar client, such as a VRM renderer, over the /stream SSE. For "
+              "one chunk per sentence, fire it once per sentence (a For-each over "
+              "Sentences). Wire the separate ports or one combined `utterance` JSON; "
+              "the separate ports win. Lip-sync stays on the client.")
 class Avatar:
     channel: Widget = Widget(kind="text", default="avatar", label="stream channel")
     inputs = [Port("trigger", "event", trigger=True),
