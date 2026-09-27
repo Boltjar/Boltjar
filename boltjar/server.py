@@ -26,6 +26,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import datetime
+import hmac
 import json
 import pathlib
 import platform
@@ -953,7 +954,8 @@ async def webhook_handler(slug: str, path: str, request: Request):
     secret_expected = _secrets.resolve_secrets(str(secret_cfg or "")).strip()
     if secret_expected:
         provided = request.headers.get("x-webhook-secret", "")
-        if provided != secret_expected:
+        # constant time, so the response timing never leaks how much matched.
+        if not hmac.compare_digest(provided.encode("utf-8"), secret_expected.encode("utf-8")):
             return JSONResponse({"error": "forbidden"}, status_code=401)
 
     body_bytes = await request.body()

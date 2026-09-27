@@ -208,6 +208,28 @@ def test_200_when_secret_matches():
         _close(ws)
 
 
+def test_secret_is_compared_in_constant_time(monkeypatch):
+    import boltjar.server as server
+    real = server.hmac.compare_digest
+    calls = []
+
+    def spy(a, b):
+        calls.append((a, b))
+        return real(a, b)
+
+    slug = "wh-secret-digest"
+    ws = _power_on(slug, _graph(secret="s3cret"))
+    monkeypatch.setattr(server.hmac, "compare_digest", spy)
+    try:
+        assert client.post(f"/hook/{slug}/foo", json={},
+                           headers={"X-Webhook-Secret": "s3cret"}).status_code == 200
+        assert client.post(f"/hook/{slug}/foo", json={},
+                           headers={"X-Webhook-Secret": "s3creT"}).status_code == 401
+        assert calls == [(b"s3cret", b"s3cret"), (b"s3creT", b"s3cret")]
+    finally:
+        _close(ws)
+
+
 def test_secret_headers_never_reach_the_graph():
     slug = "wh-secret-headers"
     ws = _power_on(slug, _graph(secret="s3cret"))
