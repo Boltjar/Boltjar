@@ -1114,7 +1114,7 @@
   "name": "Sentences",
   "kind": "transform",
   "category": "Data",
-  "summary": "Split text into a list of sentences (each ends on . ! ? ... or a new line). Feed it through For-each to send an LLM reply to TTS or Avatar one sentence at a time, so speech starts sooner.",
+  "summary": "Split text into a list of sentences (each ends on . ! ? ... or a new line). Feed it through For-each to send an LLM reply to TTS one sentence at a time, so speech starts sooner.",
   "icon": "reorder-four-outline",
   "subline": "",
   "inputs": [
@@ -2245,62 +2245,6 @@
    }
   ],
   "widgets": []
- },
- {
-  "id": "core.output.avatar",
-  "name": "Avatar",
-  "kind": "output",
-  "category": "Output",
-  "summary": "Stream one avatar chunk per fire (text, audio, mood, action and lang) to an avatar client, such as a VRM renderer, listening on /stream. For one chunk per sentence, fire it once per sentence (a For-each over Sentences). Wire the separate ports or one combined `utterance` JSON; the separate ports win. Lip-sync stays on the client.",
-  "icon": "happy-outline",
-  "subline": "",
-  "inputs": [
-   {
-    "name": "trigger",
-    "growable": false
-   },
-   {
-    "name": "text",
-    "growable": false
-   },
-   {
-    "name": "audio",
-    "growable": false
-   },
-   {
-    "name": "mood",
-    "growable": false
-   },
-   {
-    "name": "action",
-    "growable": false
-   },
-   {
-    "name": "lang",
-    "growable": false
-   },
-   {
-    "name": "done",
-    "growable": false
-   },
-   {
-    "name": "utterance",
-    "growable": false
-   }
-  ],
-  "widgets": [
-   {
-    "name": "channel",
-    "kind": "text",
-    "label": "stream channel",
-    "default": "avatar",
-    "surface": "body",
-    "promotable": true,
-    "op_field": null,
-    "op_values": [],
-    "model_kind": null
-   }
-  ]
  },
  {
   "id": "core.output.respond_webhook",
