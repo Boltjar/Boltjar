@@ -2,15 +2,20 @@
 // ProblemsPanel: a floating panel listing pre-run validation problems (from
 // POST /api/validate and the ws `invalid` event). Each row names the broken node
 // and the reason; clicking it selects/centres that node. Turning On is gated on
-// this being empty (a broken graph never runs). Dismissible.
+// this being empty (a broken graph never runs). Dismissible. When the problems
+// are why the launch could not turn the graph back On, it also offers Stop
+// resuming (lib/resumeNotice).
 // ============================================================================
 import { Icon } from "../lib/icons";
+import { STOP_RESUMING } from "../lib/resumeNotice";
 import type { Problem } from "../types/protocol";
 
 interface ProblemsPanelProps {
   problems: Problem[];
   onGoToNode: (id: string) => void;
   onClose: () => void;
+  /** the launch could not resume this graph and retries it: stop that */
+  onStopResuming?: () => void;
 }
 
 const KIND_LABEL: Record<string, string> = {
@@ -22,7 +27,7 @@ const KIND_LABEL: Record<string, string> = {
   cycle: "unguarded cycle",
 };
 
-export function ProblemsPanel({ problems, onGoToNode, onClose }: ProblemsPanelProps) {
+export function ProblemsPanel({ problems, onGoToNode, onClose, onStopResuming }: ProblemsPanelProps) {
   return (
     <div className="problems-panel">
       <div className="pp-head">
@@ -54,6 +59,15 @@ export function ProblemsPanel({ problems, onGoToNode, onClose }: ProblemsPanelPr
           ))
         )}
       </div>
+      {onStopResuming && (
+        <div className="pp-foot">
+          <span className="pp-foot-note">{STOP_RESUMING.note}</span>
+          <button type="button" className="conn-action-btn" onClick={onStopResuming}>
+            <Icon name={STOP_RESUMING.icon} />
+            {STOP_RESUMING.button}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

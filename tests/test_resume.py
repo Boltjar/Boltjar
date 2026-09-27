@@ -750,3 +750,25 @@ def test_an_editor_closing_while_the_api_turns_a_graph_on_leaves_it_reachable(fr
         assert pending.result(10)["power"] == "on"
         assert server.HUBS.get("chat") is hub
         assert client.portal.call(server.shutdown_all) == 1  # the exit reaches it
+
+
+def test_stop_resuming_is_an_off_for_a_graph_that_is_off(fresh, monkeypatch, no_local_providers):
+    """The editor's Stop resuming sends the Off a person sends: the launch
+    stops retrying the graph and its notice goes."""
+    save(fresh, "broken", MANUAL_LOG)
+    settings.update({"resume_workflows": True})
+    left_on(monkeypatch, ("broken", NO_TRIGGER))
+    with local_client() as client:
+        client.portal.call(server.launch_sequence)
+        assert resume.slugs() == ["broken"]  # kept for the next launch
+        with client.websocket_connect("/ws?slug=broken") as ws:
+            assert [ws.receive_json()["kind"] for _ in range(3)] == ["status", "live_graph", "invalid"]
+            ws.send_json({"action": "off"})
+            assert ws.receive_json() == {"kind": "status", "power": "off", "slug": "broken"}
+        assert resume.slugs() == []
+        with client.websocket_connect("/ws?slug=broken") as ws:
+            assert [ws.receive_json()["kind"] for _ in range(2)] == ["status", "live_graph"]
+    restart_server(monkeypatch)
+    with local_client() as client:
+        client.portal.call(server.launch_sequence)
+        assert "broken" not in server.LAUNCH_NOTICES

@@ -37,6 +37,7 @@ import { ProblemsPanel } from "./components/ProblemsPanel";
 import { StatusBar } from "./components/StatusBar";
 import { ConnectionsWindow } from "./components/ConnectionsWindow";
 import { GEAR_TAB, SETTINGS_LINKS, type SettingsTab } from "./lib/settingsTabs";
+import { STOP_RESUMING } from "./lib/resumeNotice";
 import { type WorkflowTab } from "./components/WorkflowTabs";
 import { isPermutation, bringToFront } from "./components/WorkflowTabs.test.helper";
 
@@ -1023,12 +1024,19 @@ export default function App() {
     [helpActions],
   );
 
+  // a graph the launch could not turn back On is Off, so its toggle offers no
+  // Off: this is that Off (the server stops retrying it at each launch).
+  const stopResuming = useCallback(() => socket.off(), [socket]);
+
   // ── palette actions (adapted to the power model) ──
   const paletteActions: PaletteAction[] = useMemo(
     () => [
       ...(socket.power === "off"
         ? [{ id: "on", label: "Power on", hint: "validate + start live", icon: "power", run: () => void powerOn() }]
         : [{ id: "off", label: "Power off", hint: "stop the runtime", icon: "power-outline", run: powerOff }]),
+      ...(socket.resumeNotice && socket.power !== "on"
+        ? [{ id: "stop-resuming", label: STOP_RESUMING.label, hint: STOP_RESUMING.hint, icon: STOP_RESUMING.icon, run: stopResuming }]
+        : []),
       ...(socket.power === "on" ? [{ id: "restart", label: "Save & Restart", hint: "apply live edits", icon: "refresh-outline", run: () => void restart() }] : []),
       { id: "save", label: "Save graph", hint: "PUT /api/graphs", icon: "save-outline", kbd: mod("S"), run: () => void putGraph() },
       { id: "settings", label: "Open Settings", hint: "startup, providers and secrets", icon: "settings-outline", run: () => setSettingsTab(SETTINGS_LINKS.openSettings) },
@@ -1039,7 +1047,7 @@ export default function App() {
       { id: "clear", label: "Clear console", hint: "empty the log feed", icon: "trash-outline", run: socket.clearLog },
       ...helpActions,
     ],
-    [socket.power, socket.clearLog, powerOn, powerOff, restart, putGraph, undo, redo, activeSlug, helpActions],
+    [socket.power, socket.resumeNotice, socket.clearLog, powerOn, powerOff, stopResuming, restart, putGraph, undo, redo, activeSlug, helpActions],
   );
 
   const selectedNode = nodes.find((n) => n.id === selectedId) ?? null;
@@ -1306,6 +1314,7 @@ export default function App() {
             setProblemsOpen(false);
           }}
           onClose={() => setProblemsOpen(false)}
+          onStopResuming={socket.resumeNotice ? stopResuming : undefined}
         />
       )}
 

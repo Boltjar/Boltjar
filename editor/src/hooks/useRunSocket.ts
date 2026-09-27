@@ -19,6 +19,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Graph, Problem, RunEvent } from "../types/protocol";
 import { liveEdgeKey, type Power } from "../lib/liveClassify";
 import { consoleText } from "../lib/mediaSummary";
+import { resumeNoticeAfter } from "../lib/resumeNotice";
 
 export type NodeRunStatus = "idle" | "running" | "ok" | "warn" | "error";
 export type { Power };
@@ -66,6 +67,9 @@ export interface RunSocketState {
   liveEdges: Set<string>;
   chats: Record<string, ChatMessage[]>;
   problems: Problem[];
+  /** the launch could not turn this graph back On and retries it at each one
+   *  (lib/resumeNotice); the editor offers Stop resuming while it shows. */
+  resumeNotice: boolean;
   counters: { eventsPerSec: number; inFlight: number };
   on: (graph: Graph) => void;
   off: () => void;
@@ -117,6 +121,7 @@ export function useRunSocket(slug: string = "_default"): RunSocketState {
   const [liveEdges, setLiveEdges] = useState<Set<string>>(new Set());
   const [chats, setChats] = useState<Record<string, ChatMessage[]>>({});
   const [problems, setProblems] = useState<Problem[]>([]);
+  const [resumeNotice, setResumeNotice] = useState(false);
   const [counters, setCounters] = useState({ eventsPerSec: 0, inFlight: 0 });
 
   // every console line passes through here, so none can carry a raw payload
@@ -132,6 +137,7 @@ export function useRunSocket(slug: string = "_default"): RunSocketState {
   const handleEvent = useCallback(
     (evt: RunEvent) => {
       const t = Date.now();
+      setResumeNotice((showing) => resumeNoticeAfter(showing, evt));
       switch (evt.kind) {
         case "value": {
           eventTimes.current.push(t);
@@ -404,6 +410,7 @@ export function useRunSocket(slug: string = "_default"): RunSocketState {
     setLiveNodes(new Set());
     setLiveEdges(new Set());
     setProblems([]);
+    setResumeNotice(false);
     setPower("off");
     // open a fresh socket for the new slug
     closedByUs.current = false;
@@ -430,6 +437,7 @@ export function useRunSocket(slug: string = "_default"): RunSocketState {
     liveEdges,
     chats,
     problems,
+    resumeNotice,
     counters,
     on,
     off,
