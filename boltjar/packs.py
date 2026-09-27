@@ -112,7 +112,7 @@ def _load_core() -> None:
         return
     core = importlib.import_module("boltjar.nodes.core")
     LOADED[CORE_ID] = Pack(
-        id=CORE_ID, name="Core", version=__version__, license="AGPL-3.0-or-later",
+        id=CORE_ID, name="Core", version=__version__, license="Apache-2.0",
         description="The built-in nodes: values, triggers, data, logic, AI, stores and outputs.",
         module=core.__name__,
         nodes=[nid for nid in NODE_REGISTRY if nid.startswith(CORE_ID + ".")],

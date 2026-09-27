@@ -68,4 +68,4 @@ npm test --prefix editor
 
 ## License
 
-AGPL-3.0-or-later with a node pack exception: use Boltjar for anything, share your changes to Boltjar itself, and license your own packs and graphs however you want. Details in [LICENSE-EXCEPTION.md](LICENSE-EXCEPTION.md); the name and logo in [TRADEMARK.md](TRADEMARK.md).
+[Apache-2.0](LICENSE): use Boltjar for anything, commercial work included, change it and ship it, as long as you keep the credit in [NOTICE](NOTICE) where your product shows its credits: "Built with Boltjar (https://boltjar.link), designed by DKLRD". Your own custom nodes and workflows are yours to license however you want. Community nodes that join Boltjar are credited in [CREDITS.md](CREDITS.md); the name and logo are covered by [TRADEMARK.md](TRADEMARK.md).

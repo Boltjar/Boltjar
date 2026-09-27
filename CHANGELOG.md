@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- Boltjar is licensed Apache-2.0: free for any use, commercial included, with the credit in NOTICE kept. The node pack exception is gone because nothing needs it now.
+
 ### Added
 
 - A node editor on React Flow, with wires colored by type, undo and redo, node groups and a command palette.

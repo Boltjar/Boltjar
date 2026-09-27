@@ -138,7 +138,7 @@ A pack is a folder in `packs/` with a `pack.toml` manifest and an `__init__.py` 
 
 Start from `examples/packs/hello/`: one pulled node, one fired node (its `trigger` input fires it and must be wired, like every trigger), and a `pack.toml` with every field (`id`, `name`, `version`, `author`, `license`, `description`, `homepage`, `min_boltjar`). The examples folder is MIT-0, so copy it freely.
 
-Talk to Boltjar only through `boltjar.sdk` and the manifest files, and don't copy Boltjar code into the pack. Then the [Node Pack Exception](LICENSE-EXCEPTION.md) applies: the pack is yours to license however you want, open or closed. Packs can ship model manifests too, in a `models/` folder next to `pack.toml`.
+A custom node is yours: license it however you want, open or closed. Boltjar is Apache-2.0, so building on its SDK asks nothing of your code; if you copy parts of Boltjar into it, keep their license notice and the [NOTICE](NOTICE). Packs can ship model manifests too, in a `models/` folder next to `pack.toml`.
 
 ## Pull requests
 
@@ -161,7 +161,7 @@ The subject reads `area: what is true now`.
 Real examples:
 
 ```
-license: AGPL-3.0-or-later with a node pack exception
+license: Apache-2.0, credit kept in NOTICE
 ```
 
 ```
@@ -183,7 +183,9 @@ With the sign-off you agree to the [Developer Certificate of Origin](https://dev
 
 ## License of contributions
 
-Boltjar is licensed AGPL-3.0-or-later with the [Node Pack Exception](LICENSE-EXCEPTION.md). Contributions come in under the same terms they go out: by opening a pull request you license your change under AGPL-3.0-or-later with the Node Pack Exception. There is no CLA, and you keep the copyright on your work. The name and logo are covered separately in [TRADEMARK.md](TRADEMARK.md).
+Boltjar is licensed [Apache-2.0](LICENSE). Contributions come in under the same terms they go out: by opening a pull request you license your change under Apache-2.0. There is no CLA, and you keep the copyright on your work.
+
+A custom node you wrote can join Boltjar itself when you want it to: open a pull request with it (or say so in an issue), and once it is merged you are credited in [CREDITS.md](CREDITS.md), on the node's page in the docs and in the release notes. Boltjar never adds a community node without its author's agreement. The name and logo are covered separately in [TRADEMARK.md](TRADEMARK.md).
 
 ## Conduct and security
 

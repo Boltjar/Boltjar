@@ -1,6 +1,6 @@
 # Boltjar name and logo
 
-The code is open source (see [LICENSE-EXCEPTION.md](LICENSE-EXCEPTION.md)). The name **Boltjar**
+The code is open source under [Apache-2.0](LICENSE). The name **Boltjar**
 and the Boltjar logo are not part of that license. They identify this project, so people know what
 they are getting.
 
