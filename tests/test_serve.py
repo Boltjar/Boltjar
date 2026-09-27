@@ -239,15 +239,6 @@ def test_packs_check_counts_what_loaded():
     assert "core" in detail and "nodes" in detail and "models" in detail
 
 
-def test_providers_check_names_providers_only(monkeypatch):
-    from boltjar import secrets
-    monkeypatch.setattr(secrets, "provider_status", lambda: [
-        {"provider": "ollama", "connected": False, "envVar": None},
-        {"provider": "xai", "connected": True, "envVar": "XAI_API_KEY"},
-    ])
-    assert serve.providers_check() == ("xai", "ok", None)
-    monkeypatch.setattr(secrets, "provider_status", lambda: [])
-    assert serve.providers_check()[1] == "info"
 
 
 # ---------------------------------------------------------------- start and stop order
@@ -436,7 +427,37 @@ def test_a_boot_over_ssh_leaves_the_browser_closed(boot, monkeypatch):
     monkeypatch.setattr(serve, "threading", types.SimpleNamespace(Thread=Thread))
     monkeypatch.setattr(serve, "bind", lambda host, port: socket.socket())
     monkeypatch.setattr(serve, "packs_check", lambda: ("core", "ok", None))
-    monkeypatch.setattr(serve, "providers_check", lambda: ("none yet", "info", None))
     monkeypatch.setattr(serve, "make_server", lambda config, shutdown_app, on_ready, **kw: Server(on_ready))
     assert boot(port=9001) == 0
     assert opened == []
+
+
+class ReadyServer:
+    """Stands in for uvicorn: reports ready at once, then returns as after a Ctrl+C."""
+    graphs_stopped = 0
+
+    def __init__(self, on_ready):
+        self.on_ready = on_ready
+
+    def run(self, sockets=None):
+        self.on_ready()
+
+
+def test_the_boot_never_lists_providers_or_keys(boot, monkeypatch, capsys):
+    # providers and keys change while the server runs (the editor's Connections),
+    # so a line about them would go stale: the terminal never asks, never lists.
+    import boltjar.server  # noqa: F401  (imported up front, so the boot's import step is instant)
+    from boltjar import secrets
+
+    def refuse(*args, **kwargs):
+        raise AssertionError("the boot asked about providers")
+
+    monkeypatch.setattr(secrets, "provider_status", refuse)
+    monkeypatch.setattr(secrets, "provider_connected", refuse)
+    monkeypatch.setattr(serve, "bind", lambda host, port: socket.socket())
+    monkeypatch.setattr(serve, "make_server",
+                        lambda config, shutdown_app, on_ready, **kw: ReadyServer(on_ready))
+    assert boot(port=9001, open_browser=False) == 0
+    shown = capsys.readouterr().out.lower()
+    assert "9001" in shown  # the boot got as far as the ready line
+    assert "provider" not in shown and "key" not in shown

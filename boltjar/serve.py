@@ -5,7 +5,9 @@ boltjar.serve: `python -m boltjar serve`, the command that runs Boltjar.
                             [--verbose] [--allow-remote]
 
 It prints the banner and a boot checklist (Python, the virtualenv, the
-requirements, the editor bundle, the port, the node packs, the providers),
+requirements, the editor bundle, the port, the node packs), only facts that
+hold for the whole run: providers and keys change while it runs, in the
+editor's Connections, so the editor shows them and the terminal never does. It
 binds the port itself so a busy one is reported before anything starts, runs
 uvicorn in this process with the console's quiet log setup, opens the browser
 once the server reports ready (when a screen is in front of whoever started it,
@@ -249,17 +251,6 @@ def packs_check() -> Check:
             "the reason is in the log line above, and at /api/packs")
 
 
-def providers_check() -> Check:
-    """The providers ready to use, by name only (never a key)."""
-    from boltjar import secrets
-
-    ready = [p["provider"] for p in secrets.provider_status() if p["connected"]]
-    if ready:
-        return ", ".join(ready), "ok", None
-    return ("none yet: an LLM node answers in mock mode", "info",
-            "add a key in the editor's Connections, or in .env")
-
-
 # ---------------------------------------------------------------- the server
 def browser_can_open(platform: str | None = None, env: Mapping[str, str] | None = None) -> bool:
     """Whether opening the editor reaches a browser window in front of the
@@ -401,9 +392,6 @@ def _serve(out: console.Console, host: str, port: int, open_browser: bool,
     url = editor_url(host, port)
 
     def ready() -> None:
-        # after the app's startup, so the providers line sees the keys it loaded.
-        with out.step("providers") as step:
-            step.done(*providers_check())
         out.ready(url, f"Ctrl+C stops the server {sep} log times are local ({console.local_zone()})")
         if open_browser and browser_can_open():
             threading.Thread(target=webbrowser.open, args=(url,), daemon=True).start()
