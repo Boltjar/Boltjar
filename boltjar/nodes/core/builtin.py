@@ -15,7 +15,8 @@ import re
 
 from simpleeval import SimpleEval, DEFAULT_FUNCTIONS
 
-from boltjar.sdk import node, Kind, NodeFailure, Port, Widget, code, model, select, slider, tmpl
+from boltjar.sdk import (node, Kind, NodeFailure, Port, Widget, code, model, select, slider,
+                         store_schema, tmpl)
 from boltjar import endpoints, model_discovery, models
 from boltjar.secrets import resolve_secrets
 
@@ -1539,19 +1540,28 @@ def _store():
     return STORE
 
 
-@node(id="core.store.database", name="Database", kind=Kind.STORE, category="Store",
+DATABASE_ID = "core.store.database"
+
+
+def database_key(node_id: str, cfg: dict | None) -> str:
+    """The store key a Database node emits: its stable `db_key` (assigned by the
+    editor at creation, persisted with the graph, so it survives a rename), else
+    the node id. The server reads it the same way to make declared tables exist."""
+    return str((cfg or {}).get("db_key") or node_id or "")
+
+
+@node(id=DATABASE_ID, name="Database", kind=Kind.STORE, category="Store",
       pulled=True, summary="An embedded SQLite database. Emits a db connection "
                            "other nodes use.")
 class Database:
     outputs = [Port("db", "db")]
+    # the tables this graph needs, created when the graph opens or powers on.
+    schema: Widget = store_schema()
 
-    # Pulled source: emits the store key. A stable `db_key` (assigned by the
-    # editor at creation, persisted with the graph) survives rename; until the
-    # editor supplies one we fall back to the node id. The runtime sets _node_id
-    # and _node_cfg on each instance at build time.
+    # Pulled source: emits the store key. The runtime sets _node_id and
+    # _node_cfg on each instance at build time.
     def run(self, **_):
-        cfg = getattr(self, "_node_cfg", {})
-        return {"db": cfg.get("db_key") or getattr(self, "_node_id", "")}
+        return {"db": database_key(getattr(self, "_node_id", ""), getattr(self, "_node_cfg", {}))}
 
 
 # ============================================================ db (consolidated)

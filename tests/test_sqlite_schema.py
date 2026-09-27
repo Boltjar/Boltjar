@@ -130,3 +130,119 @@ def test_add_column_uses_safe_type(store):
     t = _table(schema, "facts")
     col = next(c for c in t["columns"] if c["name"] == "c")
     assert col["type"] == "TEXT"
+
+
+# ---------------------------------------------------------------- ensure_schema
+# A graph declares the tables its Database node needs; ensure_schema makes them
+# exist without ever taking anything away.
+
+CHAT = [{"name": "chat_history", "columns": [
+    {"name": "id", "type": "INTEGER", "pk": True},
+    {"name": "time", "type": "TEXT", "pk": False},
+    {"name": "sender", "type": "TEXT", "pk": False},
+    {"name": "message", "type": "TEXT", "pk": False},
+]}]
+
+
+def test_ensure_schema_creates_a_missing_table(store):
+    out = store.ensure_schema("k", CHAT)
+    assert out["created"] == ["chat_history"] and out["conflicts"] == []
+    t = _table(out["schema"], "chat_history")
+    assert [(c["name"], c["type"], c["pk"]) for c in t["columns"]] == [
+        ("id", "INTEGER", True), ("time", "TEXT", False),
+        ("sender", "TEXT", False), ("message", "TEXT", False),
+    ]
+    assert out["schema"] == store.schema("k")
+
+
+def test_ensure_schema_is_idempotent(store):
+    store.ensure_schema("k", CHAT)
+    again = store.ensure_schema("k", CHAT)
+    assert again["created"] == [] and again["added"] == [] and again["conflicts"] == []
+
+
+def test_ensure_schema_adds_missing_columns_and_keeps_rows(store):
+    store.create_table("k", "chat_history", [{"name": "id", "type": "int", "pk": True},
+                                             {"name": "message", "type": "text"}])
+    store.execute("k", "INSERT INTO chat_history (message) VALUES ('hi')")
+    out = store.ensure_schema("k", CHAT)
+    assert out["created"] == []
+    assert out["added"] == ["chat_history.time", "chat_history.sender"]
+    assert _colnames(out["schema"], "chat_history") == ["id", "message", "time", "sender"]
+    assert store.query("k", "SELECT message FROM chat_history") == [{"message": "hi"}]
+
+
+def test_ensure_schema_never_drops_or_retypes(store):
+    store.create_table("k", "chat_history", [{"name": "id", "type": "int", "pk": True},
+                                             {"name": "time", "type": "int"},
+                                             {"name": "mood", "type": "text"}])
+    store.create_table("k", "extra")
+    out = store.ensure_schema("k", CHAT)
+    # the undeclared table and column stay; the mistyped column keeps its type
+    # and is reported, not altered.
+    assert _table(out["schema"], "extra") is not None
+    assert "mood" in _colnames(out["schema"], "chat_history")
+    time = next(c for c in _table(out["schema"], "chat_history")["columns"] if c["name"] == "time")
+    assert time["type"] == "INTEGER"
+    assert out["conflicts"] == ["chat_history.time is declared text but the database holds it as integer"]
+
+
+def test_ensure_schema_matches_names_ignoring_case(store):
+    store.create_table("k", "Chat_History", [{"name": "ID", "type": "int", "pk": True},
+                                             {"name": "Time", "type": "text"},
+                                             {"name": "Sender", "type": "text"},
+                                             {"name": "Message", "type": "text"}])
+    out = store.ensure_schema("k", CHAT)
+    assert out == {**out, "created": [], "added": [], "conflicts": []}
+    assert [t["name"] for t in out["schema"]] == ["Chat_History"]
+
+
+def test_ensure_schema_reads_types_by_affinity(store):
+    store.execute("k", "CREATE TABLE t (a VARCHAR(20), b DATETIME, c BOOLEAN, d)")
+    declared = [{"name": "t", "columns": [
+        {"name": "a", "type": "text"}, {"name": "b", "type": "DATETIME"},
+        {"name": "c", "type": "bool"}, {"name": "d", "type": ""},
+    ]}]
+    out = store.ensure_schema("k", declared)
+    # VARCHAR is text; DATETIME matches itself; an untyped declaration never conflicts.
+    assert out["conflicts"] == ["t.c is declared bool but the database holds it as boolean"]
+
+
+def test_ensure_schema_reports_a_primary_key_it_cannot_add(store):
+    store.create_table("k", "chat_history", [{"name": "message", "type": "text"}])
+    out = store.ensure_schema("k", CHAT)
+    assert "id" not in _colnames(out["schema"], "chat_history")
+    assert out["added"] == ["chat_history.time", "chat_history.sender"]
+    assert out["conflicts"] == [
+        "chat_history.id is declared as the primary key, and SQLite cannot add "
+        "a primary key column to a table that exists"
+    ]
+
+
+def test_ensure_schema_round_trips_a_live_schema(store, tmp_path):
+    store.execute("k", "CREATE TABLE notes (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                       "body TEXT, score REAL, seen DATETIME, raw BLOB)")
+    snapshot = [{"name": t["name"], "columns": t["columns"]} for t in store.schema("k")]
+    fresh = SqliteStore(root=tmp_path / "other")
+    try:
+        out = fresh.ensure_schema("k", snapshot)
+        assert out["conflicts"] == []
+        assert fresh.ensure_schema("k", snapshot)["conflicts"] == []
+        cols = _table(out["schema"], "notes")["columns"]
+        assert [(c["name"], c["type"], c["pk"]) for c in cols] == [
+            ("id", "INTEGER", True), ("body", "TEXT", False), ("score", "REAL", False),
+            ("seen", "NUMERIC", False), ("raw", "BLOB", False),
+        ]
+    finally:
+        fresh.close()
+
+
+def test_ensure_schema_skips_malformed_entries_and_reports_refused_names(store):
+    out = store.ensure_schema("k", [
+        "not a table", {"name": ""}, {"columns": []},
+        {"name": "sqlite_reserved", "columns": [{"name": "a"}]},
+        {"name": "ok", "columns": [{"name": ""}, {"name": "a", "type": "int"}, 7]},
+    ])
+    assert out["created"] == ["ok"]
+    assert _colnames(out["schema"], "ok") == ["a"]
+    assert len(out["conflicts"]) == 1 and out["conflicts"][0].startswith("sqlite_reserved: ")

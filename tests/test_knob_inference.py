@@ -68,7 +68,7 @@ CORE_WIDGET_KINDS = {
     "core.state.meter": {"amount": "number", "to": "number", "rest": "number", "rate": "number",
                          "min": "number", "max": "number", "threshold": "number", "start": "number",
                          "persist": "bool"},
-    "core.store.database": {},
+    "core.store.database": {"schema": "schema"},
     "core.store.kv": {},
     "core.store.vectors": {},
     "core.text.strip": {"emoji": "bool", "markdown": "bool", "tags": "bool", "actions": "bool", "urls": "bool"},

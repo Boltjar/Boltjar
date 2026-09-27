@@ -53,6 +53,33 @@ def _safe_coltype(coltype: str | None) -> str:
     return _COLTYPES.get((coltype or "").strip().lower(), "TEXT")
 
 
+def _affinity(coltype: str | None) -> str:
+    """The affinity SQLite gives a declared column type (the rules in section 3.1
+    of its datatype page), so VARCHAR(20) and TEXT read as the same kind of
+    column when a declared schema is compared with a live one."""
+    t = (coltype or "").upper()
+    if "INT" in t:
+        return "INTEGER"
+    if "CHAR" in t or "CLOB" in t or "TEXT" in t:
+        return "TEXT"
+    if "BLOB" in t or not t:
+        return "BLOB"
+    if "REAL" in t or "FLOA" in t or "DOUB" in t:
+        return "REAL"
+    return "NUMERIC"
+
+
+def _declared_type(coltype: str | None) -> str:
+    """The allow-listed type a declared column is created with: the schema
+    editor's names (int, bool, real...) map as `_safe_coltype` maps them, and a
+    type read back from a live table (DATETIME, VARCHAR(20)) keeps the affinity
+    SQLite gave it. No type at all is TEXT, as in `create_table`."""
+    raw = (coltype or "").strip()
+    if not raw:
+        return "TEXT"
+    return _affinity(_COLTYPES.get(raw.lower(), raw))
+
+
 def _authorize(action: int, arg1, arg2, db_name, trigger) -> int:
     """The authorizer on every store connection: no statement may reach a file
     outside the store. ATTACH (and VACUUM INTO, which runs one with its target
@@ -151,6 +178,73 @@ class SqliteStore:
                 continue
             self.create_table(key, name, t.get("columns") or [])
         return self.schema(key)
+
+    def ensure_schema(self, key: str, tables: list[dict]) -> dict:
+        """Make a declared schema exist, in the {name, columns:[{name, type, pk}]}
+        shape `schema()` returns: create each missing table and add each missing
+        column. It only ever adds. A table or column that exists stays as it is
+        (never dropped, retyped or emptied), and names match the way SQLite
+        matches them, ignoring case. What cannot be made to match is reported in
+        `conflicts`: a column whose live type has another affinity than the
+        declared one, a primary key column missing from a table that exists
+        (SQLite cannot add one), or a name SQLite refuses. Returns
+        {created, added, conflicts, schema}."""
+        created: list[str] = []
+        added: list[str] = []
+        conflicts: list[str] = []
+        with self._lock:
+            conn = self._conn(key)
+            live = {
+                r["name"].lower(): r["name"] for r in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                ).fetchall()
+            }
+            for t in tables or []:
+                if not isinstance(t, dict) or not str(t.get("name") or "").strip():
+                    continue
+                name = str(t["name"]).strip()
+                cols = [
+                    {"name": str(c["name"]).strip(), "type": c.get("type"), "pk": bool(c.get("pk"))}
+                    for c in (t.get("columns") or [])
+                    if isinstance(c, dict) and str(c.get("name") or "").strip()
+                ]
+                try:
+                    if name.lower() not in live:
+                        self.create_table(key, name, [
+                            {**c, "type": _declared_type(c["type"])} for c in cols
+                        ])
+                        live[name.lower()] = name
+                        created.append(name)
+                        continue
+                    table = live[name.lower()]
+                    existing = {
+                        c["name"].lower(): c["type"] for c in conn.execute(
+                            f"PRAGMA table_info({_quote_ident(table)})"
+                        ).fetchall()
+                    }
+                    for c in cols:
+                        col, declared = c["name"], str(c["type"] or "").strip()
+                        if col.lower() in existing:
+                            have = existing[col.lower()]
+                            if declared and _affinity(have) != _declared_type(declared):
+                                conflicts.append(
+                                    f"{table}.{col} is declared {declared.lower()} but the "
+                                    f"database holds it as {(have or 'untyped').lower()}"
+                                )
+                            continue
+                        if c["pk"]:
+                            conflicts.append(
+                                f"{table}.{col} is declared as the primary key, and SQLite "
+                                f"cannot add a primary key column to a table that exists"
+                            )
+                            continue
+                        self.add_column(key, table, col, _declared_type(declared))
+                        existing[col.lower()] = _declared_type(declared)
+                        added.append(f"{table}.{col}")
+                except sqlite3.DatabaseError as exc:
+                    conflicts.append(f"{name}: {exc}")
+        return {"created": created, "added": added, "conflicts": conflicts,
+                "schema": self.schema(key)}
 
     def add_column(self, key: str, table: str, name: str, coltype: str | None = None) -> dict:
         coltype = _safe_coltype(coltype)
