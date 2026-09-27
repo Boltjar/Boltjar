@@ -153,9 +153,10 @@ async def list_node_types() -> list[dict]:
 
 @mcp.tool()
 async def list_models() -> dict:
-    """List every declared model and its capabilities and params (the catalog the
-    LLM node reshapes itself to). Use to pick a valid `model` id for an
-    `core.ai.llm` node's config."""
+    """List every model: the declared manifests plus what each connected provider
+    lists now, with capabilities, params, `source` and `available` (the catalog
+    the LLM node reshapes itself to). Use to pick a valid `model` id for a
+    `core.ai.llm` node's config: an available one, or "auto"."""
     return await _get("/api/models")
 
 
