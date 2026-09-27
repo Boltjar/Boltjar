@@ -404,3 +404,62 @@ def test_the_launch_starts_after_the_ready_line_with_the_flag(monkeypatch, capsy
     monkeypatch.setenv("BOLTJAR_PORT", "")
     assert serve.serve(port=9001, open_browser=False, resume=False) == 0
     assert seen == [(False, True, True)]
+
+
+# ---------------------------------------------------------------- the file itself
+def _unreadable(path):
+    """Path.read_text that fails on `path` the way Windows does while another
+    program (an antivirus, a backup, an indexer) holds the file open."""
+    import pathlib
+
+    real = pathlib.Path.read_text
+
+    def read_text(self, *args, **kwargs):
+        if self == path:
+            raise PermissionError(13, "The process cannot access the file")
+        return real(self, *args, **kwargs)
+
+    return read_text
+
+
+def test_a_record_that_cannot_be_read_is_never_written_over(fresh, monkeypatch):
+    import pathlib
+
+    with local_client() as client:
+        power(client, "chat", "on", MANUAL_LOG)
+        power(client, "digest", "on", MANUAL_LOG)
+        before = resume.PATH.read_bytes()
+        with monkeypatch.context() as m:
+            m.setattr(pathlib.Path, "read_text", _unreadable(resume.PATH))
+            # the graph still turns On and Off: only the record waits
+            assert power(client, "third", "on", MANUAL_LOG)["power"] == "on"
+            assert power(client, "chat", "off")["power"] == "off"
+        assert resume.PATH.read_bytes() == before  # chat and digest are still there
+        for slug in ("digest", "third"):
+            power(client, slug, "off")
+
+
+def test_a_broken_record_is_set_aside_before_a_write(fresh):
+    resume.PATH.parent.mkdir(parents=True)
+    resume.PATH.write_text("{not json", encoding="utf-8")
+    assert resume.recorded() == []
+    with local_client() as client:
+        power(client, "chat", "on", MANUAL_LOG)
+        power(client, "chat", "off")
+    assert (resume.PATH.parent / "resume.json.bad").read_text(encoding="utf-8") == "{not json"
+
+
+def test_a_launch_that_cannot_read_the_record_resumes_nothing_and_says_so(fresh, monkeypatch, caplog):
+    import pathlib
+
+    save(fresh, "chat", MANUAL_LOG)
+    resume.record("chat", MANUAL_LOG)
+    before = resume.PATH.read_bytes()
+    with caplog.at_level(logging.INFO, logger="boltjar.graph"):
+        with local_client() as client:
+            with monkeypatch.context() as m:
+                m.setattr(pathlib.Path, "read_text", _unreadable(resume.PATH))
+                assert client.portal.call(server.resume_graphs) == ([], [])
+            assert "chat" not in server.HUBS or server.HUBS["chat"].runtime is None
+    assert any("could not read the graphs that were On" in r.getMessage() for r in caplog.records)
+    assert resume.PATH.read_bytes() == before  # tried again at the next launch

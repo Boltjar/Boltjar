@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import datetime
 import json
+import logging
 import os
 import pathlib
 import tempfile
@@ -26,14 +27,28 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 PATH = ROOT / "user" / "data" / "resume.json"
 VERSION = 1
 
+_log = logging.getLogger(__name__)
 
-def _read() -> dict[str, dict]:
+
+def _read(*, for_write: bool = False) -> dict[str, dict]:
+    """The recorded graphs; {} when there is no record yet. A file that cannot
+    be read (a sharing violation, no permission) raises OSError, so nothing is
+    ever written over what it holds. One that is not a record reads as empty;
+    before a write it is set aside as resume.json.bad, never overwritten."""
     try:
-        data = json.loads(PATH.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+        text = PATH.read_text(encoding="utf-8")
+    except FileNotFoundError:
         return {}
-    graphs = data.get("graphs") if isinstance(data, dict) else None
-    if not isinstance(graphs, dict):
+    try:
+        data = json.loads(text)
+        graphs = data.get("graphs") if isinstance(data, dict) else None
+        if not isinstance(graphs, dict):
+            raise ValueError("it holds no graphs")
+    except ValueError as exc:
+        if for_write:
+            bad = PATH.with_name(PATH.name + ".bad")
+            os.replace(PATH, bad)
+            _log.warning("%s could not be read (%s): set aside as %s", PATH.name, exc, bad.name)
         return {}
     return {slug: entry for slug, entry in graphs.items()
             if isinstance(entry, dict) and isinstance(entry.get("graph"), dict)}
@@ -59,7 +74,7 @@ def _now() -> str:
 def record(slug: str, graph: dict) -> None:
     """`slug` is On, running `graph`. A graph already recorded keeps its place
     in the order and its `since`; its JSON becomes the new one (a Restart)."""
-    graphs = _read()
+    graphs = _read(for_write=True)
     since = graphs.get(slug, {}).get("since") or _now()
     graphs[slug] = {"since": since, "graph": graph}
     _write(graphs)
@@ -68,7 +83,7 @@ def record(slug: str, graph: dict) -> None:
 def forget(slug: str) -> bool:
     """A person turned `slug` Off, or its graph is gone: drop it. False when it
     was not recorded (nothing is written then)."""
-    graphs = _read()
+    graphs = _read(for_write=True)
     if slug not in graphs:
         return False
     del graphs[slug]

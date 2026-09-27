@@ -425,7 +425,12 @@ async def _cancel_launch() -> None:
 
 
 async def launch_sequence(resume: bool = True) -> None:
-    prefs = _settings.load()
+    try:
+        prefs = _settings.load()
+    except OSError as exc:
+        _launch_log.warning("could not read the settings, so nothing starts on its own: %s", exc,
+                            extra={"tone": "warn"})
+        prefs = dict(_settings.DEFAULTS)
     if prefs["start_ollama"]:
         try:
             tone, text = await _ollama.launch_start()
@@ -465,7 +470,12 @@ async def resume_graphs() -> tuple[list[str], list[str]]:
     Returns (resumed, not resumed) slugs."""
     resumed: list[str] = []
     failed: list[str] = []
-    for slug, graph in _resume.recorded():
+    try:
+        entries = _resume.recorded()
+    except OSError as exc:
+        GRAPH_LINES.note(f"could not read the graphs that were On, so none is resumed: {exc}", "warn")
+        return resumed, failed
+    for slug, graph in entries:
         if _graph_path(slug) is None:
             _forget_resume(slug)
             GRAPH_LINES.resume_dropped(slug)
@@ -1248,9 +1258,16 @@ def _settings_payload(request: Request) -> dict:
             "autostart": {**auto, "editable": editable}}
 
 
+def _settings_unreadable(exc: OSError) -> JSONResponse:
+    return JSONResponse({"error": f"could not read the settings: {exc}"}, status_code=500)
+
+
 @app.get("/api/settings")
-def api_settings(request: Request) -> dict:
-    return _settings_payload(request)
+def api_settings(request: Request):
+    try:
+        return _settings_payload(request)
+    except OSError as exc:
+        return _settings_unreadable(exc)
 
 
 @app.patch("/api/settings")
@@ -1279,7 +1296,10 @@ async def api_update_settings(request: Request, body: dict = Body(...)):
             _settings.update(changes)
     except OSError as exc:
         return JSONResponse({"error": f"could not save the setting: {exc}"}, status_code=500)
-    return _settings_payload(request)
+    try:
+        return _settings_payload(request)
+    except OSError as exc:
+        return _settings_unreadable(exc)
 
 
 @app.post("/api/connections/providers/{provider}/key")

@@ -16,11 +16,13 @@ time by boltjar.autostart.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import pathlib
 import tempfile
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
+_log = logging.getLogger(__name__)
 # Module-level so the test suite can point it at a tmp dir.
 PATH = ROOT / "user" / "data" / "settings.json"
 
@@ -34,12 +36,27 @@ DEFAULTS: dict[str, bool] = {
 }
 
 
-def _read() -> dict:
+def _read(*, for_write: bool = False) -> dict:
+    """The saved settings; {} when there is no file yet. A file that cannot be
+    read (a sharing violation, no permission) raises OSError, so nothing is
+    ever written over what it holds. One that is not a JSON object reads as
+    empty; before a write it is set aside as settings.json.bad, never
+    overwritten."""
     try:
-        data = json.loads(PATH.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+        text = PATH.read_text(encoding="utf-8")
+    except FileNotFoundError:
         return {}
-    return data if isinstance(data, dict) else {}
+    try:
+        data = json.loads(text)
+        if not isinstance(data, dict):
+            raise ValueError("not a JSON object")
+    except ValueError as exc:
+        if for_write:
+            bad = PATH.with_name(PATH.name + ".bad")
+            os.replace(PATH, bad)
+            _log.warning("%s could not be read (%s): set aside as %s", PATH.name, exc, bad.name)
+        return {}
+    return data
 
 
 def _write(data: dict) -> None:
@@ -79,7 +96,7 @@ def check(changes: dict) -> None:
 
 def load() -> dict[str, bool]:
     """Every setting: the saved value when the file holds one of the right
-    type, else its default."""
+    type, else its default. Raises OSError when the file cannot be read."""
     saved = _read()
     out = {}
     for name, default in DEFAULTS.items():
@@ -95,9 +112,10 @@ def get(name: str) -> bool:
 def update(changes: dict) -> dict[str, bool]:
     """Save `changes` ({name: value}) and return every setting. Raises
     ValueError, with nothing written, for a name that is not a setting or a
-    value of the wrong type (see `check`)."""
+    value of the wrong type (see `check`), and OSError, with nothing written,
+    when the file cannot be read or written."""
     check(changes)
-    data = _read()
+    data = _read(for_write=True)
     data.update(changes)
     _write(data)
     return load()

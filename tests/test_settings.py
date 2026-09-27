@@ -87,3 +87,40 @@ def test_paths_under_the_home_folder_show_a_tilde(tmp_path):
     shown = settings.shown_path(home / "Library" / "LaunchAgents" / "link.boltjar.plist", home)
     assert pathlib.PurePath(shown) == pathlib.PurePath("~", "Library", "LaunchAgents", "link.boltjar.plist")
     assert settings.shown_path(tmp_path / "elsewhere", home) == str(tmp_path / "elsewhere")
+
+
+def _unreadable(path: pathlib.Path):
+    """Path.read_text that fails on `path` the way Windows does while another
+    program (an antivirus, a backup, an indexer) holds the file open."""
+    real = pathlib.Path.read_text
+
+    def read_text(self, *args, **kwargs):
+        if self == path:
+            raise PermissionError(13, "The process cannot access the file")
+        return real(self, *args, **kwargs)
+
+    return read_text
+
+
+def test_settings_that_cannot_be_read_are_never_written_over(store, monkeypatch):
+    store.parent.mkdir(parents=True)
+    store.write_text(json.dumps({"start_ollama": True, "from_a_newer_boltjar": 3}), encoding="utf-8")
+    before = store.read_bytes()
+    with monkeypatch.context() as m:
+        m.setattr(pathlib.Path, "read_text", _unreadable(store))
+        with pytest.raises(OSError):
+            settings.update({"resume_workflows": True})
+        with local_client() as client:
+            changed = client.patch("/api/settings", json={"resume_workflows": True})
+            shown = client.get("/api/settings")
+    assert changed.status_code == 500 and "could not" in changed.json()["error"]
+    assert shown.status_code == 500 and "could not read the settings" in shown.json()["error"]
+    assert store.read_bytes() == before  # the other settings and the newer one survive
+
+
+def test_a_broken_settings_file_is_set_aside_before_a_write(store):
+    store.parent.mkdir(parents=True)
+    store.write_text("{not json", encoding="utf-8")
+    settings.update({"start_ollama": True})
+    assert (store.parent / "settings.json.bad").read_text(encoding="utf-8") == "{not json"
+    assert json.loads(store.read_text(encoding="utf-8")) == {"start_ollama": True}
