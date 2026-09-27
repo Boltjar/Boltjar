@@ -226,6 +226,8 @@ class Runtime:
         self.nodes: dict[str, NodeInstance] = {}
         self.edges_from: dict[tuple[str, str], list[tuple[str, str]]] = {}
         self.edges_into: dict[tuple[str, str], tuple[str, str]] = {}
+        # the drawn wires behind each live input (FlatGraph.paths), for `carry`
+        self.edge_paths: dict[tuple[str, str], list[tuple[str, str, str, str]]] = {}
         self.alive = False
         self._tasks: list[asyncio.Task] = []
         self._observer = observer
@@ -272,6 +274,7 @@ class Runtime:
         for src, sp, dst, dp in flat.live:
             self.edges_from.setdefault((src, sp), []).append((dst, dp))
             self.edges_into[(dst, dp)] = (src, sp)
+            self.edge_paths[(dst, dp)] = flat.paths.get((dst, dp)) or [(src, sp, dst, dp)]
 
     # --------------------------------------------------------------- turns
     def new_turn(self, scope: Any = _INHERIT) -> int:
@@ -503,6 +506,9 @@ class Runtime:
         if src is None:
             inst = self.nodes.get(node_id)
             return inst.latch.get(port) if inst is not None else None
+        # a read carries the value along this one wire, to this reader only: the
+        # source's other wires carried nothing
+        self._carry([(node_id, port)])
         return self._pull_output(src[0], src[1], turn)
 
     def _pull_output(self, node_id: str, port: str, turn: int) -> Any:
@@ -546,15 +552,28 @@ class Runtime:
         if scope is not None and not scope.closed:
             scope.values[(node_id, port)] = value
         self._notify({"kind": "value", "node": node_id, "port": port, "value": _preview(value)})
+        fired: list[tuple[str, str]] = []
         for dst, dst_port in self.edges_from.get((node_id, port), []):
             dst_inst = self.nodes[dst]
             if dst_inst.is_trigger(dst_port):
                 # a trigger input fires its node, a pulled node that declares
                 # one (the Template) included.
                 dst_inst.mailbox.put_nowait((dst_port, value, turn))
+                fired.append((dst, dst_port))
             elif not dst_inst.spec.pulled:
                 dst_inst.latch[dst_port] = value
             # a pulled node's data inputs read our out_latch when it evaluates.
+        # a push carries along the wires it fires; a data wire carries when its
+        # reader pulls it (_pull_input), so an idle reader's wire stays dark
+        self._carry(fired)
+
+    def _carry(self, inputs: list[tuple[str, str]]) -> None:
+        """Tell the editor which drawn wires just carried a value: a `carry`
+        event lists them as [src, src_port, dst, dst_port], the whole chain
+        behind each input (through a Router or a Wireless pair) included."""
+        wires = [list(w) for key in inputs for w in self.edge_paths.get(key, ())]
+        if wires:
+            self._notify({"kind": "carry", "wires": wires})
 
     def send_chat(self, node_id: str, text: str) -> None:
         """Inject a chat message into a Chat Input node (latch text, then fire)."""
@@ -616,6 +635,10 @@ class FlatGraph:
     flattened: set[str]                      # node ids never instantiated
     live: list[tuple[str, str, str, str]]    # (src, src_port, dst, dst_port), src resolved
     dead: list[tuple[str, str, str]]         # (dst, dst_port, stop): resolves to nothing
+    # the drawn wires a value crosses to reach each live input, source first,
+    # keyed (dst, dst_port): one wire, or the chain through a Router, a
+    # Wireless In/Out pair or a bypassed node. What a `carry` event names.
+    paths: dict[tuple[str, str], list[tuple[str, str, str, str]]] = field(default_factory=dict)
 
 
 def flatten_graph(graph: dict) -> FlatGraph:
@@ -654,44 +677,54 @@ def flatten_graph(graph: dict) -> FlatGraph:
         spec = NODE_REGISTRY.get(types_by_id.get(node_id, ""))
         return spec.bypass if spec else {}
 
-    def resolve_source(node_id: str, out_port: str,
-                       seen: frozenset) -> tuple[Optional[tuple[str, str]], str]:
+    def resolve_source(node_id: str, out_port: str, seen: frozenset,
+                       ) -> tuple[Optional[tuple[str, str]], str, list[tuple[str, str, str, str]]]:
         """Walk back through flattened nodes to the real source that should feed
         `(node_id, out_port)`: a Wireless Out routes through its channel's
         Wireless In socket of the same name; a disabled passthrough walks its
-        `bypass` shape. Returns (source, "") or, at a dead-end, (None, the
-        flattened node the walk stops at). Cycle-safe via `seen`."""
+        `bypass` shape. Returns (source, "", the drawn wires walked, source
+        first) or, at a dead-end, (None, the flattened node the walk stops at,
+        []). Cycle-safe via `seen`."""
         if node_id in seen:
-            return None, node_id
+            return None, node_id, []
         if types_by_id.get(node_id) == WIRELESS_OUT:
             ch = str(configs_by_id.get(node_id, {}).get("channel", "1"))
             in_id = wireless_in_by_channel.get(ch)
             # the Out's output mirrors the In's socket of the same name.
-            up = raw_into.get((in_id, out_port)) if in_id else None
+            dst_in = (in_id, out_port) if in_id else None
         else:
             in_port = next((i for i, o in bypass_map(node_id).items() if o == out_port), None)
-            up = raw_into.get((node_id, in_port)) if in_port is not None else None
+            dst_in = (node_id, in_port) if in_port is not None else None
+        up = raw_into.get(dst_in) if dst_in is not None else None
         if up is None:
-            return None, node_id
-        return resolve_source(up[0], up[1], seen | {node_id}) if up[0] in flattened else (up, "")
+            return None, node_id, []
+        wire = (up[0], up[1], dst_in[0], dst_in[1])
+        if up[0] not in flattened:
+            return up, "", [wire]
+        resolved, stop, path = resolve_source(up[0], up[1], seen | {node_id})
+        return resolved, stop, (path + [wire] if resolved is not None else [])
 
     live: list[tuple[str, str, str, str]] = []
     dead: list[tuple[str, str, str]] = []
+    paths: dict[tuple[str, str], list[tuple[str, str, str, str]]] = {}
     for e in edges:
         src, sp, dst, dp = e["src"], e["src_port"], e["dst"], e["dst_port"]
         if dst in flattened:
             # the input side of a flattened node (a disabled passthrough's input,
             # or a Wireless In socket): consumed by resolution, so drop it here.
             continue
+        drawn = (src, sp, dst, dp)
+        walked: list[tuple[str, str, str, str]] = []
         if src in flattened:
-            resolved, stop = resolve_source(src, sp, frozenset())
+            resolved, stop, walked = resolve_source(src, sp, frozenset())
             if resolved is None:
                 # dead-end (unmatched channel, disabled sink): the edge is dropped.
                 dead.append((dst, dp, stop))
                 continue
             src, sp = resolved
+        paths[(dst, dp)] = walked + [drawn]
         live.append((src, sp, dst, dp))
-    return FlatGraph(flattened=flattened, live=live, dead=dead)
+    return FlatGraph(flattened=flattened, live=live, dead=dead, paths=paths)
 
 
 def node_config(spec: NodeSpec, config: Optional[dict]) -> dict:

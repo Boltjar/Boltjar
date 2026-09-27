@@ -283,7 +283,8 @@ async def observe(slug: str, seconds: float = 5.0) -> list[dict]:
     event seen: this is how you SEE DATA FLOW. Connect, then collect for up to
     `seconds` (capped at 30). On connect the backend replays the current status
     plus the last value on every wire, then you receive each new
-    value/log/node_error event as it fires. Power the graph on (and fire/chat)
+    value/log/node_error event as it fires, and a `carry` event naming the
+    wires each value travelled. Power the graph on (and fire/chat)
     before or during the window to capture activity."""
     seconds = _clamp_seconds(seconds)
     loop = asyncio.get_event_loop()
