@@ -3771,11 +3771,13 @@ async def _google(model: str, prompt: str, params: dict) -> tuple[str, str]:
         gen["thinkingConfig"] = {"includeThoughts": True}
     if _json_on(params):
         gen["responseMimeType"] = "application/json"
-    url = (f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-           f"?key={os.environ.get('GOOGLE_API_KEY', '')}")
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
     body = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": gen}
+    # the key rides a header, never the URL: an HTTP error message quotes the URL,
+    # and that message reaches the node's error output and the editor.
+    headers = {"x-goog-api-key": os.environ.get("GOOGLE_API_KEY", "")}
     async with httpx.AsyncClient(timeout=60) as client:
-        resp = await client.post(url, json=body)
+        resp = await client.post(url, json=body, headers=headers)
         resp.raise_for_status()
         cands = resp.json().get("candidates", [])
         if not cands:
