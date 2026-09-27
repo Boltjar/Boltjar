@@ -168,3 +168,25 @@ def test_demo_one_fire_runs_the_llm_once(fires):
     assert watch.emits("tpl", "out") == [
         "You are a friendly, concise assistant.\n\nUser: Hi there, how are you today?"] * fires, \
         "the LLM reads the prompt the Template assembled, once per fire"
+
+
+def test_demo_with_its_template_bypassed_still_fires_the_llm():
+    # the Template sits on the trigger path (Manual -> Template -> LLM), so a
+    # disabled one passes its trigger through: the LLM runs once per fire, with
+    # no prompt, instead of the graph turning On with nothing ever running.
+    graph = _example("demo")
+    next(n for n in graph["nodes"] if n["id"] == "tpl")["disabled"] = True
+    hub = server.Hub()
+    watch = Watch(hub)
+
+    async def drive() -> None:
+        assert await hub.power_on(graph) is None, "a bypassed Template keeps the demo powerable"
+        await watch.until(lambda ev: len(watch.log_lines("out")) >= 1)
+        hub.fire_manual("fire")
+        await watch.until(lambda ev: len(watch.log_lines("out")) >= 2)
+        await hub.power_off()
+
+    asyncio.run(drive())
+    assert not watch.trouble(), watch.trouble()
+    assert watch.fires() == {"llm": 2, "out": 2}, "the LLM and the Log, once per fire"
+    assert watch.log_lines("out") == ["assistant: [mock] "] * 2, "an empty prompt"

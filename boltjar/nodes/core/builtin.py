@@ -857,6 +857,9 @@ class Template:
     inputs = [Port("trigger", "event", trigger=True),
               Port("tag", "any", growable=True)]
     outputs = [Port("out", "text"), Port("trigger", "event")]
+    # it sits on the trigger path (Manual -> Template -> LLM), so disabled it
+    # passes its trigger through: the node it fires still runs, with no text.
+    bypass = {"trigger": "trigger"}
 
     def run(self, trigger=None, **ins):
         # `trigger` is taken apart from the tags, so a `{trigger}` in the text is
