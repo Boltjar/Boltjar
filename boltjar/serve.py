@@ -92,12 +92,48 @@ def allowed_hosts(host: str, existing: str = "") -> list[str]:
 
 
 def _machine_names() -> list[str]:
+    """This machine's name and the addresses another machine reaches it on,
+    IPv4 and IPv6. The name's own lookup can miss the LAN address (Debian and
+    Ubuntu map the hostname to 127.0.1.1), so the address of the route out is
+    added too. Loopback and link-local addresses are left out: no browser on
+    another machine can use them."""
     try:
         hostname = socket.gethostname()
-        _, aliases, addresses = socket.gethostbyname_ex(hostname)
     except OSError:
         return []
-    return [hostname, *aliases, *addresses]
+    try:
+        found = [info[4][0] for info in socket.getaddrinfo(hostname, None)]
+    except OSError:
+        found = []
+    names = [hostname]
+    for address in [*found, *_outbound_addresses()]:
+        address = address.split("%", 1)[0]  # an IPv6 zone never appears in a Host header
+        try:
+            ip = ipaddress.ip_address(address)
+        except ValueError:
+            continue
+        if not (ip.is_loopback or ip.is_link_local):
+            names.append(address)
+    return names
+
+
+# Addresses kept for documentation (RFC 5737, RFC 3849): nothing answers there.
+# Connecting a UDP socket to one sends nothing; it only asks the system which
+# local address its route out uses.
+_ROUTE_PROBES = ((socket.AF_INET, "192.0.2.1"), (socket.AF_INET6, "2001:db8::1"))
+
+
+def _outbound_addresses() -> list[str]:
+    """The local address of this machine's route out, per address family."""
+    found = []
+    for family, target in _ROUTE_PROBES:
+        try:
+            with socket.socket(family, socket.SOCK_DGRAM) as probe:
+                probe.connect((target, 9))
+                found.append(probe.getsockname()[0])
+        except OSError:  # no route in that family, or no IPv6 at all
+            continue
+    return found
 
 
 def local_url(host: str, port: int) -> str:
@@ -273,14 +309,18 @@ def _serve(out: console.Console, host: str, port: int, open_browser: bool,
     except OSError as exc:
         out.check("port", *port_problem(exc, port))
         return 1
-    remote = not is_loopback(host)
-    out.check("port", f"{host or '0.0.0.0'}:{port}" + (f" {sep} reachable from other machines" if remote else ""),
-              "warn" if remote else "ok")
-
     # read by the server when it builds its host check (see boltjar.security)
-    os.environ["BOLTJAR_ALLOWED_HOSTS"] = ",".join(
-        allowed_hosts(host, os.environ.get("BOLTJAR_ALLOWED_HOSTS", "")))
+    hosts = allowed_hosts(host, os.environ.get("BOLTJAR_ALLOWED_HOSTS", ""))
+    os.environ["BOLTJAR_ALLOWED_HOSTS"] = ",".join(hosts)
     os.environ["BOLTJAR_PORT"] = str(port)
+    if is_loopback(host):
+        out.check("port", f"{host}:{port}")
+    else:
+        # the host check answers to these names only, so another machine uses one
+        names = ", ".join(name for name in hosts if not is_loopback(name))
+        out.check("port", f"{host or '0.0.0.0'}:{port} {sep} reachable from other machines"
+                  + (f" as {names}" if names else ""), "warn",
+                  fix="to use another name, add it to BOLTJAR_ALLOWED_HOSTS (a comma list)")
 
     try:
         with out.step("packs") as step:

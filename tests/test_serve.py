@@ -92,6 +92,49 @@ def test_a_wildcard_bind_allows_this_machines_names(monkeypatch):
     assert serve.allowed_hosts("0.0.0.0") == ["localhost", "127.0.0.1", "::1", "studio", "192.168.1.20"]
 
 
+def test_the_lan_address_is_found_when_the_hostname_maps_to_loopback(monkeypatch):
+    # Debian and Ubuntu: /etc/hosts gives the hostname 127.0.1.1, never the LAN address
+    monkeypatch.setattr(socket, "gethostname", lambda: "studio")
+    monkeypatch.setattr(socket, "getaddrinfo", lambda host, port: [
+        (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.1.1", 0))])
+    monkeypatch.setattr(serve, "_outbound_addresses", lambda: ["192.168.1.20", "2001:db8::20"])
+    assert serve._machine_names() == ["studio", "192.168.1.20", "2001:db8::20"]
+
+
+def test_machine_names_keep_ipv6_and_drop_what_no_other_machine_can_use(monkeypatch):
+    monkeypatch.setattr(socket, "gethostname", lambda: "studio")
+    monkeypatch.setattr(socket, "getaddrinfo", lambda host, port: [
+        (socket.AF_INET6, socket.SOCK_STREAM, 6, "", ("fd00::20%eth0", 0, 0, 2)),
+        (socket.AF_INET6, socket.SOCK_STREAM, 6, "", ("fe80::1%eth0", 0, 0, 2)),
+        (socket.AF_INET6, socket.SOCK_STREAM, 6, "", ("::1", 0, 0, 0)),
+        (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("10.0.0.5", 0))])
+    monkeypatch.setattr(serve, "_outbound_addresses", lambda: [])
+    assert serve._machine_names() == ["studio", "fd00::20", "10.0.0.5"]
+
+
+def test_the_route_out_names_the_local_address_of_each_family(monkeypatch):
+    class Probe:
+        def __init__(self, family, kind):
+            self.family = family
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def connect(self, address):
+            if self.family == socket.AF_INET6:
+                raise OSError("no IPv6 route")
+            self.target = address
+
+        def getsockname(self):
+            return ("192.168.1.20", 50000)
+
+    monkeypatch.setattr(socket, "socket", Probe)
+    assert serve._outbound_addresses() == ["192.168.1.20"]
+
+
 def test_names_already_allowed_are_kept_once():
     hosts = serve.allowed_hosts("127.0.0.1", existing="proxy.example, LOCALHOST")
     assert hosts == ["proxy.example", "LOCALHOST", "127.0.0.1", "::1"]
@@ -263,3 +306,21 @@ def test_allow_remote_hands_the_bind_to_the_server(boot, monkeypatch):
     assert boot(host="0.0.0.0", port=9001, open_browser=False, allow_remote=True) == 1
     assert os.environ["BOLTJAR_ALLOWED_HOSTS"] == "localhost,127.0.0.1,::1,studio"
     assert os.environ["BOLTJAR_PORT"] == "9001"
+
+
+def test_a_remote_bind_lists_the_names_it_answers_to(boot, monkeypatch, capsys):
+    import boltjar.server  # noqa: F401  (imported up front, so the boot's import step is instant)
+
+    def stop_here():
+        raise RuntimeError("stop before uvicorn")
+
+    monkeypatch.setattr(serve, "_machine_names", lambda: ["studio", "192.168.1.20"])
+    monkeypatch.setattr(serve, "bind", lambda host, port: socket.socket())
+    monkeypatch.setattr(serve, "packs_check", stop_here)
+    monkeypatch.setenv("BOLTJAR_ALLOWED_HOSTS", "proxy.example")
+    monkeypatch.setenv("BOLTJAR_PORT", "")
+    boot(host="0.0.0.0", port=9001, open_browser=False, allow_remote=True)
+    shown = " ".join(capsys.readouterr().out.split())
+    assert "0.0.0.0:9001" in shown
+    assert "reachable from other machines as proxy.example, studio, 192.168.1.20" in shown
+    assert "add it to BOLTJAR_ALLOWED_HOSTS" in shown
