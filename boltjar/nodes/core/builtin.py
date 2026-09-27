@@ -839,15 +839,21 @@ class WebhookTrigger:
 
 # ============================================================ data (pulled)
 @node(id="core.data.template", name="Template", kind=Kind.TRANSFORM, category="Data",
-      summary="Assemble text from {tag} pipes. Each {tag} is a wired input. Fire "
-              "`trigger` to assemble it: `out` carries the text, then `trigger` "
-              "passes on, so the node it fires reads the finished text.",
+      pulled=True, summary="Assemble text from {tag} pipes. Each {tag} is a wired input. "
+                           "Fire `trigger` to assemble it: `out` carries the text, then "
+                           "`trigger` passes on, so the node it fires reads the finished "
+                           "text. A node that reads `out` gets the current turn's text.",
       icon="document-text-outline", subline="template · {template|tags}")
 class Template:
     template: Widget = code("{in}", expand=True)
     # `trigger` fires the node and must be wired (Chat History -> Template -> LLM):
-    # a fire pulls the tags, assembles, and holds the text on `out` until the next
-    # fire. It is a declared port, never a {tag}.
+    # a fire pulls the tags, assembles, emits `out`, then passes the trigger on.
+    # The Template is also pulled, so a node that reads `out` gets this turn's
+    # text: the fire's own result when the fire ran first (the turn memo), else
+    # assembled at the read. A node fired alongside the Template by the same
+    # source therefore never reads the previous turn's text, whichever wire was
+    # drawn first. Only a fire passes the trigger on. `trigger` is a declared
+    # port, never a {tag}.
     inputs = [Port("trigger", "event", trigger=True),
               Port("tag", "any", growable=True)]
     outputs = [Port("out", "text"), Port("trigger", "event")]
@@ -863,9 +869,12 @@ class Template:
         # with no source at all is absent from `ins`, so its literal is left intact.
         for key, val in ins.items():
             text = text.replace("{" + key + "}", "" if val is None else str(val))
-        # pass the trigger on AFTER the text (insertion order is emit order), so a
-        # consumer fired by it reads the finished prompt.
-        return {"out": text, "trigger": True}
+        # fired through `trigger`: pass it on AFTER the text (insertion order is
+        # emit order), so a consumer fired by it reads the finished prompt. A read
+        # is not a fire (the runtime clears `_fired_port`), so it never carries it.
+        if getattr(self, "_fired_port", None) == "trigger":
+            return {"out": text, "trigger": True}
+        return {"out": text}
 
 
 @node(id="core.data.format_list", name="Format List", kind=Kind.TRANSFORM, category="Data",

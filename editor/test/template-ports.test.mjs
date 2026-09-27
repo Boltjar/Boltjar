@@ -40,7 +40,7 @@ const port = (name, type, extra = {}) => ({
   name, type, growable: false, optional: false, trigger: false, ...extra,
 });
 const TEMPLATE = {
-  id: "core.data.template", name: "Template", kind: "transform", pulled: false, category: "Data",
+  id: "core.data.template", name: "Template", kind: "transform", pulled: true, category: "Data",
   version: "0.1.0", summary: "", colors: {},
   widgets: [{ name: "template", kind: "code", default: "{in}", options: [], label: "Template" }],
   inputs: [port("trigger", "event", { trigger: true }),
