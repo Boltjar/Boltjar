@@ -14,14 +14,14 @@ import re
 import sys
 
 import pytest
-from fastapi.testclient import TestClient
+from local_client import local_client
 
 import boltjar.graph_format as graph_format
 import boltjar.server as server
 from boltjar.graph_format import CURRENT_FORMAT, GraphFormatError, migrate
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
-client = TestClient(server.app)
+client = local_client()
 
 GRAPH = {
     "name": "fmt",
@@ -170,7 +170,7 @@ def test_validate_reports_a_graph_it_cannot_read():
 
 
 def test_power_migrates_the_graph_and_refuses_a_newer_one():
-    with TestClient(server.app) as live:
+    with local_client() as live:
         try:
             r = live.post("/api/runtime/fmt-new/power",
                           json={"action": "on", "graph": {**GRAPH, "format": CURRENT_FORMAT + 1}})

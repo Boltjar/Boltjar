@@ -17,7 +17,7 @@ import sys
 import textwrap
 
 import pytest
-from fastapi.testclient import TestClient
+from local_client import local_client
 
 import boltjar.nodes.core  # registers the core nodes before any snapshot below
 # importing the server runs its load_all on the real install; done here, before
@@ -211,7 +211,7 @@ def test_the_packs_route_reports_loaded_and_failed_packs(root):
     add_hello(root)
     add_pack(root, "broken", "raise RuntimeError('boom')")
     packs.load_all(root)
-    body = TestClient(server.app).get("/api/packs").json()
+    body = local_client().get("/api/packs").json()
     assert [p["id"] for p in body["loaded"]] == ["core", "hello"]
     assert body["loaded"][0]["version"] == __version__
     assert body["loaded"][0]["nodes"] == len([n for n in NODE_REGISTRY if n.startswith("core.")])

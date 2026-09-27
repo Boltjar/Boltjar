@@ -8,14 +8,14 @@ import pathlib
 import platform
 import re
 
-from fastapi.testclient import TestClient
+from local_client import local_client
 
 import boltjar
 import boltjar.server as server
 from boltjar import packs
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
-client = TestClient(server.app)
+client = local_client()
 
 
 def test_the_version_is_a_release_number():
