@@ -1,9 +1,9 @@
 """Importing the node registry has no side effects.
 
-A docs generator (or any offline tool) imports the SDK and the core pack to read
-node definitions. That must not copy the user's saved secrets into the
-environment nor reach the network (the Ollama availability ping). Secrets load
-on first use, and when the server starts."""
+A docs generator (or any offline tool) loads the registry (the SDK, the core
+pack, packs.load_all) to read node definitions. That must not copy the user's
+saved secrets into the environment nor reach the network (the Ollama
+availability ping). Secrets load on first use, and when the server starts."""
 from __future__ import annotations
 
 import json
@@ -29,7 +29,7 @@ def _run_isolated(code: str) -> subprocess.CompletedProcess:
                           capture_output=True, text=True, timeout=120)
 
 
-def test_importing_the_registry_reads_no_secrets_and_opens_no_socket():
+def test_loading_the_registry_reads_no_secrets_and_opens_no_socket():
     result = _run_isolated("""
         import os, socket
 
@@ -46,7 +46,9 @@ def test_importing_the_registry_reads_no_secrets_and_opens_no_socket():
 
         import boltjar.sdk
         import boltjar.nodes.core
-        from boltjar import models, secrets
+        from boltjar import models, packs, secrets
+
+        packs.load_all()
 
         assert not secrets._loaded, "secrets were read at import"
         assert dict(os.environ) == environ, "the environment changed at import"

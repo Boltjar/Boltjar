@@ -1,7 +1,8 @@
 """Headless runner: `python -m boltjar <graph.json> [seconds]`.
 
-Loads the core pack, builds the graph, runs the actor engine for a while, and
-prints every live event. Used for testing the runtime without the editor.
+Loads the core pack and every pack under packs/, builds the graph, runs the
+actor engine for a while, and prints every live event. Used for testing the
+runtime without the editor.
 """
 from __future__ import annotations
 
@@ -9,14 +10,14 @@ import asyncio
 import json
 import sys
 
-from boltjar import secrets
+from boltjar import packs, secrets
 from boltjar.runtime import Runtime
-import boltjar.nodes.core  # noqa: F401  (registers the core nodes)
 
 
 async def _run(path: str, seconds: float) -> None:
     with open(path, "r", encoding="utf-8") as fh:
         graph = json.load(fh)
+    packs.load_all()
     secrets.ensure_loaded()  # the graph's nodes read provider keys from os.environ
     runtime = Runtime(observer=lambda e: print(json.dumps(e)))
     runtime.build(graph)

@@ -54,8 +54,12 @@ from boltjar.file_store import FileStore
 from boltjar.kv_store import KvStore
 from boltjar.vector_store import VectorStore
 from boltjar import models
+from boltjar import packs as _packs
 import boltjar.secrets as _secrets
-import boltjar.nodes.core  # noqa: F401  (registers the core nodes + models)
+
+# the core pack, every pack under packs/ and the user's model manifests. A broken
+# pack is skipped and reported by /api/packs; it never stops the server.
+_packs.load_all()
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 # Everything created at runtime lives under user/ (gitignored): saved graphs,
@@ -513,6 +517,14 @@ def object_info() -> dict:
 def list_models() -> dict:
     """The model registry: every declared model and its capabilities/params."""
     return {"models": models.catalog()}
+
+
+@app.get("/api/packs")
+def list_packs() -> dict:
+    """The node packs: {loaded: [{id, name, version, nodes}], failed: [{id,
+    folder, error}]}. The core pack is always first in `loaded`; a pack folder
+    that could not load is in `failed` with the reason."""
+    return _packs.report()
 
 
 def _graph_path(name: str) -> pathlib.Path | None:

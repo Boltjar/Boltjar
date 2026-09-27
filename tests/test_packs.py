@@ -1,0 +1,329 @@
+"""Pack discovery: the core pack plus every packs/<folder>/ with a pack.toml and
+an __init__.py. The shipped example pack (examples/packs/hello) is copied into a
+temp root for each test, so nothing here reads or writes the real packs/ or
+user/ folders.
+
+A pack loads under a private module namespace, registers only ids under its own
+prefix, never redefines another node, and a pack that breaks a rule is rolled
+back completely and reported by /api/packs, while the rest keeps loading."""
+from __future__ import annotations
+
+import asyncio
+import pathlib
+import shutil
+import sys
+import textwrap
+
+import pytest
+from fastapi.testclient import TestClient
+
+from boltjar import __version__, models, packs
+from boltjar.runtime import Runtime
+from boltjar.sdk import NODE_REGISTRY, types
+
+EXAMPLE = pathlib.Path(__file__).resolve().parent.parent / "examples" / "packs" / "hello"
+
+MANIFEST = """\
+id = "{id}"
+name = "{name}"
+version = "1.0.0"
+"""
+
+
+@pytest.fixture
+def root(tmp_path):
+    """A temp install root, with every registry restored after the test."""
+    packs.load_all(tmp_path)  # the core pack is loaded before the snapshot
+    registry = dict(NODE_REGISTRY)
+    type_meta = {name: dict(meta) for name, meta in types.meta.items()}
+    manifests = dict(models.MODELS)
+    loaded = dict(packs.LOADED)
+    path = list(sys.path)
+    (tmp_path / "packs").mkdir()
+    yield tmp_path
+    assert sys.path == path, "loading packs must not touch sys.path"
+    NODE_REGISTRY.clear()
+    NODE_REGISTRY.update(registry)
+    types.meta.clear()
+    types.meta.update(type_meta)
+    models.MODELS.clear()
+    models.MODELS.update(manifests)
+    packs.LOADED.clear()
+    packs.LOADED.update(loaded)
+    packs.FAILED.clear()
+    for name in [m for m in sys.modules if m.startswith(packs.NAMESPACE + ".")]:
+        del sys.modules[name]
+
+
+def add_hello(root: pathlib.Path, folder: str = "hello") -> pathlib.Path:
+    target = root / "packs" / folder
+    shutil.copytree(EXAMPLE, target, ignore=shutil.ignore_patterns("__pycache__"))
+    return target
+
+
+def add_pack(root: pathlib.Path, folder: str, init: str, manifest: str | None = None,
+             files: dict[str, str] | None = None) -> pathlib.Path:
+    """A pack folder with the given __init__.py and extra files (by path inside
+    the pack). The manifest defaults to one whose id is the folder name."""
+    target = root / "packs" / folder
+    target.mkdir(parents=True)
+    if manifest is None:
+        manifest = MANIFEST.format(id=folder, name=folder.title())
+    (target / "pack.toml").write_text(manifest, encoding="utf-8")
+    (target / "__init__.py").write_text(textwrap.dedent(init), encoding="utf-8")
+    for name, text in (files or {}).items():
+        path = target / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(textwrap.dedent(text), encoding="utf-8")
+    return target
+
+
+def node_source(node_id: str, name: str = "Thing") -> str:
+    return f"""
+        from boltjar.sdk import Kind, Port, Widget, node
+
+        @node(id="{node_id}", name="{name}", kind=Kind.VALUE, category="Test", pulled=True)
+        class Thing:
+            value_text = Widget(kind="text", default="x")
+            outputs = [Port("out", "text")]
+
+            def value(self):
+                return {{"out": self.value_text}}
+    """
+
+
+def failed(report: dict) -> dict[str, str]:
+    return {f["folder"]: f["error"] for f in report["failed"]}
+
+
+def loaded(report: dict) -> dict[str, dict]:
+    return {p["id"]: p for p in report["loaded"]}
+
+
+# --------------------------------------------------------------- the example pack
+
+def test_the_example_pack_loads_next_to_the_core(root):
+    add_hello(root)
+    report = packs.load_all(root)
+    assert report["loaded"][0]["id"] == "core"
+    assert loaded(report)["hello"] == {"id": "hello", "name": "Hello", "version": "0.1.0", "nodes": 2}
+    assert report["failed"] == []
+    assert {"hello.shout", "hello.greet"} <= set(NODE_REGISTRY)
+    assert NODE_REGISTRY["hello.shout"].pulled is True
+    assert [w.kind for w in NODE_REGISTRY["hello.greet"].widgets] == ["text", "number"]
+
+
+def test_a_pack_imports_under_the_private_namespace(root):
+    add_hello(root)
+    packs.load_all(root)
+    assert f"{packs.NAMESPACE}.hello" in sys.modules
+    # the relative `from . import nodes` resolved inside the pack, not on sys.path.
+    assert f"{packs.NAMESPACE}.hello.nodes" in sys.modules
+    assert "hello" not in sys.modules
+    assert NODE_REGISTRY["hello.shout"].cls.__module__ == f"{packs.NAMESPACE}.hello.nodes"
+
+
+def test_the_example_nodes_run(root):
+    add_hello(root)
+    packs.load_all(root)
+    events: list[dict] = []
+    rt = Runtime(observer=events.append)
+    rt.build({
+        "nodes": [
+            {"id": "name", "type": "core.value.text", "config": {"text": "Ada"}},
+            {"id": "shout", "type": "hello.shout", "config": {"suffix": "?"}},
+            {"id": "fire", "type": "core.trigger.manual"},
+            {"id": "greet", "type": "hello.greet", "config": {"greeting": "Hi", "times": 2}},
+        ],
+        "edges": [
+            {"src": "name", "src_port": "out", "dst": "shout", "dst_port": "text"},
+            {"src": "fire", "src_port": "trigger", "dst": "greet", "dst_port": "trigger"},
+            {"src": "shout", "src_port": "out", "dst": "greet", "dst_port": "name"},
+        ],
+    })
+
+    async def drive() -> None:
+        await rt.run()
+        await asyncio.sleep(0.2)
+        await rt.stop()
+
+    asyncio.run(drive())
+    greeted = [e["value"] for e in events
+               if e["kind"] == "value" and e["node"] == "greet" and e["port"] == "out"]
+    assert greeted == ["Hi, ADA?! Hi, ADA?!"]
+
+
+def test_loading_again_keeps_the_loaded_packs_and_imports_nothing_twice(root):
+    add_hello(root)
+    add_pack(root, "broken", "raise RuntimeError('boom')")
+    packs.load_all(root)
+    module = sys.modules[f"{packs.NAMESPACE}.hello"]
+    report = packs.load_all(root)
+    assert sys.modules[f"{packs.NAMESPACE}.hello"] is module
+    assert list(loaded(report)) == ["core", "hello"]
+    assert list(failed(report)) == ["broken"]
+
+
+def test_the_packs_route_reports_loaded_and_failed_packs(root):
+    import boltjar.server as server
+
+    add_hello(root)
+    add_pack(root, "broken", "raise RuntimeError('boom')")
+    packs.load_all(root)
+    body = TestClient(server.app).get("/api/packs").json()
+    assert [p["id"] for p in body["loaded"]] == ["core", "hello"]
+    assert body["loaded"][0]["version"] == __version__
+    assert body["loaded"][0]["nodes"] == len([n for n in NODE_REGISTRY if n.startswith("core.")])
+    assert body["failed"] == [{"id": "broken", "folder": "broken", "error": "RuntimeError: boom"}]
+
+
+# --------------------------------------------------------------- rules
+
+def test_a_node_outside_the_pack_namespace_rejects_the_whole_pack(root):
+    add_pack(root, "mine", "from . import a, b",
+             files={"a.py": node_source("mine.ok"), "b.py": node_source("theirs.thing")})
+    report = packs.load_all(root)
+    assert "must start with 'mine.'" in failed(report)["mine"]
+    assert "theirs.thing" in failed(report)["mine"]
+    assert "mine.ok" not in NODE_REGISTRY and "theirs.thing" not in NODE_REGISTRY
+    assert not [m for m in sys.modules if m.startswith(f"{packs.NAMESPACE}.mine")]
+
+
+def test_a_pack_cannot_redefine_a_core_node(root):
+    core_text = NODE_REGISTRY["core.value.text"]
+    add_pack(root, "sneaky", node_source("core.value.text", "Hijack"))
+    report = packs.load_all(root)
+    assert "redefines" in failed(report)["sneaky"]
+    assert NODE_REGISTRY["core.value.text"] is core_text
+
+
+def test_a_pack_cannot_redefine_another_packs_node(root):
+    add_pack(root, "first", node_source("first.thing"))
+    add_pack(root, "second", node_source("first.thing", "Copy"))
+    report = packs.load_all(root)
+    assert "first" in loaded(report)
+    assert "redefines" in failed(report)["second"]
+    assert NODE_REGISTRY["first.thing"].name == "Thing"
+
+
+def test_the_core_id_is_reserved(root):
+    add_pack(root, "fake-core", node_source("core.extra"), manifest=MANIFEST.format(id="core", name="Core"))
+    report = packs.load_all(root)
+    assert "reserved" in failed(report)["fake-core"]
+    assert "core.extra" not in NODE_REGISTRY
+
+
+def test_a_duplicate_pack_id_is_skipped(root):
+    add_hello(root, "hello")
+    add_hello(root, "hello-copy")
+    report = packs.load_all(root)
+    assert loaded(report)["hello"]["nodes"] == 2
+    assert "already taken by hello" in failed(report)["hello-copy"]
+
+
+def test_ids_that_share_a_module_name_clash(root):
+    add_pack(root, "my-pack", node_source("my-pack.thing"))
+    add_pack(root, "my_pack", node_source("my_pack.thing"))
+    report = packs.load_all(root)
+    assert "my-pack" in loaded(report)
+    assert "clashes" in failed(report)["my_pack"]
+
+
+@pytest.mark.parametrize("init, error", [
+    ("raise RuntimeError('boom')", "RuntimeError: boom"),
+    ("import a_module_that_does_not_exist", "ModuleNotFoundError"),
+    ("import sys\nsys.exit(3)", "SystemExit: 3"),
+    ("def broken(:\n    pass", "SyntaxError"),
+])
+def test_a_pack_that_fails_to_import_is_skipped(root, init, error):
+    add_hello(root)
+    add_pack(root, "broken", init)
+    report = packs.load_all(root)
+    assert error in failed(report)["broken"]
+    assert "hello" in loaded(report)
+
+
+def test_a_failed_pack_leaves_no_types_or_nodes_behind(root):
+    add_pack(root, "halfway", """
+        from boltjar.sdk import types
+        from . import nodes
+        types.register("halfway-signal", "#123456")
+        raise RuntimeError("late failure")
+    """, files={"nodes.py": node_source("halfway.thing")})
+    packs.load_all(root)
+    assert "halfway.thing" not in NODE_REGISTRY
+    assert "halfway-signal" not in types.meta
+
+
+@pytest.mark.parametrize("manifest, error", [
+    ('name = "X"\nversion = "1"\n', "'id' is required"),
+    ('id = "x"\nversion = "1"\n', "'name' is required"),
+    ('id = "Bad Id"\nname = "X"\nversion = "1"\n', "may only use lowercase"),
+    ('id = "x"\nname = "X"\nversion = 1\n', "'version' must be a string"),
+    ('id = "x"\nname = "X"\nversion = "1"\nmin_boltjar = "soon"\n', "is not a version"),
+    ('id = "x\n', "pack.toml:"),
+])
+def test_an_invalid_manifest_is_reported(root, manifest, error):
+    add_pack(root, "x", node_source("x.thing"), manifest=manifest)
+    report = packs.load_all(root)
+    assert error in failed(report)["x"]
+    assert "x.thing" not in NODE_REGISTRY
+
+
+def test_a_folder_that_is_not_a_pack_is_reported(root):
+    (root / "packs" / "no-manifest").mkdir()
+    (root / "packs" / "no-manifest" / "__init__.py").write_text("", encoding="utf-8")
+    (root / "packs" / "no-init").mkdir()
+    (root / "packs" / "no-init" / "pack.toml").write_text(MANIFEST.format(id="no-init", name="N"),
+                                                           encoding="utf-8")
+    (root / "packs" / "__pycache__").mkdir()
+    (root / "packs" / ".hidden").mkdir()
+    (root / "packs" / "notes.txt").write_text("not a folder", encoding="utf-8")
+    report = packs.load_all(root)
+    assert failed(report) == {"no-init": "no __init__.py in the folder",
+                              "no-manifest": "no pack.toml in the folder"}
+
+
+def test_min_boltjar_gates_the_pack_on_this_version(root):
+    newer = f"{int(__version__.split('.')[0]) + 1}.0.0"
+    add_pack(root, "future", node_source("future.thing"),
+             manifest=MANIFEST.format(id="future", name="F") + f'min_boltjar = "{newer}"\n')
+    add_pack(root, "today", node_source("today.thing"),
+             manifest=MANIFEST.format(id="today", name="T") + f'min_boltjar = "{__version__}"\n')
+    report = packs.load_all(root)
+    assert f"needs Boltjar {newer} or newer" in failed(report)["future"]
+    assert "today" in loaded(report)
+
+
+# --------------------------------------------------------------- models
+
+MODEL = """\
+id = "{id}"
+provider = "ollama"
+label = "{label}"
+"""
+
+
+def test_a_pack_ships_models_but_cannot_replace_a_declared_one(root):
+    core_id = next(iter(models.MODELS))
+    core_label = models.MODELS[core_id].label
+    add_pack(root, "withmodels", node_source("withmodels.thing"), files={
+        "models/extra.toml": MODEL.format(id="ollama/pack-extra", label="Pack Extra"),
+        "models/clash.toml": MODEL.format(id=core_id, label="Clash"),
+    })
+    report = packs.load_all(root)
+    assert "withmodels" in loaded(report)
+    assert models.MODELS["ollama/pack-extra"].label == "Pack Extra"
+    assert models.MODELS[core_id].label == core_label
+
+
+def test_user_models_load_last_and_may_replace_a_declared_one(root):
+    core_id = next(iter(models.MODELS))
+    user_models = root / "user" / "models"
+    user_models.mkdir(parents=True)
+    (user_models / "mine.toml").write_text(MODEL.format(id="ollama/user-own", label="Mine"),
+                                           encoding="utf-8")
+    (user_models / "tuned.toml").write_text(MODEL.format(id=core_id, label="Tuned"), encoding="utf-8")
+    packs.load_all(root)
+    assert models.MODELS["ollama/user-own"].label == "Mine"
+    assert models.MODELS[core_id].label == "Tuned"

@@ -3,8 +3,10 @@ import asyncio
 import json
 import pathlib
 
+from boltjar.packs import load_all
 from boltjar.runtime import Runtime
-import boltjar.nodes.core  # noqa: F401
+
+load_all()
 
 graph = json.loads(pathlib.Path("examples/chat.json").read_text(encoding="utf-8"))
 events: list[dict] = []

@@ -9,13 +9,18 @@ outputs, and knobs to the selected model's manifest, so a vision model grows an
 image input and an audio model grows an audio input, all from one node.
 
 Models are data, not code: drop a new .toml in the models dir and it appears.
+The core pack's manifests load first, then each pack's (packs/<id>/models/),
+then the user's own (user/models/); see boltjar.packs.
 """
 from __future__ import annotations
 
+import logging
 import pathlib
 import tomllib
 from dataclasses import dataclass, field
 from typing import Any
+
+_log = logging.getLogger("boltjar.models")
 
 
 @dataclass
@@ -153,8 +158,11 @@ def _parse(path: pathlib.Path) -> ModelManifest:
     )
 
 
-def load_models(directory: pathlib.Path | str) -> int:
-    """Register every *.toml manifest in `directory`. A bad file is skipped, not fatal."""
+def load_models(directory: pathlib.Path | str, *, replace: bool = True) -> int:
+    """Register every *.toml manifest in `directory`. A bad file is skipped, not
+    fatal. With replace=False a manifest whose id is already declared is skipped
+    too (a pack cannot redefine a model another source declared); with replace
+    (the core pack, the user's own folder) it takes that id over."""
     directory = pathlib.Path(directory)
     if not directory.exists():
         return 0
@@ -163,8 +171,13 @@ def load_models(directory: pathlib.Path | str) -> int:
         try:
             manifest = _parse(path)
         except Exception as exc:  # one malformed manifest never breaks the server
-            print(f"[models] skip {path.name}: {exc}")
+            _log.warning("skip model %s: %s", path, exc)
             continue
+        if manifest.id in MODELS:
+            if not replace:
+                _log.warning("skip model %s: %r is already declared", path, manifest.id)
+                continue
+            _log.info("model %r from %s replaces the one declared before", manifest.id, path)
         MODELS[manifest.id] = manifest
         count += 1
     return count
