@@ -7,13 +7,17 @@ import pathlib
 
 import pytest
 
-from boltjar import settings
+from boltjar import autostart, settings
+from local_client import local_client
 
 
 @pytest.fixture
 def store(tmp_path, monkeypatch):
     path = tmp_path / "data" / "settings.json"
     monkeypatch.setattr(settings, "PATH", path)
+    home = tmp_path / "account"
+    monkeypatch.setattr(autostart, "_account", lambda: (
+        "win32", {"APPDATA": str(home / "AppData" / "Roaming")}, home))
     return path
 
 
@@ -22,22 +26,37 @@ def test_every_setting_is_off_on_a_fresh_install(store):
     assert not store.exists()  # reading writes nothing
 
 
+def test_the_api_serves_every_setting_off_on_a_fresh_install(store):
+    with local_client() as client:
+        body = client.get("/api/settings").json()
+    assert body["settings"] == {"start_ollama": False, "resume_workflows": False,
+                                "launch_with_system": False}
+    assert body["autostart"]["editable"] is True  # a browser on this computer
+
+
 def test_a_change_persists_across_a_restart(store):
-    assert settings.update({"resume_workflows": True})["resume_workflows"] is True
+    with local_client() as client:
+        body = client.patch("/api/settings", json={"resume_workflows": True}).json()
+    assert body["settings"]["resume_workflows"] is True
     assert json.loads(store.read_text(encoding="utf-8")) == {"resume_workflows": True}
     # a new server process reads the file again
     assert settings.load() == {"start_ollama": False, "resume_workflows": True}
+    with local_client() as client:
+        assert client.get("/api/settings").json()["settings"]["resume_workflows"] is True
 
 
-@pytest.mark.parametrize("changes", [
+@pytest.mark.parametrize("body", [
     {"no_such_setting": True},
     {"start_ollama": "yes"},
     {"start_ollama": 1},
     {"resume_workflows": True, "start_ollama": None},
+    {"launch_with_system": "on"},
 ])
-def test_a_bad_change_is_refused_and_nothing_is_written(store, changes):
-    with pytest.raises(ValueError):
-        settings.update(changes)
+def test_a_bad_change_is_refused_and_nothing_is_written(store, body):
+    with local_client() as client:
+        r = client.patch("/api/settings", json=body)
+    assert r.status_code == 400
+    assert "error" in r.json()
     assert not store.exists()
 
 

@@ -13,13 +13,14 @@ from __future__ import annotations
 import json
 import pathlib
 import shutil
+import sys
 import tempfile
 from typing import Callable
 
 import httpx
 import pytest
 
-from boltjar import endpoints, model_discovery, ollama, resume, security, settings
+from boltjar import autostart, endpoints, model_discovery, ollama, resume, security, settings
 
 
 def _never(what: str):
@@ -42,9 +43,14 @@ def pytest_configure(config):
     settings.PATH = tmp / "settings.json"
     resume.PATH = tmp / "resume.json"
     ollama.LOG_PATH = tmp / "logs" / "ollama.log"
-    # no test ever runs Ollama or ends a real process
+    # no test ever runs Ollama or ends a real process, and "Launch with system"
+    # only ever writes into a stand-in account under the suite's tmp dir
     ollama._popen = _never("run a program")
     ollama._end_tree = _never("end a process")
+    account = (sys.platform, {"APPDATA": str(tmp / "account" / "AppData" / "Roaming"),
+                              "XDG_CONFIG_HOME": str(tmp / "account" / ".config")},
+               tmp / "account")
+    autostart._account = lambda: account
 
 
 def pytest_unconfigure(config):

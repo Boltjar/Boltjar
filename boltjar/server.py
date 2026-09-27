@@ -62,6 +62,7 @@ from boltjar.kv_store import KvStore
 from boltjar.vector_store import VectorStore
 from boltjar.graph_format import GraphFormatError, format_of, migrate
 from boltjar import __version__, models
+from boltjar import autostart as _autostart
 from boltjar import endpoints as _endpoints
 from boltjar import model_discovery as _discovery
 from boltjar import ollama as _ollama
@@ -1233,6 +1234,52 @@ async def api_start_ollama():
         return result
     status = 409 if result["state"] == _ollama.NOT_INSTALLED or not result["started"] else 502
     return JSONResponse(result, status_code=status)
+
+
+# ---- Settings (the editor's Settings panel, General tab) ---------------------
+
+def _settings_payload(request: Request) -> dict:
+    """Every setting, "launch_with_system" read from disk (the entry exists and
+    starts this install), plus where that entry lives and whether this caller
+    may change it (a browser on this computer only)."""
+    auto = _autostart.status()
+    editable = _security.from_this_machine(request.scope, request.headers)
+    return {"settings": {**_settings.load(), "launch_with_system": auto["enabled"]},
+            "autostart": {**auto, "editable": editable}}
+
+
+@app.get("/api/settings")
+def api_settings(request: Request) -> dict:
+    return _settings_payload(request)
+
+
+@app.patch("/api/settings")
+async def api_update_settings(request: Request, body: dict = Body(...)):
+    """Body: {name: value, ...}. Every change is checked before any is made.
+    "launch_with_system" writes or deletes the login entry, and only a browser
+    on this computer may change it: a person reaching the editor from another
+    machine (the token link) is refused, since it starts programs here."""
+    changes = dict(body)
+    launch = changes.pop("launch_with_system", None)
+    try:
+        _settings.check(changes)
+        if launch is not None and not isinstance(launch, bool):
+            raise ValueError(f"launch_with_system takes bool, not {type(launch).__name__}")
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    if launch is not None and not _security.from_this_machine(request.scope, request.headers):
+        return JSONResponse({"error": "Launch with system can be changed only on this computer, "
+                                      "not from another machine"}, status_code=403)
+    try:
+        if launch is True:
+            _autostart.enable()
+        elif launch is False:
+            _autostart.disable()
+        if changes:
+            _settings.update(changes)
+    except OSError as exc:
+        return JSONResponse({"error": f"could not save the setting: {exc}"}, status_code=500)
+    return _settings_payload(request)
 
 
 @app.post("/api/connections/providers/{provider}/key")
