@@ -156,6 +156,10 @@ class Hub:
         self.latest: dict[tuple[str, str], dict] = {}
         # serialises power ops so two concurrent "on" actions can't orphan a runtime.
         self._lock = asyncio.Lock()
+        # power operations under way (validation included): an editor closing
+        # its last tab never drops a Hub from HUBS while one is, or the graph it
+        # turns On would run where nothing can reach it.
+        self._busy = 0
         # set by get_hub() when this Hub is registered; broadcast() stamps it.
         self.slug: str = "_default"
 
@@ -218,10 +222,25 @@ class Hub:
             except Exception:
                 pass
 
+    @property
+    def busy(self) -> bool:
+        """A power operation is under way."""
+        return self._busy > 0
+
+    @contextlib.contextmanager
+    def _operation(self):
+        self._busy += 1
+        try:
+            yield
+        finally:
+            self._busy -= 1
+
     async def power_off(self) -> None:
         """A person turned this graph Off (from the editor, the REST API or the
         MCP server): it stops, and a launch no longer resumes it."""
-        await self._power_down()
+        _resume.claim(self.slug)
+        with self._operation():
+            await self._power_down()
         LAUNCH_NOTICES.pop(self.slug, None)
         _forget_resume(self.slug)
 
@@ -236,54 +255,90 @@ class Hub:
         self.broadcast({"kind": "status", "power": "off"})
         self.broadcast(self.live_graph_event())  # empty set: nothing is live now
 
-    async def power_on(self, graph: dict, *, resuming: bool = False) -> list[dict] | None:
-        """Start the graph live. Returns validation problems if the graph is broken.
+    async def power_on(self, graph: dict) -> list[dict] | None:
+        """A person turns the graph On (the editor, the REST API or the MCP
+        server). Returns validation problems if the graph is broken. On success
+        the graph is recorded as On (boltjar.resume), with the JSON it runs."""
+        _resume.claim(self.slug)  # a launch resuming graphs leaves this one alone now
+        with self._operation():
+            graph, problems = await self._checked(graph)
+            if problems:
+                _tap({"kind": "invalid", "problems": problems, "slug": self.slug})
+                return problems
+            async with self._lock:
+                was_on = self.runtime is not None
+                error = await self._start(graph)
+                if error is not None:
+                    if was_on:
+                        # a Restart that left it Off: it is not On at the next exit
+                        _forget_resume(self.slug)
+                    self.broadcast(error)
+                    return None
+            self._went_on(graph)
+            return None
 
-        On success the graph is recorded as On (boltjar.resume), with the JSON it
-        runs. `resuming`: a launch is powering back a graph that was On; a
-        refusal then prints no lines of its own (the launch prints one per
-        graph) and is kept for the editor, which is shown it on connect."""
+    async def resume(self, graph: dict) -> tuple[str, list[dict] | None]:
+        """A launch powers back On a graph the last run left On, from the JSON
+        it ran. Returns ("on", None); ("invalid", problems) or ("error", None)
+        when it cannot, kept for the editor (shown it on connect) and printing
+        no problem lines of its own (the launch prints one per graph); or
+        ("left", None) when a person turned it On or Off in this run, before
+        or while this validated: the launch leaves it as they did."""
+        with self._operation():
+            if self._taken():
+                return "left", None
+            graph, problems = await self._checked(graph)
+            async with self._lock:
+                if self._taken():
+                    return "left", None
+                if problems:
+                    self._launch_notice({"kind": "invalid", "problems": problems})
+                    return "invalid", problems
+                error = await self._start(graph)
+                if error is not None:
+                    error["resume"] = True
+                    LAUNCH_NOTICES[self.slug] = dict(error)
+                    self.broadcast(error)
+                    return "error", None
+            self._went_on(graph)
+            return "on", None
+
+    def _taken(self) -> bool:
+        """A person turned this graph On or Off in this run."""
+        return self.runtime is not None or _resume.claimed(self.slug)
+
+    async def _checked(self, graph: dict) -> tuple[dict, list[dict]]:
+        """The graph in the current format, and its validation problems."""
         try:
             graph = migrate(graph)
         except GraphFormatError as exc:
-            problems = [_format_problem(exc)]
-        else:
-            problems = await validate_graph_now(graph)
-        if problems:
-            if resuming:
-                self._launch_notice({"kind": "invalid", "problems": problems})
-            else:
-                _tap({"kind": "invalid", "problems": problems, "slug": self.slug})
-            return problems
-        async with self._lock:
-            was_on = self.runtime is not None
-            await self._stop()
-            runtime = Runtime(observer=self.broadcast, stream_observer=self.publish_stream)
-            try:
-                runtime.build(graph)
-                # reachable before run() so an "off" arriving mid-start can still stop it.
-                self.runtime = runtime
-                await runtime.run()
-            except Exception as exc:
-                self.runtime = None
-                self.graph = None
-                # built here, not in the runtime, so it gets the redaction every
-                # runtime event gets on its way out (Runtime._notify)
-                error = {"kind": "error", "error": _secrets.redact(repr(exc))}
-                if resuming:
-                    error["resume"] = True
-                    LAUNCH_NOTICES[self.slug] = dict(error)
-                elif was_on:
-                    # a Restart that left it Off: it is not On at the next exit
-                    _forget_resume(self.slug)
-                self.broadcast(error)
-                return None
-            self.graph = graph  # the now-running graph (the live set source of truth)
+            return graph, [_format_problem(exc)]
+        return graph, await validate_graph_now(graph)
+
+    async def _start(self, graph: dict) -> dict | None:
+        """Under the lock: stop what runs, build and run `graph`. Returns None,
+        or the `error` event when it could not start (nothing runs then)."""
+        await self._stop()
+        runtime = Runtime(observer=self.broadcast, stream_observer=self.publish_stream)
+        try:
+            runtime.build(graph)
+            # reachable before run() so an "off" arriving mid-start can still stop it.
+            self.runtime = runtime
+            await runtime.run()
+        except Exception as exc:
+            self.runtime = None
+            self.graph = None
+            # built here, not in the runtime, so it gets the redaction every
+            # runtime event gets on its way out (Runtime._notify)
+            return {"kind": "error", "error": _secrets.redact(repr(exc))}
+        self.graph = graph  # the now-running graph (the live set source of truth)
+        return None
+
+    def _went_on(self, graph: dict) -> None:
         LAUNCH_NOTICES.pop(self.slug, None)
         _record_resume(self.slug, graph)
         self.broadcast({"kind": "status", "power": "on"})
         self.broadcast(self.live_graph_event())
-        return None
 
     def _launch_notice(self, event: dict) -> None:
         """Keep why a launch could not resume this graph, for every editor that
@@ -347,6 +402,14 @@ def _carry_resume(slug: str) -> None:
         _resume.carry([slug])
     except OSError as exc:
         _log.warning("could not keep %s for the next launch: %s", slug, exc)
+
+
+def _drop_earlier(slug: str) -> None:
+    """Drop what the last run left for `slug`, if nothing in this run replaced it."""
+    try:
+        _resume.drop_earlier([slug])
+    except OSError as exc:
+        _log.warning("could not drop %s from the graphs a launch resumes: %s", slug, exc)
 
 
 def get_hub(slug: str) -> Hub:
@@ -497,10 +560,12 @@ async def resume_graphs() -> tuple[list[str], list[str]]:
     and stays recorded for the next launch (no person turned it Off), with one
     terminal line and the problems kept for the editor; one whose graph file
     was deleted since is dropped (a draft never saved had none, and comes back
-    from its JSON). Returns (resumed, not resumed) slugs."""
+    from its JSON). A graph a person turned On or Off in this run, before the
+    launch reached it or while it validated, is theirs: the launch leaves it
+    as they did. Returns (resumed, not resumed) slugs."""
     resumed: list[str] = []
     failed: list[str] = []
-    dropped: list[str] = []
+    skipped: list[str] = []  # gone, or a person's
     try:
         entries = _resume.earlier()
     except OSError as exc:
@@ -511,26 +576,30 @@ async def resume_graphs() -> tuple[list[str], list[str]]:
         if entry["saved"] and _graph_path(slug) is None:
             _forget_resume(slug)
             GRAPH_LINES.resume_dropped(slug)
-            dropped.append(slug)
+            skipped.append(slug)
             continue
         hub = get_hub(slug)
-        if hub.runtime is not None:  # already turned On since the boot
-            resumed.append(slug)
-            continue
         try:
-            problems = await hub.power_on(graph, resuming=True)
+            outcome, problems = await hub.resume(graph)
         except Exception as exc:
+            outcome = "invalid"
             problems = [{"node": None, "kind": "error", "message": _secrets.redact(str(exc))}]
             hub._launch_notice({"kind": "invalid", "problems": problems})
-        if hub.runtime is not None:
+        if outcome == "on":
             resumed.append(slug)
+            continue
+        if outcome == "left":
+            # the person's On recorded it anew, their Off dropped it; a refused
+            # On of theirs leaves it Off in this run, so it is not On at the exit
+            _drop_earlier(slug)
+            skipped.append(slug)
             continue
         failed.append(slug)
         _carry_resume(slug)
         if problems:
             GRAPH_LINES.not_resumed(slug, problems[0])
         # a graph that failed to build printed its own line (its `error` event)
-    GRAPH_LINES.resume_summary(resumed, failed, dropped)
+    GRAPH_LINES.resume_summary(resumed, failed, skipped)
     return resumed, failed
 
 
@@ -1759,9 +1828,12 @@ async def runtime_ws(websocket: WebSocket, slug: str = "_default") -> None:
     finally:
         hub.subscribers.discard(outgoing)
         pump_task.cancel()
-        # Drop an idle, unsubscribed hub from the registry so we don't leak.
-        if not hub.subscribers and hub.runtime is None:
-            HUBS.pop(hub.slug, None)
+        # Drop an idle, unsubscribed hub from the registry so we don't leak;
+        # never one a power operation is under way on (a launch resuming it,
+        # the API turning it On), which would then run out of every reach.
+        if not hub.subscribers and hub.runtime is None and not hub.busy \
+                and HUBS.get(hub.slug) is hub:
+            del HUBS[hub.slug]
 
 
 @app.get("/stream/{slug}/{channel}")

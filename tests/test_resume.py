@@ -40,7 +40,9 @@ def fresh(monkeypatch, tmp_path):
     """This test's own Hubs, resume record, settings and saved graphs."""
     monkeypatch.setattr(server, "HUBS", {})
     monkeypatch.setattr(server, "LAUNCH_NOTICES", {})
-    monkeypatch.setattr(resume, "LAUNCH", resume.LAUNCH)  # new_launch() is undone after the test
+    # this test's own launch: new_launch() is undone after it
+    monkeypatch.setattr(resume, "LAUNCH", resume.LAUNCH)
+    monkeypatch.setattr(resume, "_claimed", set())
     monkeypatch.setattr(resume, "PATH", tmp_path / "data" / "resume.json")
     monkeypatch.setattr(settings, "PATH", tmp_path / "data" / "settings.json")
     graphs = tmp_path / "graphs"
@@ -179,18 +181,18 @@ def test_graphs_resume_one_at_a_time_in_the_order_they_turned_on(fresh, monkeypa
         power(client, "a-first", "on", MANUAL_LOG)
     restart_server(monkeypatch)
     order, active = [], []
-    real = server.Hub.power_on
+    real = server.Hub.resume
 
-    async def watched(self, graph, **kw):
+    async def watched(self, graph):
         active.append(self.slug)
         assert len(active) == 1  # never two at once
         order.append(self.slug)
         try:
-            return await real(self, graph, **kw)
+            return await real(self, graph)
         finally:
             active.remove(self.slug)
 
-    monkeypatch.setattr(server.Hub, "power_on", watched)
+    monkeypatch.setattr(server.Hub, "resume", watched)
     with local_client() as client:
         assert client.portal.call(server.resume_graphs) == (["b-second", "a-first"], [])
     assert order == ["b-second", "a-first"]
@@ -641,3 +643,110 @@ def test_the_summary_never_says_nothing_was_on_when_a_graph_was_dropped(fresh, m
     shown = [r.getMessage() for r in caplog.records if r.name == "boltjar.graph"]
     assert shown[-1] == "nothing left to resume"
     assert not any("no graph was On" in line for line in shown)
+
+
+# ---------------------------------------------------------------- a person first
+def _hold_the_first_validation(monkeypatch):
+    """The first validation (the resume's) waits until `gate` is set; every
+    later one passes at once. Returns (gate, entered), thread events."""
+    import threading
+
+    gate, entered = threading.Event(), threading.Event()
+    calls = []
+
+    async def confirm(refs):
+        calls.append(refs)
+        if len(calls) == 1:
+            entered.set()
+            while not gate.is_set():
+                await asyncio.sleep(0.01)
+
+    monkeypatch.setattr(model_discovery, "confirm_missing", confirm)
+    return gate, entered
+
+
+def test_a_persons_off_while_the_launch_resumes_the_graph_wins(fresh, monkeypatch):
+    save(fresh, "chat", MANUAL_LOG)
+    left_on(monkeypatch, ("chat", MANUAL_LOG))
+    gate, entered = _hold_the_first_validation(monkeypatch)
+    with local_client() as client:
+        pending = client.portal.start_task_soon(server.resume_graphs)
+        assert entered.wait(5)
+        assert power(client, "chat", "off")["power"] == "off"  # the REST API, the MCP server
+        gate.set()
+        assert pending.result(10) == ([], [])
+        assert client.get("/api/runtime/chat/state").json()["power"] == "off"
+    assert resume.slugs() == []
+
+
+def test_a_persons_on_while_the_launch_resumes_the_graph_wins(fresh, monkeypatch):
+    save(fresh, "chat", MANUAL_LOG)
+    left_on(monkeypatch, ("chat", MANUAL_LOG))
+    gate, entered = _hold_the_first_validation(monkeypatch)
+    with local_client() as client:
+        pending = client.portal.start_task_soon(server.resume_graphs)
+        assert entered.wait(5)
+        assert power(client, "chat", "on", MANUAL_LOG_DRAFT)["power"] == "on"  # their draft
+        gate.set()
+        assert pending.result(10) == ([], [])
+        assert [n["id"] for n in server.HUBS["chat"].graph["nodes"]] == ["m", "lg", "lg2"]
+        assert dict(resume.recorded())["chat"] == migrate(copy.deepcopy(MANUAL_LOG_DRAFT))
+        power(client, "chat", "off")
+
+
+def test_a_persons_refused_on_before_the_launch_leaves_the_graph_off(fresh, monkeypatch,
+                                                                     no_local_providers):
+    save(fresh, "chat", MANUAL_LOG)
+    settings.update({"resume_workflows": True})
+    left_on(monkeypatch, ("chat", MANUAL_LOG))
+    with local_client() as client:
+        assert power(client, "chat", "on", NO_TRIGGER)["problems"]  # a draft that cannot run
+        client.portal.call(server.launch_sequence)
+        assert running() == []  # not the older JSON behind the person's back
+    assert resume.slugs() == []
+
+
+def _wait_until_unsubscribed(hub) -> None:
+    import time
+
+    for _ in range(500):
+        if not hub.subscribers:
+            return
+        time.sleep(0.01)
+    raise AssertionError("the editor socket never closed")
+
+
+def test_an_editor_closing_while_the_launch_resumes_leaves_the_graph_reachable(fresh, monkeypatch):
+    save(fresh, "chat", MANUAL_LOG)
+    left_on(monkeypatch, ("chat", MANUAL_LOG))
+    gate, entered = _hold_the_first_validation(monkeypatch)
+    with local_client() as client:
+        pending = client.portal.start_task_soon(server.resume_graphs)
+        assert entered.wait(5)
+        hub = server.HUBS["chat"]
+        # an editor tab for chat opens and goes away (a reload, a closed tab)
+        with client.websocket_connect("/ws?slug=chat") as ws:
+            assert ws.receive_json()["kind"] == "status"
+        _wait_until_unsubscribed(hub)
+        gate.set()
+        assert pending.result(10) == (["chat"], [])
+        assert server.HUBS.get("chat") is hub
+        assert client.get("/api/runtime/chat/state").json()["power"] == "on"
+        power(client, "chat", "off")
+        assert hub.runtime is None  # the Off reached the graph that runs
+
+
+def test_an_editor_closing_while_the_api_turns_a_graph_on_leaves_it_reachable(fresh, monkeypatch):
+    gate, entered = _hold_the_first_validation(monkeypatch)
+    with local_client() as client:
+        pending = client.portal.start_task_soon(
+            server.runtime_power, "chat", {"action": "on", "graph": MANUAL_LOG})
+        assert entered.wait(5)
+        hub = server.HUBS["chat"]
+        with client.websocket_connect("/ws?slug=chat") as ws:
+            assert ws.receive_json()["kind"] == "status"
+        _wait_until_unsubscribed(hub)
+        gate.set()
+        assert pending.result(10)["power"] == "on"
+        assert server.HUBS.get("chat") is hub
+        assert client.portal.call(server.shutdown_all) == 1  # the exit reaches it

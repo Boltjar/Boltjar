@@ -15,7 +15,9 @@ left is the graphs On when it ended, and this launch settles it
 is powered back On from the JSON recorded here, and one that cannot be stays
 recorded, stamped anew, to be tried again at the next launch; with --no-resume
 they are all kept for the next launch; with the setting off they are dropped,
-since they are Off in this run (a graph turned On again records itself).
+since they are Off in this run (a graph turned On again records itself). A
+graph a person turns On or Off in this run is theirs, and the launch leaves it
+alone (`claim`).
 
 The record lives in user/data/resume.json, rewritten whole through a temporary
 file (atomic) on every change, in the order the graphs turned On:
@@ -47,12 +49,26 @@ _log = logging.getLogger(__name__)
 # This run of Boltjar: the stamp on every entry it writes. An entry stamped
 # otherwise was left by an earlier launch.
 LAUNCH = uuid.uuid4().hex
+# The graphs a person turned On or Off in this run (the editor, the REST API,
+# the MCP server): a launch resuming graphs leaves these alone.
+_claimed: set[str] = set()
 
 
 def new_launch() -> None:
     """Start a new run, as a new server process does (the test suite's restart)."""
-    global LAUNCH
+    global LAUNCH, _claimed
     LAUNCH = uuid.uuid4().hex
+    _claimed = set()
+
+
+def claim(slug: str) -> None:
+    """A person turned `slug` On or Off in this run: it is theirs, and the
+    launch leaves it alone."""
+    _claimed.add(slug)
+
+
+def claimed(slug: str) -> bool:
+    return slug in _claimed
 
 
 # ---------------------------------------------------------------- the file
@@ -156,10 +172,10 @@ def carry(slugs: list[str] | None = None) -> list[str]:
     return _settle(slugs, keep=True)
 
 
-def drop_earlier() -> list[str]:
-    """Drop what an earlier launch left; what this run recorded stays. Returns
-    the slugs dropped."""
-    return _settle(None, keep=False)
+def drop_earlier(slugs: list[str] | None = None) -> list[str]:
+    """Drop what an earlier launch left (only `slugs` of it, when given); what
+    this run recorded stays. Returns the slugs dropped."""
+    return _settle(slugs, keep=False)
 
 
 # ---------------------------------------------------------------- reading
