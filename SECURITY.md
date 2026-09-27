@@ -97,5 +97,5 @@ shown in the editor display a known secret (8 characters or longer) as its
 ## Reporting a vulnerability
 
 Please report privately through GitHub:
-<https://github.com/DKLRD/Boltjar/security/advisories/new>. Do not open a
+<https://github.com/Boltjar/Boltjar/security/advisories/new>. Do not open a
 public issue for a vulnerability.
