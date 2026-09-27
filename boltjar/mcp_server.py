@@ -116,13 +116,16 @@ async def get_version() -> dict:
 
 def _condense_catalog(object_info: dict) -> list[dict]:
     """Shrink /api/object_info to the shape an author needs: per node its id,
-    title, category, summary, ports (name/type/direction) and knobs
+    title, category, summary, ports (name/type/direction; an input also says
+    whether it is a `trigger`, `optional` or `growable`) and knobs
     (name/kind/default/options). This is the schema source of truth so the AI
     wires real ports and sets real knobs instead of guessing."""
     out: list[dict] = []
     for n in object_info.get("nodes", []):
         ports = (
-            [{"name": p["name"], "type": p["type"], "direction": "in"}
+            [{"name": p["name"], "type": p["type"], "direction": "in",
+              "trigger": bool(p.get("trigger")), "optional": bool(p.get("optional")),
+              "growable": bool(p.get("growable"))}
              for p in n.get("inputs", [])]
             + [{"name": p["name"], "type": p["type"], "direction": "out"}
                for p in n.get("outputs", [])]
@@ -145,9 +148,12 @@ def _condense_catalog(object_info: dict) -> list[dict]:
 async def list_node_types() -> list[dict]:
     """List every node type available to build graphs with, condensed to what an
     author needs: id, title, category, summary, ports (name/type/direction), and
-    knobs (name/kind/default/options). This is the SCHEMA SOURCE OF TRUTH: read it
-    before authoring a graph so you wire real port names and set real knob names,
-    never guessed ones."""
+    knobs (name/kind/default/options). Each input port also carries `trigger`,
+    `optional` and `growable`. Every trigger input must be wired (a growable one
+    on at least one socket, e.g. `in0`) or the graph does not turn On;
+    validate_graph names any other input that is missing. This is the SCHEMA
+    SOURCE OF TRUTH: read it before authoring a graph so you wire real port
+    names and set real knob names, never guessed ones."""
     return _condense_catalog(await _get("/api/object_info"))
 
 

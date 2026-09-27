@@ -64,6 +64,20 @@ def test_list_node_types_is_condensed_schema():
     man = next(n for n in cat if n["id"] == "core.trigger.manual")
     assert man["title"] == "Manual"
     assert {"name": "trigger", "type": "event", "direction": "out"} in man["ports"]
+    # an input says whether it is a trigger (which must be wired), optional or
+    # growable, so an author knows what to wire before validate_graph says so.
+    preview = next(n for n in cat if n["id"] == "core.output.preview")
+    assert [p for p in preview["ports"] if p["direction"] == "in"] == [
+        {"name": "in", "type": "any", "direction": "in",
+         "trigger": True, "optional": False, "growable": False},
+        {"name": "trigger", "type": "event", "direction": "in",
+         "trigger": True, "optional": False, "growable": False}]
+    sync = next(n for n in cat if n["id"] == "core.flow.sync")
+    assert {"name": "in", "type": "event", "direction": "in",
+            "trigger": True, "optional": False, "growable": True} in sync["ports"]
+    chat_out = next(n for n in cat if n["id"] == "core.output.chat")
+    assert {"name": "user", "type": "text", "direction": "in",
+            "trigger": False, "optional": True, "growable": False} in chat_out["ports"]
     # a node with knobs exposes name/kind/default/options
     chat = next(n for n in cat if n["id"] == "core.trigger.chat")
     knob_names = {k["name"] for k in chat["knobs"]}
