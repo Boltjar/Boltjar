@@ -155,6 +155,8 @@ def test_exec_injection_is_stored_verbatim(store, attack):
 
 def test_secret_tokens_still_resolve_in_sql(store, monkeypatch):
     from boltjar import secrets
-    monkeypatch.setitem(secrets._store, "DB_TEST_NAME", "Ada")
+    # a store that counts as loaded, so the real secrets file is never read over it.
+    monkeypatch.setattr(secrets, "_store", {"DB_TEST_NAME": "Ada"})
+    monkeypatch.setattr(secrets, "_loaded", True)
     rows = _run("query", "SELECT age FROM people WHERE name = '{{secret.DB_TEST_NAME}}'")["rows"]
     assert rows == [{"age": 36}]

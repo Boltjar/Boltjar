@@ -122,8 +122,10 @@ def test_db_multiline_secret_value_stays_one_field(db, monkeypatch):
     """{{secret.X}} resolves inside its own value too: a multi-line secret with
     '=' in it is one field, never split into lines or columns."""
     pem = "-----BEGIN KEY-----\nabc=def\n-----END KEY-----"
-    # a stored secret (an arbitrary env var is not one).
-    monkeypatch.setitem(secrets._store, "DBKV_PARSE_TEST_PEM", pem)
+    # a stored secret (an arbitrary env var is not one), in a store that counts
+    # as loaded, so the real secrets file is never read over it.
+    monkeypatch.setattr(secrets, "_store", {"DBKV_PARSE_TEST_PEM": pem})
+    monkeypatch.setattr(secrets, "_loaded", True)
     db.execute("mydb", "CREATE TABLE creds(id INTEGER PRIMARY KEY, name TEXT, pem TEXT)")
     _run({
         "nodes": [
