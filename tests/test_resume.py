@@ -299,7 +299,7 @@ def steps(monkeypatch):
         ran.append("ollama")
         return "ok", "started Ollama"
 
-    async def refresh(names, changed=False):
+    async def refresh(names):
         ran.append(f"refresh {sorted(names)}")
 
     async def resume_graphs():
@@ -308,7 +308,7 @@ def steps(monkeypatch):
 
     monkeypatch.setattr(ollama, "launch_start", start_ollama)
     monkeypatch.setattr(model_discovery, "local_providers", lambda: ["ollama", "lmstudio"])
-    monkeypatch.setattr(model_discovery, "refresh", refresh)
+    monkeypatch.setattr(model_discovery, "refresh_alongside", refresh)
     monkeypatch.setattr(server, "resume_graphs", resume_graphs)
     return ran
 
@@ -354,11 +354,11 @@ def test_the_local_refresh_never_asks_a_cloud_provider(monkeypatch):
 
 
 def test_the_local_refresh_is_bounded(fresh, monkeypatch):
-    async def hangs(names, changed=False):
+    async def hangs(names):
         await asyncio.Event().wait()
 
     monkeypatch.setattr(model_discovery, "local_providers", lambda: ["ollama"])
-    monkeypatch.setattr(model_discovery, "refresh", hangs)
+    monkeypatch.setattr(model_discovery, "refresh_alongside", hangs)
     monkeypatch.setattr(server, "LOCAL_REFRESH_WAIT", 0.05)
     asyncio.run(asyncio.wait_for(server.refresh_local_models(), 2))
 

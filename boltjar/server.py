@@ -549,7 +549,8 @@ async def refresh_local_models() -> None:
     if not local:
         return
     try:
-        await asyncio.wait_for(_discovery.refresh(set(local), changed=True), LOCAL_REFRESH_WAIT)
+        # beside the boot refresh, which may still be asking a cloud provider
+        await asyncio.wait_for(_discovery.refresh_alongside(set(local)), LOCAL_REFRESH_WAIT)
     except asyncio.TimeoutError:
         _launch_log.info("the local model lists took longer than %s s", LOCAL_REFRESH_WAIT)
     except Exception as exc:

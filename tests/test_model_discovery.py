@@ -1057,3 +1057,47 @@ def test_the_endpoint_file_is_parsed_again_only_when_it_changes(fresh, monkeypat
         "lmstudio": {"base_url": "http://localhost:1234/v1", "key_secret": ""},
         "vllm": {"base_url": "http://localhost:8000/v1", "key_secret": ""}}), encoding="utf-8")
     assert [e.name for e in endpoints.list_endpoints()] == ["lmstudio", "vllm"]
+
+
+# ------------------------------------------------------- the launch's local refresh
+
+def test_the_launch_asks_the_local_providers_beside_a_slow_cloud_refresh(fresh, monkeypatch):
+    """The boot refresh asks every provider; the launch then asks the local ones
+    again (Ollama may have just started). It never waits for the cloud ones, and
+    the boot refresh's older answer never overwrites its newer one."""
+    from boltjar import server
+
+    monkeypatch.setattr(md, "AUTO_REFRESH", True)
+    asked: list[str] = []
+
+    async def ollama(client):
+        asked.append("ollama")
+        if asked.count("ollama") == 1:  # the boot refresh asked before Ollama was up
+            raise httpx.ConnectError("connection refused")
+        return []
+
+    async def cloud(client):
+        asked.append("xai")
+        await asyncio.sleep(1.0)  # a slow network at login
+        return []
+
+    monkeypatch.setattr(md, "_discoverers", lambda listed=None: {"ollama": ollama, "xai": cloud})
+    monkeypatch.setattr(md, "_base_url", lambda name: "http://localhost:11434" if name == "ollama"
+                        else md.XAI_MODELS_URL)
+
+    async def scenario():
+        loop = asyncio.get_running_loop()
+        md.schedule_refresh()  # the lifespan's boot refresh
+        await asyncio.sleep(0.05)
+        began = loop.time()
+        await server.refresh_local_models()
+        took = loop.time() - began
+        while md.refreshing():  # the boot refresh ends after it
+            await asyncio.sleep(0.01)
+        return took
+
+    took = asyncio.run(scenario())
+    assert took < 0.5
+    assert asked == ["ollama", "xai", "ollama"]
+    assert md._state["ollama"].ok is True
+    assert md._state["xai"].ok is True

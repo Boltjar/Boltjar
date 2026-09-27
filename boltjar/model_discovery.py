@@ -37,6 +37,7 @@ import dataclasses
 import datetime
 import difflib
 import functools
+import itertools
 import json
 import logging
 import os
@@ -192,6 +193,7 @@ def reset() -> None:
     _job = None
     _tasks.clear()
     _state.clear()
+    _answered.clear()
     models.DISCOVERED.clear()
     models.ALIASES.clear()
 
@@ -534,12 +536,22 @@ def _short_error(exc: BaseException) -> str:
     return _secrets.redact(text)[:200]
 
 
+# Each refresh numbers its ask; a provider's listing holds the answer to its
+# latest ask that has come back. Two refreshes can ask one provider at once (the
+# launch asks the local ones beside the boot refresh, see refresh_alongside), and
+# the one that asked first may answer last: its older answer is then dropped.
+_asks = itertools.count(1)
+_answered: dict[str, int] = {}  # provider -> the ask its listing answers
+
+
 async def _refresh(only: frozenset[str] | set[str] | None = None) -> None:
     """Ask the usable providers (`only`: just those of them) and record what
     each said. A provider asked that fails keeps its last good list (the
     offline copy); a provider not asked keeps its listing as it was; one no
-    longer usable (its key removed) drops out."""
+    longer usable (its key removed) drops out. A provider a later refresh has
+    answered for already keeps that newer answer."""
     ensure_loaded()
+    ask = next(_asks)
     asked = {n: fn for n, fn in _discoverers().items() if only is None or n in only}
     results: list = []
     if asked:
@@ -548,10 +560,13 @@ async def _refresh(only: frozenset[str] | set[str] | None = None) -> None:
                                            return_exceptions=True)
     checked = _iso(_now())
     for name, result in zip(asked, results):
+        if isinstance(result, asyncio.CancelledError):
+            raise result
+        if _answered.get(name, 0) > ask:
+            continue  # asked again since, and that answer is in: it is the newer one
+        _answered[name] = ask
         before = _state.get(name)
         if isinstance(result, BaseException):
-            if isinstance(result, asyncio.CancelledError):
-                raise result
             # unreachable or refused: keep the last good list (the offline copy).
             _state[name] = Listing(ok=False, checked=checked,
                                    updated=before.updated if before else None,
@@ -630,6 +645,18 @@ async def refresh(names: set[str] | None = None, *, changed: bool = False) -> No
     answers, joining a refresh that already asks them. Never raises for a
     provider that fails: it keeps its list."""
     task = _start(asyncio.get_running_loop(), names, changed=changed)
+    await asyncio.shield(task)
+
+
+async def refresh_alongside(names: set[str]) -> None:
+    """Ask `names` now, beside any refresh under way instead of queued behind
+    it, and wait for their answers only. A launch asks the providers on this
+    computer this way, so it never waits on a cloud provider the boot refresh
+    is still asking; an older answer never overwrites the one this gets."""
+    task = asyncio.get_running_loop().create_task(_refresh(frozenset(names)))
+    task.add_done_callback(_log_failure)
+    _tasks.add(task)
+    task.add_done_callback(_tasks.discard)
     await asyncio.shield(task)
 
 
