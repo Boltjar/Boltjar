@@ -245,8 +245,8 @@ def _safe_json_obj(text: str, fallback: str) -> dict:
 
 @node(id="core.parse.tags", name="Tag Parse", kind=Kind.TRANSFORM, category="Data",
       pulled=True, summary="Read inline [bracket] tags in text: emit a mood (the "
-                           "highest-priority mood tag), the clean display "
-                           "text (tags -> emoji, capped, or stripped), and an action.",
+                           "highest-priority mood tag), the display text with its tags "
+                           "shown as emoji, cut short or removed, and an action.",
       icon="pricetags-outline")
 class TagParse:
     moods: Widget = Widget(kind="code", default=_DEFAULT_MOODS, label="tag -> mood", expand=True)
@@ -531,8 +531,8 @@ def _list_windows() -> list:
 
 
 @node(id="core.sensor.screen", name="Screen Capture", kind=Kind.SENSOR, category="Sensors",
-      pulled=True, volatile=True, summary="Grab a fresh screenshot on every pull (a "
-                                          "live frame for a vision LLM). Cross-platform.",
+      pulled=True, volatile=True, summary="Grab a fresh screenshot each time a node reads "
+                                          "it (a live frame for a vision LLM).",
       icon="desktop-outline")
 class ScreenCapture:
     monitor: Widget = select(["Primary", "1", "2", "3", "All"], default="Primary")
@@ -550,8 +550,9 @@ class ScreenCapture:
 
 
 @node(id="core.sensor.window", name="Window Capture", kind=Kind.SENSOR, category="Sensors",
-      pulled=True, volatile=True, summary="Grab a specific window by title hint (a fresh "
-                                          "frame each pull). Windows only; empty elsewhere.",
+      pulled=True, volatile=True, summary="Grab one window, found by a part of its title, "
+                                          "fresh each time a node reads it. Windows only; "
+                                          "empty elsewhere.",
       icon="browsers-outline")
 class WindowCapture:
     title: Widget = tmpl("", kind="text", port_type="text", placeholder="window title hint (substring)")
@@ -637,8 +638,8 @@ _CLOCK_ZONES = [
 
 
 @node(id="core.sensor.clock", name="Time", kind=Kind.SENSOR, category="Services",
-      pulled=True, volatile=True, summary="The current time, re-read on every pull. "
-                                          "Pick the output format and timezone.",
+      pulled=True, volatile=True, summary="The current time, read fresh each time a node "
+                                          "reads it. Pick the output format and timezone.",
       icon="time-outline", subline="clock · volatile")
 class Clock:
     # the dropdown lists example outputs; pick the shape you want.
@@ -789,8 +790,8 @@ class Schedule:
 
 
 @node(id="core.trigger.manual", name="Manual", kind=Kind.TRIGGER, category="Triggers",
-      summary="Fires once when the graph turns On, and again whenever you press its "
-              "Fire button (a run-button you control).",
+      summary="Fires once when the graph turns On, and again whenever you press its Fire "
+              "button.",
       icon="play-circle-outline", subline="manual · once")
 class Manual:
     outputs = [Port("trigger", "event")]
@@ -815,9 +816,9 @@ class ChatInput:
 
 
 @node(id="core.trigger.audio_in", name="Audio Input", kind=Kind.TRIGGER, category="Triggers",
-      summary="Stream a microphone clip into the live graph (push-to-talk). Emits "
-              "the audio data + a trigger, the way Chat Input emits text. Feed the "
-              "audio into an STT node to transcribe it.",
+      summary="Send a microphone clip into the live graph while you hold to talk. Emits the "
+              "audio and a trigger, the way Chat Input emits text. Feed the audio into an "
+              "STT node to transcribe it.",
       icon="mic-circle-outline")
 class AudioInput:
     placeholder: str = "Hold to talk..."
@@ -829,8 +830,9 @@ class AudioInput:
 
 
 @node(id="core.trigger.webhook", name="Webhook", kind=Kind.TRIGGER, category="Triggers",
-      summary="Listen for inbound HTTP calls. Fires when POST/GET hits "
-              "{origin}/hook/{workflow}/{path}; emits the body, json, headers, query.",
+      summary="Listen for HTTP calls from outside. Fires when a POST or GET reaches "
+              "{origin}/hook/{workflow}/{path}, and emits the body, json, headers and "
+              "query.",
       icon="link-outline")
 class WebhookTrigger:
     path: Widget = Widget(kind="text", default="my-hook", label="path")
@@ -964,9 +966,9 @@ def _dynamic_sorted(ins: dict, base: str) -> list:
 
 
 @node(id="core.data.list", name="List", kind=Kind.TRANSFORM, category="Data",
-      pulled=True, summary="Assemble wired values into one list (the reverse of "
-                           "For-each). A socket grows per wire, and a null value "
-                           "is left out.",
+      pulled=True, summary="Assemble wired values into one list (the reverse of For-each). "
+                           "A new socket appears for each wire, and a null value is left "
+                           "out.",
       icon="list-outline")
 class List:
     # type-agnostic: text, an image data-URL, a file path, json, all ride `any`.
@@ -978,8 +980,8 @@ class List:
 
 
 @node(id="core.data.compute", name="Compute", kind=Kind.TRANSFORM, category="Data",
-      pulled=True, summary="Derive a value from a pure expression over the wired "
-                           "inputs. Compute calculates; Logic routes.",
+      pulled=True, summary="Derive a value from an expression over the wired inputs. "
+                           "Compute calculates; Logic routes.",
       icon="calculator-outline", subline="compute · {expression|clip:14}")
 class Compute:
     expression: Widget = code("value", expand=True)
@@ -1402,9 +1404,9 @@ async def _rerank_model(manifest, query: str, docs: list, endpoint: str) -> list
 
 
 @node(id="core.ai.embed", name="Embed", kind=Kind.TRANSFORM, category="AI",
-      summary="Encode text into an embedding vector. Picks an embed model (Ollama "
-              "bge-m3 by default) the way the LLM picks its model. Fires on its "
-              "trigger and emits the vector + a trigger to sequence the next node.",
+      summary="Turn text into an embedding vector. Picks an embed model (Ollama bge-m3 by "
+              "default) the way the LLM picks its model. Fires on its trigger and emits the "
+              "vector and a trigger for the next node.",
       icon="finger-print-outline")
 class Embed:
     # With nothing picked the node runs this declared default, so the picker shows
@@ -1422,10 +1424,10 @@ class Embed:
 
 
 @node(id="core.ai.rerank", name="Rerank", kind=Kind.TRANSFORM, category="AI",
-      summary="A cross-encoder precision pass: score each candidate against the query "
-              "and keep the best. Picks a rerank model, served over HTTP at the address "
-              "in its `endpoint` setting. When no rerank service answers, the node fails "
-              "with an error instead of passing the candidates on unranked.",
+      summary="Reorder candidates by how well each one answers the query, and keep the "
+              "best. Picks a rerank model, served over HTTP at the address in its "
+              "`endpoint` setting. When no rerank service answers, the node fails with an "
+              "error instead of passing the candidates on unranked.",
       icon="podium-outline")
 class Rerank:
     # a model node like the LLM: the body draws the picker and the picked
@@ -1469,8 +1471,8 @@ class Rerank:
 
 
 @node(id="core.data.chunk", name="Chunk", kind=Kind.TRANSFORM, category="Data",
-      pulled=True, summary="Split text into overlapping chunks for embedding/"
-                           "indexing. Output is a list; feed it through For-each.",
+      pulled=True, summary="Split text into overlapping chunks to embed and store. The "
+                           "output is a list; feed it through For-each.",
       icon="cut-outline")
 class Chunk:
     size: Widget = Widget(kind="number", default=800, min=50, max=8000, step=50, label="size")
@@ -1495,9 +1497,9 @@ _SENTENCE_RE = re.compile(r".+?(?:[.!?…]+(?:[\"')\]]+)?|\n+|$)", re.DOTALL)
 
 
 @node(id="core.data.sentences", name="Sentences", kind=Kind.TRANSFORM, category="Data",
-      pulled=True, summary="Split text into a list of sentences (ends on . ! ? ... or a "
-                           "newline). Feed through For-each to stream the LLM reply one "
-                           "sentence at a time into TTS / Avatar (low-latency streaming).",
+      pulled=True, summary="Split text into a list of sentences (each ends on . ! ? ... or "
+                           "a new line). Feed it through For-each to send an LLM reply to "
+                           "TTS or Avatar one sentence at a time, so speech starts sooner.",
       icon="chatbox-outline")
 class Sentences:
     inputs = [Port("text", "text")]
@@ -1510,8 +1512,8 @@ class Sentences:
 
 
 @node(id="core.store.vectors", name="Vector Store", kind=Kind.STORE, category="Store",
-      pulled=True, summary="An embedded vector store (sqlite + cosine). Emits a "
-                           "handle the Vectors node indexes into and searches.",
+      pulled=True, summary="A vector store kept in a file on this machine. Wire it into a "
+                           "Vectors node, which adds to it and searches it.",
       icon="planet-outline")
 class VectorStoreNode:
     outputs = [Port("vectors", "vectors")]
@@ -2011,7 +2013,7 @@ class Parse:
 
 
 @node(id="core.data.stringify", name="Stringify", kind=Kind.TRANSFORM, category="Data",
-      pulled=True, summary="Serialise a value to a pretty (2-space) JSON string.",
+      pulled=True, summary="Turn a value into JSON text, indented two spaces.",
       icon="code-working-outline")
 class Stringify:
     inputs = [Port("json", "json")]
@@ -2145,8 +2147,8 @@ def _files():
 
 @node(id="core.file.read", name="Read File", kind=Kind.SERVICE, category="Files",
       pulled=True, volatile=True,
-      summary="Read a file's text from the sandbox. Pulled, fresh; a missing "
-              "file reads as empty.",
+      summary="Read a file's text from the sandbox, fresh each time a node reads it. A "
+              "missing file reads as empty.",
       icon="document-outline")
 class ReadFile:
     path: Widget = Widget(kind="text", default="", label="Path")
@@ -2167,8 +2169,8 @@ class ReadFile:
 
 
 @node(id="core.file.write", name="Write File", kind=Kind.SERVICE, category="Files",
-      summary="Write text to a file in the sandbox on a trigger, creating parent "
-              "dirs. Emits the resolved relative path.",
+      summary="Write text to a file in the sandbox on a trigger, creating its folders. "
+              "Emits the file's path inside the sandbox.",
       icon="create-outline")
 class WriteFile:
     path: Widget = Widget(kind="text", default="", label="Path")
@@ -2188,8 +2190,8 @@ class WriteFile:
 
 
 @node(id="core.file.append", name="Append File", kind=Kind.SERVICE, category="Files",
-      summary="Append text to a file in the sandbox on a trigger, creating it if "
-              "absent. Emits the resolved relative path.",
+      summary="Append text to a file in the sandbox on a trigger, creating it if it is not "
+              "there. Emits the file's path inside the sandbox.",
       icon="add-circle-outline")
 class AppendFile:
     path: Widget = Widget(kind="text", default="", label="Path")
@@ -2207,8 +2209,8 @@ class AppendFile:
 
 
 @node(id="core.file.delete", name="Delete File", kind=Kind.SERVICE, category="Files",
-      summary="Delete a file in the sandbox on a trigger (idempotent; a missing "
-              "file is a no-op). Emits the resolved relative path.",
+      summary="Delete a file in the sandbox on a trigger. Deleting a file that is not there "
+              "does nothing. Emits the file's path inside the sandbox.",
       icon="trash-outline")
 class DeleteFile:
     path: Widget = Widget(kind="text", default="", label="Path")
@@ -2226,8 +2228,8 @@ class DeleteFile:
 
 @node(id="core.file.list", name="List Dir", kind=Kind.SERVICE, category="Files",
       pulled=True, volatile=True,
-      summary="List entry names under a directory in the sandbox. Pulled, fresh; "
-              "a missing dir lists as []. Default path is the sandbox root.",
+      summary="List the names in a folder of the sandbox, fresh each time a node reads it. "
+              "A missing folder lists as empty. The default path is the sandbox itself.",
       icon="folder-open-outline")
 class ListDir:
     path: Widget = Widget(kind="text", default="", label="Path")
@@ -2259,8 +2261,8 @@ def _kv():
 
 
 @node(id="core.store.kv", name="KV Store", kind=Kind.STORE, category="Store",
-      pulled=True, summary="A persistent key-value store. Emits a kv handle "
-                           "other nodes read and write through.",
+      pulled=True, summary="A key-value store that keeps its values between runs. Wire it "
+                           "into the KV nodes that read and write it.",
       icon="archive-outline")
 class KvStoreNode:
     # Pulled source: emits the store key. A stable `kv_key` (assigned by the
@@ -2274,9 +2276,9 @@ class KvStoreNode:
 
 
 @node(id="core.kv", name="KV", kind=Kind.TRANSFORM, category="Store",
-      summary="Read/write a kv store. The 'operation' knob reshapes the inputs "
-              "and outputs. Knobs are templates: {tag} pulls from a wired "
-              "source, {{secret.X}} resolves a secret.",
+      summary="Read and write a key-value store. The operation knob reshapes the inputs and "
+              "outputs. Knobs are templates: {tag} pulls from a wired source, {{secret.X}} "
+              "resolves a secret.",
       icon="key-outline")
 class KV:
     # op-shaped (replaces kvKnobNamesFor): key for get/set/delete/has, value for
@@ -2385,12 +2387,12 @@ def _meter_f(cfg: dict, key: str, default: float) -> float:
 
 
 @node(id="core.state.meter", name="Meter", kind=Kind.TRANSFORM, category="State",
-      summary="A float that persists across fires and drifts toward `rest` at "
-              "`rate`/sec (lazy, no timer). Fire `nudge` to add `amount`; fire "
-              "`set` to overwrite with `to` (both triggers must be wired); always "
-              "clamped to [min,max]. Emits `value` and a `crossed` event (with "
-              "direction up/down) when a fire moves it across `threshold`. A mood / "
-              "energy / attention accumulator.",
+      summary="A number that persists across fires and drifts toward `rest` at `rate` per "
+              "second, worked out when it is read, with no timer running. Fire `nudge` to "
+              "add `amount`, or `set` to overwrite it with `to` (both triggers must be "
+              "wired); it always stays within `min` and `max`. Emits `value`, and a "
+              "`crossed` event (up or down) when a fire moves it across `threshold`. Use it "
+              "for a mood, energy or attention level.",
       icon="speedometer-outline")
 class Meter:
     # every knob is promotable to a typed input. amount/to carry the two operations'
@@ -2549,11 +2551,12 @@ def _maybe_json(value):
 
 
 @node(id="core.trigger.agenda", name="Agenda", kind=Kind.TRIGGER, category="Triggers",
-      summary="Fire from data instead of a fixed clock: poll a wired store table of "
-              "{when, payload} rows and fire each row when its `when` is due. `when` "
-              "is an ISO datetime or epoch seconds. It fires `due` with the payload "
-              "and emits `payload`, then marks the row done (or deletes it) so it "
-              "never fires twice. Several due rows fire one at a time, earliest first.",
+      summary="Fire from data instead of a fixed clock: poll a wired store table of {when, "
+              "payload} rows and fire each row when its `when` is due. `when` is an ISO "
+              "8601 date and time, or a count of seconds since 1970 (Unix time). It fires "
+              "`due` with the payload and emits `payload`, then marks the row done (or "
+              "deletes it) so it never fires twice. Several due rows fire one at a time, "
+              "earliest first.",
       icon="calendar-outline")
 class Agenda:
     poll: Widget = Widget(kind="number", default=60, min=1, max=86400, step=1,
@@ -2724,9 +2727,10 @@ _RESPONSE_TYPE_DEFAULT_MIME = {
 
 
 @node(id="core.net.http", name="HTTP Request", kind=Kind.TRANSFORM, category="Network",
-      summary="Call an external API. Fires on a trigger; resolves {{secret.NAME}} in "
-              "url / headers / body and substitutes {tag} pipes from wired inputs. "
-              "Auto-detects the request body shape (json / form / multipart / raw).",
+      summary="Call an external API. Fires on a trigger, fills in {{secret.NAME}} in the "
+              "URL, headers and body, and puts each {tag} pipe's wired value in its place. "
+              "The body goes as JSON, a form, multipart or raw text, whichever it looks "
+              "like.",
       icon="globe-outline")
 class Http:
     method: Widget = select(["GET", "POST", "PUT", "PATCH", "DELETE"], default="GET")
@@ -2909,8 +2913,8 @@ class Log:
 
 
 @node(id="core.output.preview", name="Preview", kind=Kind.OUTPUT, category="Inspect",
-      summary="Tap a wire and show its value live (adapts to the type). Sits "
-              "mid-flow: when `trigger` fires it passes `in` on `out`, then the "
+      summary="Tap a wire and show its value live, drawn to suit its type. It sits "
+              "mid-flow: when `trigger` fires it passes `in` on at `out`, then passes the "
               "trigger on.",
       icon="eye-outline", subline="preview · live tap")
 class Preview:
@@ -3014,10 +3018,10 @@ def _coerce_list(value) -> list:
 
 @node(id="core.flow.for_each", name="For-each", kind=Kind.TRANSFORM, category="Flow",
       opens_turn=True,
-      summary="Dispense a list one item at a time. Fire `trigger` to start; wire the "
-              "body's done back into `loop` to release the next (both triggers must "
-              "be wired); `after_last` fires when the list is exhausted. "
-              "Type-agnostic (text, image, file, json).",
+      summary="Hand out a list one item at a time. Fire `trigger` to start, and wire the "
+              "body's done back into `loop` to release the next (both triggers must be "
+              "wired); `after_last` fires after the last item. Items can be of any type: "
+              "text, images, files or JSON.",
       icon="repeat-outline")
 class ForEach:
     # `trigger` starts the loop; `loop` is the back-edge ("body finished this item,
@@ -3067,9 +3071,9 @@ _CHANGED_UNSET = object()  # sentinel so a Changed node's first value always cou
 
 
 @node(id="core.flow.changed", name="Changed", kind=Kind.TRANSFORM, category="Flow",
-      summary="Pass a value on only when it differs from the last one (a dedup "
-              "gate). Interval, HTTP Request, Changed and LLM in a row poll a source "
-              "and run the LLM only on a real change. The first value always passes.",
+      summary="Pass a value on only when it differs from the last one. Interval, HTTP "
+              "Request, Changed and LLM in a row poll a source and run the LLM only on a "
+              "real change. The first value always passes.",
       icon="funnel-outline")
 class Changed:
     inputs = [Port("trigger", "event", trigger=True),
@@ -3126,8 +3130,8 @@ class Sync:
 
 
 @node(id="core.flow.wait", name="Wait", kind=Kind.TRANSFORM, category="Flow",
-      summary="Relay a trigger after a delay. 1:1 (trigger in -> trigger out). Pick "
-              "the amount and the unit; paces a For-each loop or throttles a chain.",
+      summary="Relay a trigger after a delay, one trigger out for each one in. Pick the "
+              "amount and the unit; it paces a For-each loop or slows a chain.",
       icon="hourglass-outline")
 class Wait:
     # use ready widgets only: a number box + a unit dropdown.
@@ -3230,11 +3234,11 @@ class ChatOutput:
 
 
 @node(id="core.output.avatar", name="Avatar", kind=Kind.OUTPUT, category="Output",
-      summary="Stream one avatar chunk per fire (text, audio, mood, action and lang) "
-              "to an avatar client, such as a VRM renderer, over the /stream SSE. For "
-              "one chunk per sentence, fire it once per sentence (a For-each over "
-              "Sentences). Wire the separate ports or one combined `utterance` JSON; "
-              "the separate ports win. Lip-sync stays on the client.",
+      summary="Stream one avatar chunk per fire (text, audio, mood, action and lang) to an "
+              "avatar client, such as a VRM renderer, listening on /stream. For one chunk "
+              "per sentence, fire it once per sentence (a For-each over Sentences). Wire "
+              "the separate ports or one combined `utterance` JSON; the separate ports win. "
+              "Lip-sync stays on the client.",
       icon="happy-outline")
 class Avatar:
     channel: Widget = Widget(kind="text", default="avatar", label="stream channel")

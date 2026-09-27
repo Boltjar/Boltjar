@@ -24,10 +24,12 @@ FIXTURE = pathlib.Path(__file__).resolve().parent.parent / "editor" / "test" / "
 
 
 def _look(d: dict) -> dict:
-    """The part of a served definition the editor's icon, subline and knob rows
-    read (editor/test/knob-rows.test.mjs picks the rows from the same file)."""
+    """The part of a served definition the editor's icon, subline, knob rows and
+    palette search read (editor/test/knob-rows.test.mjs and node-search.test.mjs
+    read the same file)."""
     return {
-        "id": d["id"], "kind": d["kind"], "category": d["category"],
+        "id": d["id"], "name": d["name"], "kind": d["kind"], "category": d["category"],
+        "summary": d["summary"],
         "icon": d["icon"], "subline": d["subline"],
         "inputs": [{"name": p["name"], "growable": p["growable"]} for p in d["inputs"]],
         "widgets": [{"name": w["name"], "kind": w["kind"], "label": w["label"],

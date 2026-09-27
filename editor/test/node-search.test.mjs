@@ -97,6 +97,15 @@ check("an id match ranks above a category match",
 check("a category match ranks above a summary match",
   names(rankNodes(REGISTRY, "inspect", PALETTE_ROWS)), ["Chat"]);
 
+// the served definitions (fixtures/core-nodes.json, kept equal to the registry
+// by tests/test_node_look.py): "sql" used to add Vector Store, whose summary
+// said "sqlite", ahead of Database and DB, all three tied on a summary word
+const SERVED = JSON.parse(readFileSync(resolve(here, "fixtures/core-nodes.json"), "utf8"));
+check("sql, over the served nodes: Database and DB first",
+  names(rankNodes(SERVED, "sql", PALETTE_ROWS)).slice(0, 2), ["Database", "DB"]);
+check("sql: Vector Store is not offered for it", names(rankNodes(SERVED, "sql", PALETTE_ROWS)).includes("Vector Store"), false);
+check("LLM, over the served nodes: the LLM node first", names(rankNodes(SERVED, "LLM", PALETTE_ROWS))[0], "LLM");
+
 check("the row limit cuts after ranking: one row is the best match",
   names(rankNodes(REGISTRY, "LLM", 1)), ["LLM"]);
 check("an empty query lists the registry in order, cut to the limit",

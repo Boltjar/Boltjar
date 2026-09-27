@@ -1,8 +1,10 @@
 [
  {
   "id": "core.value.text",
+  "name": "Text",
   "kind": "value",
   "category": "Values",
+  "summary": "A constant text block.",
   "icon": "text-outline",
   "subline": "text · {text|clip:16|or:empty}",
   "inputs": [],
@@ -22,8 +24,10 @@
  },
  {
   "id": "core.value.integer",
+  "name": "Integer",
   "kind": "value",
   "category": "Values",
+  "summary": "A constant integer.",
   "icon": "keypad-outline",
   "subline": "int · {number}",
   "inputs": [],
@@ -43,8 +47,10 @@
  },
  {
   "id": "core.value.float",
+  "name": "Float",
   "kind": "value",
   "category": "Values",
+  "summary": "A constant float.",
   "icon": "options-outline",
   "subline": "float · {number}",
   "inputs": [],
@@ -64,8 +70,10 @@
  },
  {
   "id": "core.value.boolean",
+  "name": "Boolean",
   "kind": "value",
   "category": "Values",
+  "summary": "A constant boolean.",
   "icon": "toggle-outline",
   "subline": "bool · {on|bool}",
   "inputs": [],
@@ -85,8 +93,10 @@
  },
  {
   "id": "core.value.image",
+  "name": "Image",
   "kind": "value",
   "category": "Values",
+  "summary": "An image source: an https URL, or a local file in user/data/files or examples/ (read into a data: URL).",
   "icon": "image-outline",
   "subline": "",
   "inputs": [],
@@ -106,8 +116,10 @@
  },
  {
   "id": "core.value.audio",
+  "name": "Audio",
   "kind": "value",
   "category": "Values",
+  "summary": "An audio source: an https URL, or a local file in user/data/files or examples/ (read into a data: URL). It works like Image.",
   "icon": "musical-notes-outline",
   "subline": "",
   "inputs": [],
@@ -127,8 +139,10 @@
  },
  {
   "id": "core.parse.tags",
+  "name": "Tag Parse",
   "kind": "transform",
   "category": "Data",
+  "summary": "Read inline [bracket] tags in text: emit a mood (the highest-priority mood tag), the display text with its tags shown as emoji, cut short or removed, and an action.",
   "icon": "pricetags-outline",
   "subline": "",
   "inputs": [
@@ -208,8 +222,10 @@
  },
  {
   "id": "core.text.strip",
+  "name": "Strip",
   "kind": "transform",
   "category": "Text",
+  "summary": "Clean text for TTS and more: drop emoji, markdown markers, [bracket] tags, *action* stage directions and URLs. Each cleaner has its own toggle, and the leftover whitespace collapses.",
   "icon": "backspace-outline",
   "subline": "",
   "inputs": [
@@ -278,8 +294,10 @@
  },
  {
   "id": "core.sensor.screen",
+  "name": "Screen Capture",
   "kind": "sensor",
   "category": "Sensors",
+  "summary": "Grab a fresh screenshot each time a node reads it (a live frame for a vision LLM).",
   "icon": "desktop-outline",
   "subline": "",
   "inputs": [],
@@ -332,8 +350,10 @@
  },
  {
   "id": "core.sensor.window",
+  "name": "Window Capture",
   "kind": "sensor",
   "category": "Sensors",
+  "summary": "Grab one window, found by a part of its title, fresh each time a node reads it. Windows only; empty elsewhere.",
   "icon": "browsers-outline",
   "subline": "",
   "inputs": [
@@ -391,8 +411,10 @@
  },
  {
   "id": "core.sensor.foreground",
+  "name": "Foreground Window",
   "kind": "sensor",
   "category": "Sensors",
+  "summary": "The focused window's title (and optionally the open-window list). Windows only; empty elsewhere.",
   "icon": "layers-outline",
   "subline": "",
   "inputs": [],
@@ -412,8 +434,10 @@
  },
  {
   "id": "core.sensor.clock",
+  "name": "Time",
   "kind": "sensor",
   "category": "Services",
+  "summary": "The current time, read fresh each time a node reads it. Pick the output format and timezone.",
   "icon": "time-outline",
   "subline": "clock · volatile",
   "inputs": [],
@@ -444,8 +468,10 @@
  },
  {
   "id": "core.trigger.interval",
+  "name": "Interval",
   "kind": "trigger",
   "category": "Triggers",
+  "summary": "Fire an event every N seconds.",
   "icon": "timer-outline",
   "subline": "every · {seconds}s",
   "inputs": [],
@@ -465,8 +491,10 @@
  },
  {
   "id": "core.trigger.schedule",
+  "name": "Schedule",
   "kind": "trigger",
   "category": "Triggers",
+  "summary": "Fire on a cron schedule: 'min hour day month weekday', in the zone its timezone knob picks. '0 9 * * *' fires daily at 09:00, '*/15 * * * *' every 15 minutes, '0 9 * * 1' on Mondays at 09:00. When both day fields are set, either one matches, as in standard cron. It checks each minute and emits a trigger and the firing time once per matching minute.",
   "icon": "alarm-outline",
   "subline": "",
   "inputs": [],
@@ -497,8 +525,10 @@
  },
  {
   "id": "core.trigger.manual",
+  "name": "Manual",
   "kind": "trigger",
   "category": "Triggers",
+  "summary": "Fires once when the graph turns On, and again whenever you press its Fire button.",
   "icon": "play-circle-outline",
   "subline": "manual · once",
   "inputs": [],
@@ -506,8 +536,10 @@
  },
  {
   "id": "core.trigger.chat",
+  "name": "Chat Input",
   "kind": "trigger",
   "category": "Triggers",
+  "summary": "Type a message and send it into the live graph.",
   "icon": "chatbubble-ellipses-outline",
   "subline": "chat · on send",
   "inputs": [],
@@ -527,8 +559,10 @@
  },
  {
   "id": "core.trigger.audio_in",
+  "name": "Audio Input",
   "kind": "trigger",
   "category": "Triggers",
+  "summary": "Send a microphone clip into the live graph while you hold to talk. Emits the audio and a trigger, the way Chat Input emits text. Feed the audio into an STT node to transcribe it.",
   "icon": "mic-circle-outline",
   "subline": "",
   "inputs": [],
@@ -548,8 +582,10 @@
  },
  {
   "id": "core.trigger.webhook",
+  "name": "Webhook",
   "kind": "trigger",
   "category": "Triggers",
+  "summary": "Listen for HTTP calls from outside. Fires when a POST or GET reaches {origin}/hook/{workflow}/{path}, and emits the body, json, headers and query.",
   "icon": "link-outline",
   "subline": "",
   "inputs": [],
@@ -591,8 +627,10 @@
  },
  {
   "id": "core.data.template",
+  "name": "Template",
   "kind": "transform",
   "category": "Data",
+  "summary": "Assemble text from {tag} pipes. Each {tag} is a wired input. Fire `trigger` to assemble it: `out` carries the text, then `trigger` passes on, so the node it fires reads the finished text. A node that reads `out` gets the current turn's text.",
   "icon": "document-text-outline",
   "subline": "template · {template|tags}",
   "inputs": [
@@ -621,8 +659,10 @@
  },
  {
   "id": "core.data.format_list",
+  "name": "Format List",
   "kind": "transform",
   "category": "Data",
+  "summary": "Turn a json list into text: render each item with a {field} template and join with a separator (one per line by default).",
   "icon": "receipt-outline",
   "subline": "",
   "inputs": [
@@ -658,8 +698,10 @@
  },
  {
   "id": "core.data.list",
+  "name": "List",
   "kind": "transform",
   "category": "Data",
+  "summary": "Assemble wired values into one list (the reverse of For-each). A new socket appears for each wire, and a null value is left out.",
   "icon": "list-outline",
   "subline": "",
   "inputs": [
@@ -672,8 +714,10 @@
  },
  {
   "id": "core.data.compute",
+  "name": "Compute",
   "kind": "transform",
   "category": "Data",
+  "summary": "Derive a value from an expression over the wired inputs. Compute calculates; Logic routes.",
   "icon": "calculator-outline",
   "subline": "compute · {expression|clip:14}",
   "inputs": [
@@ -698,8 +742,10 @@
  },
  {
   "id": "core.logic.condition",
+  "name": "Logic",
   "kind": "logic",
   "category": "Logic",
+  "summary": "Route a value true/false on an expression. Routes, never computes.",
   "icon": "git-branch-outline",
   "subline": "route · {expression|clip:14}",
   "inputs": [
@@ -728,8 +774,10 @@
  },
  {
   "id": "core.ai.llm",
+  "name": "LLM",
   "kind": "transform",
   "category": "AI",
+  "summary": "A chat / multimodal model. Reshapes its inputs, outputs, and params to the capabilities of the selected model. A provider failure fires `error` (with the message) instead of a reply.",
   "icon": "sparkles-outline",
   "subline": "{model|model}",
   "inputs": [
@@ -762,8 +810,10 @@
  },
  {
   "id": "core.ai.tool",
+  "name": "Tool",
   "kind": "transform",
   "category": "AI",
+  "summary": "A tool the LLM can call. It declares a name, a description and its parameters. When the model calls it, `call` carries the arguments into the body you wired, and the answer that comes back on `result` goes back to the model.",
   "icon": "construct-outline",
   "subline": "",
   "inputs": [
@@ -823,8 +873,10 @@
  },
  {
   "id": "core.ai.tool_args",
+  "name": "Tool Args",
   "kind": "transform",
   "category": "AI",
+  "summary": "Where a tool's body starts. It runs when the model calls the tool: it splits `call` into one typed output per argument and fires `trigger` to run the rest of the body. Its field names are also the tool's parameters (in auto mode the Tool builds its schema from them). Wire the body's answer back into the Tool's `result`.",
   "icon": "log-in-outline",
   "subline": "",
   "inputs": [
@@ -849,8 +901,10 @@
  },
  {
   "id": "core.ai.stt",
+  "name": "STT",
   "kind": "transform",
   "category": "AI",
+  "summary": "Speech to text. Picks a model from any connected STT provider (Fish Audio, ElevenLabs, xAI) the same way the LLM picks its model. `lang` carries the language the provider detected.",
   "icon": "mic-outline",
   "subline": "{model|model}",
   "inputs": [
@@ -879,8 +933,10 @@
  },
  {
   "id": "core.ai.tts",
+  "name": "TTS",
   "kind": "transform",
   "category": "AI",
+  "summary": "Text to speech. Picks a model from any connected TTS provider (Fish Audio, ElevenLabs, xAI) the same way the LLM picks its model. A wired `lang` overrides the language knob for providers that take one (xAI); Fish and ElevenLabs detect the language themselves and ignore it.",
   "icon": "volume-high-outline",
   "subline": "{model|model}",
   "inputs": [
@@ -913,8 +969,10 @@
  },
  {
   "id": "core.ai.embed",
+  "name": "Embed",
   "kind": "transform",
   "category": "AI",
+  "summary": "Turn text into an embedding vector. Picks an embed model (Ollama bge-m3 by default) the way the LLM picks its model. Fires on its trigger and emits the vector and a trigger for the next node.",
   "icon": "finger-print-outline",
   "subline": "",
   "inputs": [
@@ -943,8 +1001,10 @@
  },
  {
   "id": "core.ai.rerank",
+  "name": "Rerank",
   "kind": "transform",
   "category": "AI",
+  "summary": "Reorder candidates by how well each one answers the query, and keep the best. Picks a rerank model, served over HTTP at the address in its `endpoint` setting. When no rerank service answers, the node fails with an error instead of passing the candidates on unranked.",
   "icon": "podium-outline",
   "subline": "",
   "inputs": [
@@ -977,8 +1037,10 @@
  },
  {
   "id": "core.data.chunk",
+  "name": "Chunk",
   "kind": "transform",
   "category": "Data",
+  "summary": "Split text into overlapping chunks to embed and store. The output is a list; feed it through For-each.",
   "icon": "cut-outline",
   "subline": "",
   "inputs": [
@@ -1025,8 +1087,10 @@
  },
  {
   "id": "core.data.sentences",
+  "name": "Sentences",
   "kind": "transform",
   "category": "Data",
+  "summary": "Split text into a list of sentences (each ends on . ! ? ... or a new line). Feed it through For-each to send an LLM reply to TTS or Avatar one sentence at a time, so speech starts sooner.",
   "icon": "chatbox-outline",
   "subline": "",
   "inputs": [
@@ -1039,8 +1103,10 @@
  },
  {
   "id": "core.store.vectors",
+  "name": "Vector Store",
   "kind": "store",
   "category": "Store",
+  "summary": "A vector store kept in a file on this machine. Wire it into a Vectors node, which adds to it and searches it.",
   "icon": "planet-outline",
   "subline": "",
   "inputs": [],
@@ -1048,8 +1114,10 @@
  },
  {
   "id": "core.vectors",
+  "name": "Vectors",
   "kind": "transform",
   "category": "Store",
+  "summary": "Index and search an embedded vector store. The operation knob reshapes the knobs, inputs and outputs. Search takes one or more query embeddings, keeps each item's best score across them and returns the top k. It compares every stored vector by cosine similarity, which suits thousands of items.",
   "icon": "compass-outline",
   "subline": "",
   "inputs": [
@@ -1153,8 +1221,10 @@
  },
  {
   "id": "core.store.database",
+  "name": "Database",
   "kind": "store",
   "category": "Store",
+  "summary": "An embedded SQLite database. Emits a db connection other nodes use.",
   "icon": "server-outline",
   "subline": "",
   "inputs": [],
@@ -1174,8 +1244,10 @@
  },
  {
   "id": "core.db",
+  "name": "DB",
   "kind": "transform",
   "category": "Store",
+  "summary": "Read and write a SQLite store. The operation knob reshapes the knobs and outputs. Knobs are templates: {tag} pulls from a wired source and {{secret.X}} resolves a secret. In SQL a wired {tag} is bound as a parameter, so it is always a value, never SQL. An insert or update stores a data: URL value as text.",
   "icon": "grid-outline",
   "subline": "",
   "inputs": [
@@ -1267,8 +1339,10 @@
  },
  {
   "id": "core.data.parse",
+  "name": "Parse",
   "kind": "transform",
   "category": "Data",
+  "summary": "Parse JSON text into a structured value. A parse error comes back as data ({\"error\": ...}).",
   "icon": "code-download-outline",
   "subline": "",
   "inputs": [
@@ -1281,8 +1355,10 @@
  },
  {
   "id": "core.data.stringify",
+  "name": "Stringify",
   "kind": "transform",
   "category": "Data",
+  "summary": "Turn a value into JSON text, indented two spaces.",
   "icon": "code-working-outline",
   "subline": "",
   "inputs": [
@@ -1295,8 +1371,10 @@
  },
  {
   "id": "core.data.build",
+  "name": "Build JSON",
   "kind": "transform",
   "category": "Data",
+  "summary": "Build a JSON object from wired inputs: each input's port name becomes a key holding that input's value.",
   "icon": "extension-puzzle-outline",
   "subline": "",
   "inputs": [
@@ -1309,8 +1387,10 @@
  },
  {
   "id": "core.data.get",
+  "name": "Get",
   "kind": "transform",
   "category": "Data",
+  "summary": "Read the value at a dotted or bracket path (user.name, items.0.id). A missing path gives null.",
   "icon": "eyedrop-outline",
   "subline": "",
   "inputs": [
@@ -1335,8 +1415,10 @@
  },
  {
   "id": "core.data.split",
+  "name": "Split JSON",
   "kind": "transform",
   "category": "Data",
+  "summary": "Split a json object onto one output per configured key (the reverse of Build JSON): each key routes its value.",
   "icon": "trail-sign-outline",
   "subline": "",
   "inputs": [
@@ -1361,8 +1443,10 @@
  },
  {
   "id": "core.file.read",
+  "name": "Read File",
   "kind": "service",
   "category": "Files",
+  "summary": "Read a file's text from the sandbox, fresh each time a node reads it. A missing file reads as empty.",
   "icon": "document-outline",
   "subline": "",
   "inputs": [
@@ -1387,8 +1471,10 @@
  },
  {
   "id": "core.file.write",
+  "name": "Write File",
   "kind": "service",
   "category": "Files",
+  "summary": "Write text to a file in the sandbox on a trigger, creating its folders. Emits the file's path inside the sandbox.",
   "icon": "create-outline",
   "subline": "",
   "inputs": [
@@ -1421,8 +1507,10 @@
  },
  {
   "id": "core.file.append",
+  "name": "Append File",
   "kind": "service",
   "category": "Files",
+  "summary": "Append text to a file in the sandbox on a trigger, creating it if it is not there. Emits the file's path inside the sandbox.",
   "icon": "add-circle-outline",
   "subline": "",
   "inputs": [
@@ -1455,8 +1543,10 @@
  },
  {
   "id": "core.file.delete",
+  "name": "Delete File",
   "kind": "service",
   "category": "Files",
+  "summary": "Delete a file in the sandbox on a trigger. Deleting a file that is not there does nothing. Emits the file's path inside the sandbox.",
   "icon": "trash-outline",
   "subline": "",
   "inputs": [
@@ -1485,8 +1575,10 @@
  },
  {
   "id": "core.file.list",
+  "name": "List Dir",
   "kind": "service",
   "category": "Files",
+  "summary": "List the names in a folder of the sandbox, fresh each time a node reads it. A missing folder lists as empty. The default path is the sandbox itself.",
   "icon": "folder-open-outline",
   "subline": "",
   "inputs": [
@@ -1511,8 +1603,10 @@
  },
  {
   "id": "core.store.kv",
+  "name": "KV Store",
   "kind": "store",
   "category": "Store",
+  "summary": "A key-value store that keeps its values between runs. Wire it into the KV nodes that read and write it.",
   "icon": "archive-outline",
   "subline": "",
   "inputs": [],
@@ -1520,8 +1614,10 @@
  },
  {
   "id": "core.kv",
+  "name": "KV",
   "kind": "transform",
   "category": "Store",
+  "summary": "Read and write a key-value store. The operation knob reshapes the inputs and outputs. Knobs are templates: {tag} pulls from a wired source, {{secret.X}} resolves a secret.",
   "icon": "key-outline",
   "subline": "",
   "inputs": [
@@ -1596,8 +1692,10 @@
  },
  {
   "id": "core.state.meter",
+  "name": "Meter",
   "kind": "transform",
   "category": "State",
+  "summary": "A number that persists across fires and drifts toward `rest` at `rate` per second, worked out when it is read, with no timer running. Fire `nudge` to add `amount`, or `set` to overwrite it with `to` (both triggers must be wired); it always stays within `min` and `max`. Emits `value`, and a `crossed` event (up or down) when a fire moves it across `threshold`. Use it for a mood, energy or attention level.",
   "icon": "speedometer-outline",
   "subline": "",
   "inputs": [
@@ -1714,8 +1812,10 @@
  },
  {
   "id": "core.trigger.agenda",
+  "name": "Agenda",
   "kind": "trigger",
   "category": "Triggers",
+  "summary": "Fire from data instead of a fixed clock: poll a wired store table of {when, payload} rows and fire each row when its `when` is due. `when` is an ISO 8601 date and time, or a count of seconds since 1970 (Unix time). It fires `due` with the payload and emits `payload`, then marks the row done (or deletes it) so it never fires twice. Several due rows fire one at a time, earliest first.",
   "icon": "calendar-outline",
   "subline": "",
   "inputs": [
@@ -1751,8 +1851,10 @@
  },
  {
   "id": "core.net.http",
+  "name": "HTTP Request",
   "kind": "transform",
   "category": "Network",
+  "summary": "Call an external API. Fires on a trigger, fills in {{secret.NAME}} in the URL, headers and body, and puts each {tag} pipe's wired value in its place. The body goes as JSON, a form, multipart or raw text, whichever it looks like.",
   "icon": "globe-outline",
   "subline": "",
   "inputs": [
@@ -1836,8 +1938,10 @@
  },
  {
   "id": "core.output.log",
+  "name": "Log",
   "kind": "output",
   "category": "Inspect",
+  "summary": "Write the incoming value to the editor console and the server terminal.",
   "icon": "terminal-outline",
   "subline": "log · {label|clip:14}",
   "inputs": [
@@ -1862,8 +1966,10 @@
  },
  {
   "id": "core.output.preview",
+  "name": "Preview",
   "kind": "output",
   "category": "Inspect",
+  "summary": "Tap a wire and show its value live, drawn to suit its type. It sits mid-flow: when `trigger` fires it passes `in` on at `out`, then passes the trigger on.",
   "icon": "eye-outline",
   "subline": "preview · live tap",
   "inputs": [
@@ -1880,8 +1986,10 @@
  },
  {
   "id": "core.flow.wireless_in",
+  "name": "Wireless In",
   "kind": "transform",
   "category": "Flow",
+  "summary": "Broadcast any wires on a channel (1 to 100). A Wireless Out on the same channel mirrors them, like a virtual wire across the canvas.",
   "icon": "radio-outline",
   "subline": "",
   "inputs": [
@@ -1906,8 +2014,10 @@
  },
  {
   "id": "core.flow.wireless_out",
+  "name": "Wireless Out",
   "kind": "transform",
   "category": "Flow",
+  "summary": "Receive the wires broadcast by the Wireless In on the same channel (1 to 100). Its outputs mirror that In's sockets.",
   "icon": "wifi-outline",
   "subline": "",
   "inputs": [],
@@ -1927,8 +2037,10 @@
  },
  {
   "id": "core.flow.router",
+  "name": "Router",
   "kind": "transform",
   "category": "Flow",
+  "summary": "Reroute a wire anywhere on the canvas: one in, one out, no change. It is a pure bypass, so the wire keeps its source name and type even through several routers in a row. Optional centred label.",
   "icon": "return-down-forward-outline",
   "subline": "",
   "inputs": [
@@ -1953,8 +2065,10 @@
  },
  {
   "id": "core.flow.for_each",
+  "name": "For-each",
   "kind": "transform",
   "category": "Flow",
+  "summary": "Hand out a list one item at a time. Fire `trigger` to start, and wire the body's done back into `loop` to release the next (both triggers must be wired); `after_last` fires after the last item. Items can be of any type: text, images, files or JSON.",
   "icon": "repeat-outline",
   "subline": "",
   "inputs": [
@@ -1975,8 +2089,10 @@
  },
  {
   "id": "core.flow.changed",
+  "name": "Changed",
   "kind": "transform",
   "category": "Flow",
+  "summary": "Pass a value on only when it differs from the last one. Interval, HTTP Request, Changed and LLM in a row poll a source and run the LLM only on a real change. The first value always passes.",
   "icon": "funnel-outline",
   "subline": "",
   "inputs": [
@@ -1993,8 +2109,10 @@
  },
  {
   "id": "core.flow.sync",
+  "name": "Sync",
   "kind": "transform",
   "category": "Flow",
+  "summary": "A control barrier: it fires one trigger once every wired input has fired, then resets. It waits for the slowest branch, and `in` needs at least one wire. It touches no data; data rides its own wires.",
   "icon": "git-merge-outline",
   "subline": "",
   "inputs": [
@@ -2007,8 +2125,10 @@
  },
  {
   "id": "core.flow.wait",
+  "name": "Wait",
   "kind": "transform",
   "category": "Flow",
+  "summary": "Relay a trigger after a delay, one trigger out for each one in. Pick the amount and the unit; it paces a For-each loop or slows a chain.",
   "icon": "hourglass-outline",
   "subline": "",
   "inputs": [
@@ -2044,8 +2164,10 @@
  },
  {
   "id": "core.flow.queue",
+  "name": "Queue",
   "kind": "transform",
   "category": "Flow",
+  "summary": "Run many producers through one lane. Each arrival on `in` waits in a buffer, `out` releases one item, and the next goes only when `ack` fires, so two turns reach a shared LLM one after the other. Both triggers must be wired: the producers into `in`, and the node that ends the turn into `ack`.",
   "icon": "file-tray-stacked-outline",
   "subline": "",
   "inputs": [
@@ -2074,8 +2196,10 @@
  },
  {
   "id": "core.output.chat",
+  "name": "Chat",
   "kind": "output",
   "category": "Inspect",
+  "summary": "Show the running conversation: your message and the model's reply. A live viewer, like Preview, that keeps history. Each side commits when its trigger fires, so both triggers must be wired.",
   "icon": "chatbubbles-outline",
   "subline": "",
   "inputs": [
@@ -2100,8 +2224,10 @@
  },
  {
   "id": "core.output.avatar",
+  "name": "Avatar",
   "kind": "output",
   "category": "Output",
+  "summary": "Stream one avatar chunk per fire (text, audio, mood, action and lang) to an avatar client, such as a VRM renderer, listening on /stream. For one chunk per sentence, fire it once per sentence (a For-each over Sentences). Wire the separate ports or one combined `utterance` JSON; the separate ports win. Lip-sync stays on the client.",
   "icon": "happy-outline",
   "subline": "",
   "inputs": [
