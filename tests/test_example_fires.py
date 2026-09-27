@@ -156,8 +156,8 @@ def test_demo_one_fire_runs_the_llm_once(fires):
 
     asyncio.run(drive())
     assert not watch.trouble(), watch.trouble()
-    assert watch.fires().get("llm") == fires, "one LLM run per fire"
-    assert watch.fires().get("out") == fires, "one Log per fire"
+    assert watch.fires() == {"tpl": fires, "llm": fires, "out": fires}, \
+        "the Template, then the LLM, then the Log: each once per fire"
     assert len(watch.emits("llm", "response")) == fires, "one reply per fire"
     lines = watch.log_lines("out")
     assert len(lines) == fires and len(set(lines)) == 1, "one log line per fire"

@@ -306,8 +306,8 @@ export function concreteInputs(
     // --- a growable base: materialise named sockets ---
     if (def.id === TEMPLATE_ID) {
       const template = String(config.template ?? "");
-      // a declared port (the optional `trigger`) rendered above; its name is
-      // never a tag, so `{trigger}` in the string mints no second socket.
+      // a declared port (the `trigger` that fires the Template) rendered above;
+      // its name is never a tag, so `{trigger}` in the string mints no second socket.
       const tags = templateTags(def, template);
       const tagSet = new Set(tags);
       // one socket per tag, in template order; a connected tag shows as filled.

@@ -8,11 +8,14 @@ Two flows:
     its trigger inputs.
   - **data (pull):** when a node fires it PULLS its data inputs, evaluating the
     upstream pure-data subgraph on demand (memoized per turn; `volatile` sensors
-    re-read every pull). Pure data nodes (Text, Template, Compute, ...) never
-    fire on their own; they are evaluated when something needs them.
+    re-read every pull). Pure data nodes (Text, Compute, Format List, ...) have
+    no trigger and never fire; they are evaluated when something needs them. A
+    fired node's output is the value of its last fire.
 
-So `Text -> Template -> LLM.prompt` is pulled by the LLM when the LLM is
-triggered; the Template never sits on a clock.
+So `Text -> Compute -> LLM.prompt` is pulled by the LLM when the LLM is
+triggered; the Compute never sits on a clock. A Template has a trigger, so it
+runs when fired and passes the trigger on: `Chat -> Template -> LLM` assembles
+the prompt first, then fires the LLM, which reads it.
 
 Node execution surfaces (selected by Kind):
     VALUE / pulled data   def run(**inputs) -> dict        (or def value() -> dict)
@@ -289,8 +292,8 @@ class Runtime:
                 await _aw(inst.obj.open(inst.ctx))
         for inst in self.nodes.values():
             # every node that can FIRE gets a consumer: a fired node, and a pulled
-            # data node that declares a trigger input (Template), which sits in the
-            # control flow when that input is wired and is pulled otherwise.
+            # node that also declares a trigger input (a pack may), which fires
+            # through it as well as being evaluated on a pull.
             if inst.spec.kind != Kind.TRIGGER and (not inst.spec.pulled or inst.trigger_ports()):
                 self._tasks.append(asyncio.create_task(self._consume(inst)))
         for inst in self.nodes.values():
@@ -458,8 +461,8 @@ class Runtime:
             return cache[node_id].get(port)
         inputs = {name: self._pull_input(node_id, name, turn) for name in self._all_inputs(node_id)}
         _apply_promoted(inst.obj, inputs)
-        # a pull is not a fire: no trigger port fired, so a node that also fires
-        # (Template) never mistakes this evaluation for one (a stale value from
+        # a pull is not a fire: no trigger port fired, so a pulled node that
+        # also fires never mistakes this evaluation for one (a stale value from
         # its last fire would otherwise leak in).
         setattr(inst.obj, "_fired_port", None)
         if hasattr(inst.obj, "run"):
@@ -481,8 +484,8 @@ class Runtime:
         for dst, dst_port in self.edges_from.get((node_id, port), []):
             dst_inst = self.nodes[dst]
             if dst_inst.is_trigger(dst_port):
-                # a trigger input fires its node, a pulled data node included
-                # (a Template whose `trigger` is wired sits in the control flow).
+                # a trigger input fires its node, a pulled node that declares
+                # one included.
                 dst_inst.mailbox.put_nowait((dst_port, value, turn))
             elif not dst_inst.spec.pulled:
                 dst_inst.latch[dst_port] = value

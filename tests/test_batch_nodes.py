@@ -195,8 +195,9 @@ def test_for_each_fresh_epoch_repulls_per_item() -> None:
     # THE regression that matters: a For-each body that pulls a volatile counter
     # must see a DIFFERENT value per item. If `opens_turn` did not open a fresh
     # epoch, the body would fire on the loop's turn and read the same memoized
-    # pull for every item. The body is a Template that pulls the counter and the
-    # current item; an LLM (mock/echo) echoes the assembled body and loops back.
+    # pull for every item. The body is a Compute (pulled, memoized per turn) that
+    # pulls the counter and the current item; an LLM (mock/echo) echoes it and
+    # loops back.
     graph = {
         "nodes": [
             {"id": "a", "type": "core.value.text", "config": {"text": "A"}},
@@ -206,7 +207,8 @@ def test_for_each_fresh_epoch_repulls_per_item() -> None:
             {"id": "fire", "type": "core.trigger.manual"},
             {"id": "fe", "type": "core.flow.for_each", "config": {}},
             {"id": "ctr", "type": "test.volatile.counter", "config": {}},
-            {"id": "tpl", "type": "core.data.template", "config": {"template": "{item}#{count}"}},
+            {"id": "body", "type": "core.data.compute",
+             "config": {"expression": 'str(item) + "#" + str(count)'}},
             {"id": "llm", "type": "core.ai.llm", "config": {"model": "mock/echo"}},
             {"id": "log", "type": "core.output.log", "config": {"label": "body"}},
         ],
@@ -216,10 +218,10 @@ def test_for_each_fresh_epoch_repulls_per_item() -> None:
             {"src": "c", "src_port": "out", "dst": "lst", "dst_port": "item_2"},
             {"src": "lst", "src_port": "out", "dst": "fe", "dst_port": "list"},
             {"src": "fire", "src_port": "trigger", "dst": "fe", "dst_port": "trigger"},
-            # body: item + a fresh counter assembled by the Template, fed to the LLM.
-            {"src": "fe", "src_port": "item", "dst": "tpl", "dst_port": "item"},
-            {"src": "ctr", "src_port": "out", "dst": "tpl", "dst_port": "count"},
-            {"src": "tpl", "src_port": "out", "dst": "llm", "dst_port": "prompt"},
+            # body: item + a fresh counter joined by the Compute, fed to the LLM.
+            {"src": "fe", "src_port": "item", "dst": "body", "dst_port": "item"},
+            {"src": "ctr", "src_port": "out", "dst": "body", "dst_port": "count"},
+            {"src": "body", "src_port": "out", "dst": "llm", "dst_port": "prompt"},
             {"src": "fe", "src_port": "each", "dst": "llm", "dst_port": "trigger"},
             {"src": "llm", "src_port": "response", "dst": "log", "dst_port": "in"},
             # back-edge: the LLM's done releases the next item.

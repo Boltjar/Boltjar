@@ -121,7 +121,8 @@ def test_llm_uses_the_declared_model() -> None:
         "edges": [
             {"src": "p", "src_port": "out", "dst": "tpl", "dst_port": "persona"},
             {"src": "tpl", "src_port": "out", "dst": "llm", "dst_port": "prompt"},
-            {"src": "fire", "src_port": "trigger", "dst": "llm", "dst_port": "trigger"},
+            {"src": "fire", "src_port": "trigger", "dst": "tpl", "dst_port": "trigger"},
+            {"src": "tpl", "src_port": "trigger", "dst": "llm", "dst_port": "trigger"},
             {"src": "llm", "src_port": "response", "dst": "out", "dst_port": "in"},
         ],
     }

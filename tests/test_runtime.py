@@ -26,7 +26,8 @@ def logs(events: list[dict]) -> list[dict]:
 
 
 def test_llm_pulls_assembled_prompt() -> None:
-    # Manual fires the LLM; the LLM pulls the Template, which pulls the Texts.
+    # Manual fires the Template, which pulls the Texts, assembles and fires the
+    # LLM; the LLM pulls the assembled prompt.
     graph = {
         "nodes": [
             {"id": "sys", "type": "core.value.text", "config": {"text": "You are a helpful assistant."}},
@@ -40,7 +41,8 @@ def test_llm_pulls_assembled_prompt() -> None:
             {"src": "sys", "src_port": "out", "dst": "tpl", "dst_port": "system"},
             {"src": "usr", "src_port": "out", "dst": "tpl", "dst_port": "user"},
             {"src": "tpl", "src_port": "out", "dst": "llm", "dst_port": "prompt"},
-            {"src": "fire", "src_port": "trigger", "dst": "llm", "dst_port": "trigger"},
+            {"src": "fire", "src_port": "trigger", "dst": "tpl", "dst_port": "trigger"},
+            {"src": "tpl", "src_port": "trigger", "dst": "llm", "dst_port": "trigger"},
             {"src": "llm", "src_port": "response", "dst": "out", "dst_port": "in"},
         ],
     }

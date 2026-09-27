@@ -67,7 +67,7 @@ const DEFS = new Map([
     [port("trigger", "event", { trigger: true }), port("text", "text"), port("lang", "lang", { optional: true })],
     [port("audio", "audio"), port("trigger", "event")], [widget("model", "model", { default: "xai/tts" })]),
   def("core.data.template", "Template",
-    [port("trigger", "event", { trigger: true, optional: true }), port("tag", "any", { growable: true })],
+    [port("trigger", "event", { trigger: true }), port("tag", "any", { growable: true })],
     [port("out", "text"), port("trigger", "event")], [widget("template", "code", { default: "{in}", expand: true })]),
   def("core.net.http", "HTTP Request", [port("trigger", "event", { trigger: true }), tagBase("tag")],
     [port("status", "int"), port("body", "text"), port("json", "any"), port("trigger", "event")],

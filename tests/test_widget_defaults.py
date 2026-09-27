@@ -110,7 +110,8 @@ def test_node_attributes_carry_the_merged_value_too() -> None:
         ],
         "edges": [{"src": "txt", "src_port": "out", "dst": "tpl", "dst_port": "in"}],
     })
-    assert rt._pull_output("tpl", "out", rt.new_turn()) == "hi"
+    asyncio.run(rt._fire(rt.nodes["tpl"], "trigger", True, rt.new_turn()))
+    assert rt.nodes["tpl"].out_latch["out"] == "hi"
 
 
 # --------------------------------------------------------------- validation
@@ -122,7 +123,8 @@ def test_validation_accepts_the_in_tag_a_fresh_template_runs() -> None:
             {"id": "txt", "type": "core.value.text", "config": {"text": "hi"}},
             {"id": "tpl", "type": "core.data.template", "config": {}},
         ],
-        "edges": [{"src": "txt", "src_port": "out", "dst": "tpl", "dst_port": "in"}],
+        "edges": [{"src": "txt", "src_port": "out", "dst": "tpl", "dst_port": "in"},
+                  {"src": "m", "src_port": "trigger", "dst": "tpl", "dst_port": "trigger"}],
     }
     assert validate_graph(graph) == []
 

@@ -4,11 +4,12 @@
 // (src/lib/dynamicPorts.ts), transpiled with the installed TypeScript compiler
 // (its only imports are type-only). Run: `npm run test`.
 //
-// The Template declares an optional `trigger` input and a `trigger` output
-// (Chat History -> Template -> LLM: assemble, then pass the trigger on). Both
-// render as declared ports; `trigger` is never a {tag}, so a `{trigger}` in the
-// string, a trigger wire, or a source node named "trigger" dropped on the tag
-// ghost can never mint a tag socket that shadows the declared port.
+// The Template declares a `trigger` input (it fires the node, so it must be
+// wired) and a `trigger` output (Chat History -> Template -> LLM: assemble,
+// then pass the trigger on). Both render as declared ports; `trigger` is
+// never a {tag}, so a `{trigger}` in the string, a trigger wire, or a source
+// node named "trigger" dropped on the tag ghost can never mint a tag socket
+// that shadows the declared port.
 // ============================================================================
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -39,10 +40,10 @@ const port = (name, type, extra = {}) => ({
   name, type, growable: false, optional: false, trigger: false, ...extra,
 });
 const TEMPLATE = {
-  id: "core.data.template", name: "Template", kind: "transform", pulled: true, category: "Data",
+  id: "core.data.template", name: "Template", kind: "transform", pulled: false, category: "Data",
   version: "0.1.0", summary: "", colors: {},
   widgets: [{ name: "template", kind: "code", default: "{in}", options: [], label: "Template" }],
-  inputs: [port("trigger", "event", { trigger: true, optional: true }),
+  inputs: [port("trigger", "event", { trigger: true }),
            port("tag", "any", { growable: true })],
   outputs: [port("out", "text"), port("trigger", "event")],
 };
@@ -55,7 +56,7 @@ const trig = (ports) => ports.filter((p) => p.name === "trigger");
 const plain = ins({ template: "{persona} :: {msg}" }, ["trigger", "persona"]);
 check("inputs: trigger, the tags in template order, the ghost", names(plain), ["trigger", "persona", "msg", "tag·+"]);
 check("the trigger input is the declared event trigger (not a tag)",
-  trig(plain).map((p) => [p.type, p.trigger, p.optional, p.dynamic, !!p.stale]), [["event", true, true, false, false]]);
+  trig(plain).map((p) => [p.type, p.trigger, p.optional, p.dynamic, !!p.stale]), [["event", true, false, false, false]]);
 
 // ---- 2. `{trigger}` in the string is literal text, never a tag socket
 const literal = ins({ template: "{trigger} stays :: {msg}" }, ["trigger", "msg"]);

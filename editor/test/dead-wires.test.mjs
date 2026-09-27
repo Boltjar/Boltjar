@@ -62,7 +62,7 @@ const DEFS = [
   def("core.ai.tool", [], [port("call", "tool-call")], [widget("name", "text", "")]),
   def("core.output.preview", [port("in", "any", { trigger: true }), port("trigger", "event", { trigger: true, optional: true })],
     [port("out", "any"), port("trigger", "event")], [], { bypass: { in: "out", trigger: "trigger" } }),
-  def("core.data.template", [port("trigger", "event", { trigger: true, optional: true }), port("tag", "any", { growable: true })],
+  def("core.data.template", [port("trigger", "event", { trigger: true }), port("tag", "any", { growable: true })],
     [port("out", "text"), port("trigger", "event")], [widget("template", "code", "{in}")]),
   def("core.db", [trigger, port("db", "db"), port("tag", "any", { growable: true, optional: true, ghost_base: "tag" })],
     [opOut("rows", "json", ["query", "find"]), opOut("affected", "int", ["exec", "update", "delete"]),

@@ -1,11 +1,11 @@
-"""Template: a pull-only data node that can also sit in the control flow.
+"""Template: runs when its trigger fires, like every node with a trigger.
 
-With its optional `trigger` unwired, the Template is pure data: pulled by
-whatever consumes `out`, never self-firing. Wired (explicit, visible
-sequencing: Chat History -> Template -> LLM), a fire pulls the tags, assembles,
-and only then passes the trigger on: `out` first, then `trigger`, so a consumer
-fired by that trigger reads the finished text. `trigger` is a declared port,
-never a `{tag}`: a `{trigger}` in the string stays literal text.
+`trigger` must be wired (explicit, visible sequencing: Chat History ->
+Template -> LLM). A fire pulls the tags, assembles, and only then passes the
+trigger on: `out` first, then `trigger`, so a consumer fired by that trigger
+reads the finished text. A node that reads `out` without a fire gets the text
+of the last fire; it is never assembled again on a pull. `trigger` is a
+declared port, never a `{tag}`: a `{trigger}` in the string stays literal text.
 
 Real Runtime graphs; an LLM with no model runs the offline mock (no network).
 """
@@ -88,35 +88,26 @@ def test_llm_fired_by_the_template_reads_the_assembled_prompt_once_per_turn() ->
     assert _values(events, "tpl", "out") == ["Bot :: hi", "Bot :: again"]
 
 
-def test_unwired_trigger_keeps_the_template_pulled() -> None:
-    # today's behaviour: the LLM is fired elsewhere and pulls the Template, which
-    # never fires itself, so its `trigger` output never emits.
-    graph = {
+def test_a_pull_reads_the_last_fire_and_never_assembles_again() -> None:
+    rt = Runtime()
+    rt.build({
         "nodes": [
-            {"id": "persona", "type": "core.value.text", "config": {"text": "Bot"}},
-            {"id": "usr", "type": "core.value.text", "config": {"text": "hi"}},
-            {"id": "tpl", "type": "core.data.template", "config": {"template": "{persona} :: {msg}"}},
-            {"id": "m", "type": "core.trigger.manual"},
-            {"id": "llm", "type": "core.ai.llm", "config": {}},
-            {"id": "said", "type": "core.output.log", "config": {"label": "said"}},
-            {"id": "done", "type": "core.output.log", "config": {"label": "done"}},
+            {"id": "txt", "type": "core.value.text", "config": {"text": "hi"}},
+            {"id": "tpl", "type": "core.data.template", "config": {"template": "{msg}"}},
         ],
-        "edges": [
-            {"src": "persona", "src_port": "out", "dst": "tpl", "dst_port": "persona"},
-            {"src": "usr", "src_port": "out", "dst": "tpl", "dst_port": "msg"},
-            {"src": "tpl", "src_port": "out", "dst": "llm", "dst_port": "prompt"},
-            {"src": "m", "src_port": "trigger", "dst": "llm", "dst_port": "trigger"},
-            {"src": "llm", "src_port": "response", "dst": "said", "dst_port": "in"},
-            {"src": "tpl", "src_port": "trigger", "dst": "done", "dst_port": "in"},
-        ],
-    }
-    events = _run(graph)  # the Manual kicks once at startup
-    assert _logs(events, "said") == ["said: [mock] Bot :: hi"]
-    assert _values(events, "tpl", "trigger") == []
-    assert _logs(events, "done") == []
+        "edges": [{"src": "txt", "src_port": "out", "dst": "tpl", "dst_port": "msg"}],
+    })
+    assert rt._pull_output("tpl", "out", rt.new_turn()) is None, "nothing fired it yet"
+    asyncio.run(rt._fire(rt.nodes["tpl"], "trigger", True, rt.new_turn()))
+    assert rt._pull_output("tpl", "out", rt.new_turn()) == "hi"
+    # its tag changes, but only a fire assembles the text again.
+    rt.nodes["txt"].obj.text = "bye"
+    assert rt._pull_output("tpl", "out", rt.new_turn()) == "hi"
+    asyncio.run(rt._fire(rt.nodes["tpl"], "trigger", True, rt.new_turn()))
+    assert rt._pull_output("tpl", "out", rt.new_turn()) == "bye"
 
 
-def test_a_pull_after_a_fire_never_carries_the_trigger() -> None:
+def test_every_fire_passes_the_trigger_on() -> None:
     rt = Runtime()
     rt.build({
         "nodes": [
@@ -128,16 +119,11 @@ def test_a_pull_after_a_fire_never_carries_the_trigger() -> None:
     fired = asyncio.run(rt._invoke(rt.nodes["tpl"], "trigger", True,
                                    {"trigger": True, "tag": None, "msg": "hi"}))
     assert list(fired.items()) == [("out", "hi"), ("trigger", True)]
-    # a later pull (a fresh turn) assembles the text and carries no trigger: the
-    # fire just before must not leak into it.
-    assert rt._pull_output("tpl", "out", rt.new_turn()) == "hi"
-    assert rt._pull_output("tpl", "trigger", rt.new_turn()) is None
 
 
 def test_trigger_is_a_port_not_a_tag() -> None:
     # the chat's trigger carries the typed text as its payload; if `trigger` were
-    # treated as a tag, `{trigger}` would become that text. It stays literal on a
-    # fire and on a pull.
+    # treated as a tag, `{trigger}` would become that text. It stays literal.
     graph = {
         "nodes": [
             {"id": "chat", "type": "core.trigger.chat"},
@@ -151,11 +137,6 @@ def test_trigger_is_a_port_not_a_tag() -> None:
     }
     events = _run(graph, "hi")
     assert _values(events, "tpl", "out") == ["{trigger} stays :: hi"]
-
-    rt = Runtime()
-    rt.build(graph)
-    rt.nodes["chat"].out_latch.update({"text": "hi", "trigger": "hi"})
-    assert rt._pull_output("tpl", "out", rt.new_turn()) == "{trigger} stays :: hi"
 
 
 def test_validate_accepts_the_template_trigger_wires() -> None:
@@ -177,3 +158,6 @@ def test_validate_accepts_the_template_trigger_wires() -> None:
     # `trigger` is an event port, not a `{trigger}` tag: a text wire cannot land on it.
     graph["edges"][0] = {"src": "txt", "src_port": "out", "dst": "tpl", "dst_port": "trigger"}
     assert [p["kind"] for p in validate_graph(graph)] == ["type-mismatch"]
+    # and a Template whose trigger nothing fires can never run.
+    del graph["edges"][0]
+    assert [(p["node"], p["kind"]) for p in validate_graph(graph)] == [("tpl", "missing-input")]

@@ -130,6 +130,12 @@
     {
       "src": "chat",
       "src_port": "trigger",
+      "dst": "tpl",
+      "dst_port": "trigger"
+    },
+    {
+      "src": "tpl",
+      "src_port": "trigger",
       "dst": "llm",
       "dst_port": "trigger"
     },

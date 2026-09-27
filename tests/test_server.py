@@ -199,6 +199,7 @@ def test_validate_edges_accepts_valid_graph() -> None:
         {"id": "txt", "type": "core.value.text", "config": {"text": "hi"}},
         {"id": "tpl", "type": "core.data.template", "config": {"template": "{msg}"}},
     ], "edges": [
+        {"src": "m", "src_port": "trigger", "dst": "tpl", "dst_port": "trigger"},
         {"src": "txt", "src_port": "out", "dst": "tpl", "dst_port": "msg"},
     ]}
     assert validate_graph(graph) == []
