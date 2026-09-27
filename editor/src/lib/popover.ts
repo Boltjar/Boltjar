@@ -5,7 +5,12 @@
 // its height capped to that room (the list scrolls). It always touches the
 // button across `gap`, measured by the popover's real height, so a short list
 // never floats away from its button, whatever the canvas zoom. A button panned
-// out of view still gets a popover inside the viewport. Pure, so the node tests
+// out of view still gets a popover inside the viewport.
+//
+// While it stays open the popover keeps the side it opened on (`side`), so
+// typing in its search box never flips it across the button, and an upward
+// popover keeps the tallest height it has had (`heldHeight`), so its search
+// row, at the top, stays put while the results narrow. Pure, so the node tests
 // drive it.
 // ============================================================================
 
@@ -24,6 +29,9 @@ export interface PopoverRequest {
   gap: number;
   /** the least space kept between the popover and the viewport's edges. */
   margin: number;
+  /** the side it opened on, kept while it stays open. It is left only when the
+   *  button has moved (a pan) until that side has less than `minHeight`. */
+  side?: "down" | "up";
 }
 
 export interface PopoverPlacement {
@@ -44,7 +52,11 @@ export function placePopover(r: PopoverRequest): PopoverPlacement {
   const above = trigger.top - gap - margin;
   let side: "down" | "up";
   let height: number;
-  if (r.height <= below) {
+  const kept = r.side === "down" ? below : r.side === "up" ? above : -1;
+  if (r.side && kept >= Math.min(r.height, r.minHeight)) {
+    side = r.side;
+    height = Math.min(r.height, kept);
+  } else if (r.height <= below) {
     side = "down";
     height = r.height;
   } else if (r.height <= above) {
@@ -62,6 +74,15 @@ export function placePopover(r: PopoverRequest): PopoverPlacement {
   const against = side === "down" ? trigger.bottom + gap : trigger.top - gap - height;
   const top = clamp(against, margin, viewport.height - margin - height);
   return { left, top, width, maxHeight: height, side };
+}
+
+/** The height an open popover lays out at: its natural height, except that an
+ *  upward one never shrinks while open (`held` is the tallest it has been). Its
+ *  bottom sits on the button, so shrinking would move its top, and the search
+ *  row there, while the list narrows. A downward one hangs from the button and
+ *  shrinks from the bottom, so it keeps its natural height. */
+export function heldHeight(side: "down" | "up" | undefined, natural: number, held: number): number {
+  return side === "up" ? Math.max(natural, held) : natural;
 }
 
 /** `value` held inside [low, high]; `low` wins when the range is empty. */

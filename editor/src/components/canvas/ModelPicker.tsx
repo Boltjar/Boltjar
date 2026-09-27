@@ -31,7 +31,7 @@ import {
   updatedLine,
 } from "../../lib/modelMeta";
 import { useEditor } from "../../lib/editorContext";
-import { placePopover } from "../../lib/popover";
+import { heldHeight, placePopover } from "../../lib/popover";
 
 interface ModelPickerProps {
   /** every model the server lists; the picker keeps the runnable ones of `kind`. */
@@ -78,6 +78,7 @@ export function ModelPicker({
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const [rect, setRect] = useState<TriggerRect | null>(null);
 
   // close on outside-click / Escape. The panel is portaled out of rootRef, so we
@@ -106,7 +107,8 @@ export function ModelPicker({
     }
   }, [open, reloadModels]);
 
-  // measure the trigger in screen space and decide up/down (keeps the panel
+  // measure the trigger (the button itself, so the gap is the same at every
+  // zoom) in screen space and decide up/down (keeps the panel
   // on-screen). The trigger lives on a node inside React Flow's transformed
   // canvas, so panning/zooming moves it in screen space without firing any DOM
   // event we could hook. We re-measure on every animation frame while open and
@@ -117,7 +119,7 @@ export function ModelPicker({
     let raf = 0;
     let prev: TriggerRect | null = null;
     const tick = () => {
-      const el = rootRef.current;
+      const el = triggerRef.current;
       if (el) {
         const r = el.getBoundingClientRect();
         if (
@@ -143,9 +145,15 @@ export function ModelPicker({
   // The list scrolls when the panel is held shorter, so its full height is the
   // panel's height minus what the list shows plus all the list holds.
   const [panelH, setPanelH] = useState<number | null>(null);
+  // the side the panel opened on and the tallest it has been, both kept while
+  // it stays open (lib/popover), so typing in its search never moves it
+  const [openSide, setOpenSide] = useState<"down" | "up" | null>(null);
+  const [tallest, setTallest] = useState(0);
   useLayoutEffect(() => {
     if (!open) {
       if (panelH !== null) setPanelH(null);
+      if (openSide !== null) setOpenSide(null);
+      if (tallest !== 0) setTallest(0);
       return;
     }
     const panel = panelRef.current;
@@ -208,32 +216,48 @@ export function ModelPicker({
   // trigger, below it when the panel's measured height fits there, above it
   // otherwise, clamped to the viewport. Until the panel has been measured once
   // it is laid out hidden at its largest height, and measured before it paints.
+  // The first measured placement fixes the side for as long as it stays open,
+  // and an upward panel is held at its tallest, so its search row stays put.
   let panelStyle: CSSProperties | undefined;
   let dropClass: "down" | "up" = "down";
+  let placedH = 0;
   if (rect) {
+    const side = openSide ?? undefined;
     const place = placePopover({
       trigger: rect,
-      height: panelH ?? PANEL_MAX_H,
+      height: panelH === null ? PANEL_MAX_H : heldHeight(side, panelH, tallest),
       minWidth: PANEL_MIN_W,
       minHeight: PANEL_MIN_H,
       viewport: { width: window.innerWidth, height: window.innerHeight },
       gap: PANEL_GAP,
       margin: VIEWPORT_MARGIN,
+      side,
     });
     dropClass = place.side;
+    placedH = place.maxHeight;
     // the panel is portaled to <body> and fully positioned here via top/left, so
     // override the legacy .up/.down CSS that sets bottom/top (a leaked `bottom`
     // from .mp-panel.up would push a fixed panel above the viewport = invisible).
+    // An upward panel takes its whole height, so a shorter list leaves room at
+    // the bottom rather than pulling the search row down.
     panelStyle = {
       position: "fixed", left: place.left, width: place.width, top: place.top,
       right: "auto", bottom: "auto", maxHeight: place.maxHeight,
+      height: side === "up" ? place.maxHeight : undefined,
       visibility: panelH === null ? "hidden" : undefined,
     };
   }
+  // keep the side of the first measured placement, and the tallest height
+  useLayoutEffect(() => {
+    if (!open || panelH === null || !rect) return;
+    if (openSide === null) setOpenSide(dropClass);
+    if (placedH > tallest) setTallest(placedH);
+  });
 
   return (
     <div className={`modelpick ${variant}`} ref={rootRef}>
       <button
+        ref={triggerRef}
         type="button"
         className={`mp-trigger nodrag ${open ? "open" : ""} ${warn || status.state === "none" ? "missing" : ""}`}
         onClick={() => setOpen((o) => !o)}
