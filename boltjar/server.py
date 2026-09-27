@@ -1830,11 +1830,13 @@ def _find_webhook(runtime, path: str, method: str):
       - `spec.id == "core.trigger.webhook"`
       - `obj._node_cfg["path"]` (or the knob default) == request path
       - `obj._node_cfg["method"]` is "ANY" or == request method (uppercase).
-    Returns the NodeInstance or None.
+    Returns the NodeInstance or None. A knob converted to an input (a wired
+    `path`, `method` or `secret`) is read from its wire on every request.
     """
     for inst in runtime.nodes.values():
         if inst.spec.id != "core.trigger.webhook":
             continue
+        runtime.pull_knobs(inst.id)
         cfg = getattr(inst.obj, "_node_cfg", {}) or {}
         node_path = (cfg.get("path") if cfg.get("path") is not None
                      else getattr(inst.obj, "path", ""))
@@ -1875,6 +1877,12 @@ async def webhook_handler(slug: str, path: str, request: Request):
         runtime.log(node.id, f"ERROR {message}")
         return JSONResponse({"error": message}, status_code=503)
     secret_expected = _secrets.resolve_secrets(secret_cfg).strip()
+    if not secret_expected and (node.id, "secret") in runtime.edges_into:
+        # a wired secret that gives nothing (a source with no value yet, or one
+        # that failed) would turn the check off: refuse every call instead.
+        message = "Webhook secret is wired but has no value"
+        runtime.log(node.id, f"ERROR {message}")
+        return JSONResponse({"error": message}, status_code=503)
     if secret_expected:
         provided = request.headers.get("x-webhook-secret", "")
         # constant time, so the response timing never leaks how much matched.

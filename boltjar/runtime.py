@@ -155,6 +155,14 @@ class Ctx:
         self._carry = _NO_CARRY
         return carry
 
+    def pull_knobs(self) -> None:
+        """Pull the wired value of every knob this node converted to an input and
+        set it, as the runtime does before a node fires. A trigger runs on its own
+        clock instead of on a fire, so it calls this each time it reads its knobs
+        (before each wait, on each poll); the runtime also calls it once as the
+        trigger starts. An unwired converted knob keeps its own value."""
+        self._rt.pull_knobs(self.node_id)
+
     def wired_input_ports(self) -> set[str]:
         """The set of input port names that actually have a wire into this node,
         read from the live edge set. Sync uses this to count its wired `in_*`
@@ -329,6 +337,9 @@ class Runtime:
         failure is reported like any node error (log + node_error), never left
         for stop() to collect in silence."""
         try:
+            # a trigger is never fired, so nothing else sets a knob it converted
+            # to an input: read those wires before its loop reads its knobs.
+            self.pull_knobs(inst.id)
             await inst.obj.start(inst.ctx)
         except asyncio.CancelledError:
             pass
@@ -500,6 +511,32 @@ class Runtime:
             if types.compatible(out_type, grow.type):
                 found.append((src, src_port))
         return found
+
+    def pull_knobs(self, node_id: str) -> None:
+        """Set each knob `node_id` converted to an input (config.promoted) from
+        its wire, pulled on a fresh turn. A fire does this for a fired or pulled
+        node (_invoke, _pull_output); a trigger, which never fires, calls it
+        through Ctx.pull_knobs. A wire whose source fails leaves that knob at its
+        own value and reports the failure, like any node error."""
+        inst = self.nodes.get(node_id)
+        if inst is None:
+            return
+        cfg = getattr(inst.obj, "_node_cfg", None)
+        promoted = cfg.get("promoted") if isinstance(cfg, dict) else None
+        if not isinstance(promoted, (list, tuple)) or not promoted:
+            return
+        turn = self.new_turn()
+        inputs: dict[str, Any] = {}
+        for name in promoted:
+            if not isinstance(name, str):
+                continue
+            try:
+                inputs[name] = self._pull_input(node_id, name, turn)
+            except Exception as exc:
+                self.log(node_id, f"ERROR reading the wire into {name}: {exc!r}")
+                self._notify({"kind": "node_error", "node": node_id,
+                              "error": f"reading the wire into {name}: {exc!r}"})
+        _apply_promoted(inst.obj, inputs)
 
     def _pull_input(self, node_id: str, port: str, turn: int) -> Any:
         src = self.edges_into.get((node_id, port))

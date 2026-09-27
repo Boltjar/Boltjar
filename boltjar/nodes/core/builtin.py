@@ -675,7 +675,12 @@ class Interval:
     async def start(self, ctx):
         n = 0
         while ctx.alive:
-            await ctx.sleep(max(0.05, float(self.seconds)))
+            ctx.pull_knobs()  # a wired `seconds` is read before each wait
+            try:
+                seconds = float(self.seconds)
+            except (TypeError, ValueError):  # a wire that carries no number
+                seconds = float(self._knob_cfg["seconds"])
+            await ctx.sleep(max(0.05, seconds))
             n += 1
             ctx.emit("trigger", n)
 
@@ -768,6 +773,7 @@ class Schedule:
         last_minute = None
         seeded = False
         while ctx.alive:
+            ctx.pull_knobs()  # a wired `cron` or `timezone` is read at each check
             cfg = getattr(self, "_node_cfg", {}) or {}
             tz = cfg.get("timezone") or "Local"
             if tz and tz != "Local":
@@ -2574,6 +2580,7 @@ class Agenda:
 
     async def start(self, ctx):
         while ctx.alive:
+            ctx.pull_knobs()  # a wired `poll` or `table` is read at each poll
             try:
                 await self._poll_once(ctx)
             except Exception as exc:
