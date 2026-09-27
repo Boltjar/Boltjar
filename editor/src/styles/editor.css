@@ -420,8 +420,15 @@ button{font-family:inherit;}
 .canvas .react-flow__minimap-mask{fill:rgba(7,10,15,0.6);}
 .canvas .react-flow__minimap svg{border-radius:var(--radius-sm);}
 
-.canvas .react-flow__attribution{background:transparent; color:var(--ink-ghost); font-size:9px;}
-.canvas .react-flow__attribution a{color:var(--ink-ghost);}
+/* React Flow credit: bottom-left on the minimap's 16px inset, so it lines up
+   with the minimap and zoom cluster on the other side and overlaps neither.
+   Ghost ink until hovered. */
+.canvas .react-flow__attribution{
+  margin:0; left:var(--space-4); bottom:var(--space-4); padding:0; background:transparent;
+  font-family:var(--font-mono); font-size:var(--fs-micro); letter-spacing:var(--tr-mono); line-height:1;
+}
+.canvas .react-flow__attribution a{color:var(--ink-ghost); transition:color var(--dur-1) var(--ease-out);}
+.canvas .react-flow__attribution a:hover{color:var(--ink-dim);}
 
 /* ============================================================================
    RIGHT: INSPECTOR

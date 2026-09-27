@@ -420,7 +420,9 @@ export function Canvas(props: CanvasProps) {
           onOpenPalette();
         }}
         defaultEdgeOptions={{ type: "typed" }}
-        proOptions={{ hideAttribution: true }}
+        // the React Flow credit stays visible, bottom-left: the minimap and the
+        // zoom cluster own the bottom-right corner.
+        attributionPosition="bottom-left"
         // App owns Delete/Backspace (App.requestDelete) so store-node deletes get
         // the confirm. Disabling RF's built-in delete avoids it wiping nodes first.
         deleteKeyCode={null}
