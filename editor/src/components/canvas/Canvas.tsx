@@ -10,6 +10,7 @@ import {
   BackgroundVariant,
   MiniMap,
   ReactFlow,
+  getViewportForBounds,
   useReactFlow,
   type Connection,
   type EdgeChange,
@@ -33,6 +34,14 @@ import type { NodeDef } from "../../types/protocol";
 
 const nodeTypes: NodeTypes = { workflow: WorkflowNode };
 const edgeTypes: EdgeTypes = { typed: TypedEdge };
+
+/** A rectangle in flow coordinates. */
+export interface FlowBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
 
 /** What the canvas reports when something is right-clicked. */
 export interface CanvasMenuRequest {
@@ -73,6 +82,9 @@ interface CanvasProps {
   onConnectingChange: (info: { fromType: string; fromId: string } | null) => void;
   /** the canvas writes its fit-view callback here so the chrome can trigger it. */
   fitRef?: React.MutableRefObject<(() => void) | null>;
+  /** the canvas writes here how it brings a flow-space box into view: nothing
+   *  when the box is already in view, else a fit to it (Tidy up's last step). */
+  showRef?: React.MutableRefObject<((box: FlowBox, duration: number) => void) | null>;
   rejectionReason: string | null;
   loading: boolean;
   /** changes each time a graph is opened on the canvas, which frames it anew
@@ -127,6 +139,7 @@ export function Canvas(props: CanvasProps) {
     onContextRequest,
     onConnectingChange,
     fitRef,
+    showRef,
     rejectionReason,
     loading,
     viewKey,
@@ -366,6 +379,24 @@ export function Canvas(props: CanvasProps) {
   useEffect(() => {
     if (fitRef) fitRef.current = fitView;
   }, [fitRef, fitView]);
+
+  // bring a box into view: left alone when it is all visible already, else
+  // framed the way the Fit button frames the graph.
+  const show = useCallback((box: FlowBox, duration: number) => {
+    const el = wrapperRef.current;
+    if (!el || box.width <= 0 || box.height <= 0) return;
+    const { x, y, zoom } = rf.getViewport();
+    const w = el.clientWidth;
+    const h = el.clientHeight;
+    const visible = box.x * zoom + x >= 0 && box.y * zoom + y >= 0
+      && (box.x + box.width) * zoom + x <= w && (box.y + box.height) * zoom + y <= h;
+    if (visible) return;
+    const view = getViewportForBounds(box, w, h, 0.25, FIT_VIEW.maxZoom, FIT_VIEW.padding);
+    void rf.setViewport(view, { duration });
+  }, [rf]);
+  useEffect(() => {
+    if (showRef) showRef.current = show;
+  }, [showRef, show]);
 
   const nodeCount = nodes.length;
   void edges; // wire count is dropped from the overlay (low signal)

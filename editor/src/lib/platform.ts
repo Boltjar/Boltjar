@@ -21,3 +21,12 @@ export const MOD = IS_MAC ? "⌘" : "Ctrl";
 export function mod(key: string): string {
   return IS_MAC ? `${MOD}${key}` : `${MOD} ${key}`;
 }
+
+/**
+ * Format a Shift+Alt chord for display, e.g. altShift("T") -> "⌥⇧T" (mac) /
+ * "Shift Alt T" (Windows/Linux). The key is matched by its physical code, so
+ * macOS's Option characters (Option+Shift+T types a symbol) still reach it.
+ */
+export function altShift(key: string): string {
+  return IS_MAC ? `⌥⇧${key}` : `Shift Alt ${key}`;
+}

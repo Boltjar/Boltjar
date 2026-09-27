@@ -22,6 +22,10 @@ export const GROUP_COLORS: Record<string, string> = {
 const PADDING = 22;
 const BAR = 30;
 
+/** How far a group's box reaches past its members (see groupRect): the side
+ *  padding, the padding plus the title bar above, the padding below. */
+export const GROUP_BOX = { side: PADDING, top: PADDING + BAR, bottom: PADDING } as const;
+
 /** A node-like just needs a position + a measured/declared size. */
 interface RectNode {
   position: { x: number; y: number };

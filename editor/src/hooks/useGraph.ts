@@ -101,6 +101,13 @@ export interface GraphStore {
   recolorGroup: (id: string, color: string) => void;
   groupDragStart: () => void;
   moveGroup: (id: string, dx: number, dy: number) => void;
+  /** Move nodes to `positions` as ONE undo step (Tidy up), gliding there over
+   *  `duration` ms (0: at once); `onDone` runs once they are there. Marks the
+   *  graph unsaved, like any move. */
+  arrangeNodes: (
+    positions: Record<string, XYPosition>,
+    opts?: { duration?: number; onDone?: () => void },
+  ) => void;
 
   onNodesChange: (changes: NodeChange<WFNode>[]) => void;
   onEdgesChange: (changes: EdgeChange<WFEdge>[]) => void;
@@ -223,9 +230,23 @@ export function useGraph(
     return m;
   }, [problems]);
 
+  // an arrange (Tidy up) still gliding: its frame loop and where it ends.
+  const arranging = useRef<{ frame: number; target: Record<string, XYPosition> } | null>(null);
+  /** Stop a glide where it is (undo, redo and a load put their own positions). */
+  const stopArranging = () => {
+    if (!arranging.current) return;
+    cancelAnimationFrame(arranging.current.frame);
+    arranging.current = null;
+  };
+
   // ── history helpers ──
+  // a snapshot taken mid-glide records where the nodes are going, so redo
+  // after an undo lands on the finished layout, never a frame of the glide.
   const snapshot = useCallback((): Snapshot => ({
-    nodes: nodes.map((n) => ({ ...n, data: { ...n.data, config: { ...n.data.config } } })),
+    nodes: nodes.map((n) => {
+      const to = arranging.current?.target[n.id];
+      return { ...n, ...(to ? { position: { ...to } } : {}), data: { ...n.data, config: { ...n.data.config } } };
+    }),
     edges: edges.map((e) => ({ ...e })),
     graphName,
     groups: groups.map((g) => ({ ...g, members: [...g.members] })),
@@ -846,6 +867,55 @@ export function useGraph(
     markEdited();
   }, [groups, markEdited]);
 
+  const arrangeNodes = useCallback((
+    positions: Record<string, XYPosition>,
+    opts?: { duration?: number; onDone?: () => void },
+  ) => {
+    // a glide still running ends where it was going first
+    const running = arranging.current;
+    stopArranging();
+    const at = (n: WFNode) => running?.target[n.id] ?? n.position;
+    const from = new Map<string, XYPosition>();
+    for (const n of nodes) {
+      const to = positions[n.id];
+      const p = at(n);
+      if (to && (to.x !== p.x || to.y !== p.y)) from.set(n.id, { ...p });
+    }
+    if (from.size === 0) {
+      if (running) setNodes((prev) => prev.map((n) => (running.target[n.id] ? { ...n, position: { ...running.target[n.id] } } : n)));
+      opts?.onDone?.();
+      return;
+    }
+    commit();
+    setDirty(true);
+    const target: Record<string, XYPosition> = { ...(running?.target ?? {}), ...positions };
+    const place = (k: number) => setNodes((prev) => prev.map((n) => {
+      const to = target[n.id];
+      if (!to) return n;
+      const f = from.get(n.id);
+      if (!f || k >= 1) return n.position.x === to.x && n.position.y === to.y ? n : { ...n, position: { ...to } };
+      return { ...n, position: { x: f.x + (to.x - f.x) * k, y: f.y + (to.y - f.y) * k } };
+    }));
+    const duration = Math.max(0, opts?.duration ?? 0);
+    if (duration === 0) {
+      place(1);
+      opts?.onDone?.();
+      return;
+    }
+    const start = performance.now();
+    const step = (now: number) => {
+      const t = Math.min(1, (now - start) / duration);
+      place(1 - Math.pow(1 - t, 3)); // ease out
+      if (t < 1 && arranging.current) {
+        arranging.current.frame = requestAnimationFrame(step);
+      } else {
+        arranging.current = null;
+        opts?.onDone?.();
+      }
+    };
+    arranging.current = { frame: requestAnimationFrame(step), target };
+  }, [nodes, commit]);
+
   /** Splice a node onto an existing edge: src -> [new] -> dst (best-effort ports). */
   const insertOnEdge = useCallback((eid: string, typeId: string, at: XYPosition) => {
     const def = defs.get(typeId);
@@ -910,6 +980,7 @@ export function useGraph(
 
   const loadGraph = useCallback(
     (graph: Graph, opts?: { dirty?: boolean }) => {
+      stopArranging();
       const { nodes: rfNodes, edges: rfEdges } = projectGraph(graph, defs, models);
       setNodes(rfNodes);
       setEdges(rfEdges);
@@ -950,6 +1021,7 @@ export function useGraph(
   const setProblems = useCallback((p: Problem[]) => setProblemsState(p), []);
 
   const restore = useCallback((snap: Snapshot) => {
+    stopArranging();
     setNodes(snap.nodes.map((n) => ({ ...n, data: { ...n.data, config: { ...n.data.config } } })));
     setEdges(snap.edges.map((e) => ({ ...e })));
     setGraphNameState(snap.graphName);
@@ -1002,6 +1074,7 @@ export function useGraph(
     recolorGroup,
     groupDragStart,
     moveGroup,
+    arrangeNodes,
     onNodesChange,
     onEdgesChange,
     onConnect,

@@ -26,14 +26,17 @@ import { exportFileName, exportText, openedSlug, openFailedNotice, parseWorkflow
 import {
   freeSlug, graphSource, parseTabs, withTabClosed, withTabOpened, withTabRenamed, withTabSaved, type TabsState,
 } from "./lib/tabs";
-import { mod } from "./lib/platform";
+import { mod, altShift } from "./lib/platform";
+import { tidyGraph, type TidyNode } from "./lib/tidyLayout";
+import { tidyRoom } from "./lib/tidyRoom";
+import { concreteInputs, concreteOutputs } from "./lib/dynamicPorts";
 import { DOCS_URL, FEEDBACK_URL, SPONSOR_URL, bugReportUrl, copyText, diagnosticsText, openExternal, osName } from "./lib/help";
 import logoUrl from "./assets/boltjar-logo-dark.svg";
 import { CommandBar, type PowerPhase, type PrimaryAction } from "./components/CommandBar";
 import { NodeLibrary } from "./components/NodeLibrary";
 import { SavedWorkflowsPanel } from "./components/SavedWorkflowsPanel";
-import { Canvas, type CanvasMenuRequest } from "./components/canvas/Canvas";
-import { GROUP_COLORS } from "./components/canvas/GroupsLayer";
+import { Canvas, type CanvasMenuRequest, type FlowBox } from "./components/canvas/Canvas";
+import { GROUP_BOX, GROUP_COLORS } from "./components/canvas/GroupsLayer";
 import { NodeModal } from "./components/canvas/NodeModal";
 import { CommandPalette, type PaletteAction } from "./components/CommandPalette";
 import { ContextMenu, type MenuItem } from "./components/ContextMenu";
@@ -221,6 +224,7 @@ export default function App() {
     recolorGroup,
     groupDragStart,
     moveGroup,
+    arrangeNodes,
     onNodesChange,
     onEdgesChange,
     onConnect,
@@ -901,6 +905,61 @@ export default function App() {
     }
   }, [nodes]);
 
+  // ── Tidy up: lay the graph (or the 2+ selected nodes) out in columns that
+  //    follow the wires (lib/tidyLayout), from the nodes' measured sizes plus
+  //    the room kept below nodes that grow (lib/tidyRoom). One undo step; the
+  //    nodes glide there and the view follows when they left it. ──
+  const showRef = useRef<((box: FlowBox, duration: number) => void) | null>(null);
+  const tidyUp = useCallback(() => {
+    if (nodes.length < 2) return;
+    const scope = selectedIds.length >= 2 ? selectedIds : [];
+    const groupOf = new Map<string, string>();
+    for (const g of groups) for (const m of g.members) groupOf.set(m, g.id);
+    const manifests = [...new Set(models.values())];
+    const laid: TidyNode[] = nodes.map((n) => {
+      const def = defs.get(n.data.typeId);
+      const wired = connectedInputs.get(n.id) ?? new Set<string>();
+      const rows = (config: Record<string, unknown>) => (def
+        ? Math.max(concreteInputs(def, config, wired, models).length, concreteOutputs(def, config, models).length)
+        : 0);
+      return {
+        id: n.id,
+        x: n.position.x,
+        y: n.position.y,
+        width: n.measured?.width ?? n.width ?? 0,
+        height: n.measured?.height ?? n.height ?? 0,
+        room: def ? tidyRoom(def, n.data.config ?? {}, manifests, rows) : 0,
+        group: groupOf.get(n.id) ?? null,
+      };
+    });
+    // a Wireless In and the Outs on its channel are one wire to the layout,
+    // one that may share a column (the Out sits under its In, not after it)
+    const wires: Array<{ source: string; target: string; span?: number }> =
+      edges.map((e) => ({ source: e.source, target: e.target }));
+    for (const n of nodes) {
+      if (n.data.typeId !== WIRELESS_OUT_ID) continue;
+      const from = wirelessInOwners.get(String(n.data.config.channel ?? "1"));
+      if (from) wires.push({ source: from, target: n.id, span: 0 });
+    }
+    const moved = tidyGraph(laid, wires, scope, { groupPad: GROUP_BOX });
+    // what to keep in view: the tidied nodes and any node they pushed along
+    const shown = laid.filter((n) => scope.length === 0 || scope.includes(n.id) || moved[n.id]);
+    const at = (n: TidyNode) => moved[n.id] ?? { x: n.x, y: n.y };
+    const left = Math.min(...shown.map((n) => at(n).x));
+    const top = Math.min(...shown.map((n) => at(n).y));
+    const box = {
+      x: left,
+      y: top,
+      width: Math.max(...shown.map((n) => at(n).x + n.width)) - left,
+      height: Math.max(...shown.map((n) => at(n).y + n.height)) - top,
+    };
+    const still = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    arrangeNodes(moved, {
+      duration: still ? 0 : 260,
+      onDone: () => showRef.current?.(box, still ? 0 : 300),
+    });
+  }, [nodes, edges, groups, defs, models, connectedInputs, wirelessInOwners, selectedIds, arrangeNodes]);
+
   const menuItems: MenuItem[] = useMemo(() => {
     if (!menu) return [];
     if (menu.kind === "node" && menu.targetId) {
@@ -922,6 +981,7 @@ export default function App() {
         { id: "duplicate", label: multi ? `Duplicate ${selectedIds.length}` : "Duplicate", icon: "duplicate-outline", kbd: mod("D"), run: () => duplicateNode(id) },
         { id: "copy", label: "Copy", icon: "copy-outline", kbd: mod("C"), run: () => copySelection() },
         { id: "disable", label: disabled ? "Enable" : "Disable", icon: disabled ? "checkmark-circle" : "ban-outline", run: () => toggleDisabled(id) },
+        ...(multi ? [{ id: "tidy-selection", label: `Tidy up ${selectedIds.length}`, icon: "grid-outline", kbd: altShift("T"), run: tidyUp }] : []),
         // Group vs Ungroup, never both: a node already in a group only offers Ungroup.
         ...((groups.some((g) => (multi ? selectedIds : [id]).some((x) => g.members.includes(x))))
           ? [{ id: "ungroup", label: "Ungroup", icon: "remove-circle-outline", separatorBefore: true, run: () => ungroup(multi ? selectedIds : [id]) }]
@@ -956,10 +1016,11 @@ export default function App() {
       { id: "paste", label: "Paste", icon: "clipboard-outline", kbd: mod("V"), disabled: !hasClipboard(), run: () => paste(menu.flow) },
       { id: "selectall", label: "Select all", icon: "scan-outline", kbd: mod("A"), separatorBefore: true, run: () => selectAll() },
       { id: "fit", label: "Fit view", icon: "scan-outline", run: () => fitRef.current?.() },
+      { id: "tidy-canvas", label: "Tidy up", icon: "grid-outline", kbd: altShift("T"), disabled: nodes.length < 2, run: tidyUp },
     ];
     // beginGroupRename is a stable [] useCallback declared below; omit it from
     // deps (matches beginRename) to avoid a use-before-declaration reference.
-  }, [menu, disabledIds, selectedIds, groups, createGroup, ungroup, recolorGroup, duplicateNode, copySelection, toggleDisabled, deleteSelection, deleteNode, deleteEdge, requestDelete, hasClipboard, paste, selectAll, scaffoldsFor, scaffoldFromPort]);
+  }, [menu, disabledIds, selectedIds, groups, createGroup, ungroup, recolorGroup, duplicateNode, copySelection, toggleDisabled, deleteSelection, deleteNode, deleteEdge, requestDelete, hasClipboard, paste, selectAll, scaffoldsFor, scaffoldFromPort, tidyUp, nodes.length]);
 
   // ── tab handlers (open / activate / close) ──
   const activateTab = useCallback((slug: string) => {
@@ -1163,6 +1224,9 @@ export default function App() {
       } else if (mod && e.key.toLowerCase() === "d") {
         e.preventDefault();
         if (selectedId) duplicateNode(selectedId);
+      } else if (e.code === "KeyT" && e.altKey && e.shiftKey && !mod) {
+        e.preventDefault();
+        tidyUp();
       } else if (mod && e.key.toLowerCase() === "a") {
         e.preventDefault();
         selectAll();
@@ -1175,7 +1239,7 @@ export default function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [putGraph, undo, redo, copySelection, cut, paste, duplicateNode, selectAll, deleteSelection, requestDelete, selectedIds, selectedId, selectedIds.length]);
+  }, [putGraph, undo, redo, copySelection, cut, paste, duplicateNode, selectAll, deleteSelection, requestDelete, selectedIds, selectedId, selectedIds.length, tidyUp]);
 
   // ── help: one list feeds both the top bar's Help menu and the palette ──
   const copyDiagnostics = useCallback(async () => {
@@ -1261,13 +1325,23 @@ export default function App() {
       { id: "settings", label: "Open Settings", hint: "startup, providers and secrets", icon: "settings-outline", run: () => setSettingsTab(SETTINGS_LINKS.openSettings) },
       { id: "connections", label: "Open AI Providers", hint: "provider keys, endpoints and local models", icon: "git-network-outline", run: () => setSettingsTab(SETTINGS_LINKS.openConnections) },
       { id: "reset", label: "Reset to default graph", hint: "discard local edits", icon: "refresh-outline", run: () => { try { if (activeSlug) localStorage.removeItem(draftKey(activeSlug)); } catch { /* ignore */ } window.location.reload(); } },
+      ...(nodes.length >= 2
+        ? [{
+            id: "tidy",
+            label: "Tidy up",
+            hint: selectedIds.length >= 2 ? `lay out the ${selectedIds.length} selected nodes in columns` : "lay out the graph in columns, following the wires",
+            icon: "grid-outline",
+            kbd: altShift("T"),
+            run: tidyUp,
+          }]
+        : []),
       { id: "undo", label: "Undo", hint: "step back", icon: "arrow-undo-outline", kbd: mod("Z"), run: undo },
       { id: "redo", label: "Redo", hint: "step forward", icon: "arrow-redo-outline", kbd: mod("Y"), run: redo },
       { id: "clear", label: "Clear console", hint: "empty the log feed", icon: "trash-outline", run: socket.clearLog },
       ...fileActions,
       ...helpActions,
     ],
-    [socket.power, socket.resumeNotice, socket.clearLog, powerOn, powerOff, stopResuming, restart, undo, redo, activeSlug, fileActions, helpActions],
+    [socket.power, socket.resumeNotice, socket.clearLog, powerOn, powerOff, stopResuming, restart, undo, redo, activeSlug, fileActions, helpActions, nodes.length, selectedIds.length, tidyUp],
   );
 
   const selectedNode = nodes.find((n) => n.id === selectedId) ?? null;
@@ -1495,6 +1569,7 @@ export default function App() {
                 saving={saving}
                 onPrimary={() => void onPrimary()}
                 fitRef={fitRef}
+                showRef={showRef}
               />
             </ReactFlowProvider>
           ) : (
