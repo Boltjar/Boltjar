@@ -24,10 +24,27 @@ import { GeneralSettings } from "./GeneralSettings";
 
 // ── API shapes ──────────────────────────────────────────────────────────────
 
+/** Ollama on this computer (GET /api/connections, its entry's `local`). */
+interface OllamaLocal {
+  state: "running" | "stopped" | "not_installed";
+  /** where it is installed (~ for the home folder), null when it is not */
+  path: string | null;
+  /** it can be started from here (installed, stopped, on this computer) */
+  startable: boolean;
+  /** why it cannot, when it is installed but cannot */
+  reason: string | null;
+  /** this Boltjar started it, and stops it when it exits */
+  started_here: boolean;
+  /** where its output goes, relative to the install */
+  log: string;
+  download: string;
+}
+
 interface ProviderInfo {
   provider: string;
   connected: boolean;
   envVar: string | null;
+  local?: OllamaLocal;
 }
 
 interface ConnectionsResponse {
@@ -407,6 +424,64 @@ function OllamaPanel({ onRefetch: _onRefetch }: OllamaPanelProps) {
   );
 }
 
+// ── Ollama installed here but stopped: start it ─────────────────────────────
+
+interface OllamaStartProps {
+  local: OllamaLocal;
+  onStarted: () => void;
+}
+
+function OllamaStart({ local, onStarted }: OllamaStartProps) {
+  const { refreshModels } = useEditor();
+  const [starting, setStarting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function start() {
+    if (starting) return;
+    setStarting(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/connections/ollama/start", { method: "POST" });
+      if (!res.ok) throw new Error(await serverError(res));
+      onStarted();
+      void refreshModels(); // its installed models join the pickers
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setStarting(false);
+    }
+  }
+
+  return (
+    <div className="prov-add-key-form">
+      <div className="prov-ollama-note">
+        <Icon name="hardware-chip-outline" />
+        <span>Installed{local.path ? ` at ${local.path}` : ""}, not running</span>
+      </div>
+      {local.startable ? (
+        <button type="button" className="conn-save-btn" onClick={() => void start()} disabled={starting}>
+          <Icon name={starting ? "sync-outline" : "play-circle-outline"} />
+          {starting ? "Starting…" : "Start Ollama"}
+        </button>
+      ) : (
+        local.reason && <div className="prov-add-key-hint">{local.reason}</div>
+      )}
+      <div className="prov-add-key-footer">
+        <span className="prov-add-key-hint">
+          Boltjar stops it again when it exits. Its output goes to {local.log}.
+        </span>
+      </div>
+      {error && <div className="insp-problem">{error}</div>}
+    </div>
+  );
+}
+
+const OLLAMA_STATUS: Record<OllamaLocal["state"], string> = {
+  running: "CONNECTED",
+  stopped: "NOT RUNNING",
+  not_installed: "NOT INSTALLED",
+};
+
 function providerMeta(provider: string): ProviderMeta {
   return (
     PROVIDER_META[provider.toLowerCase()] ?? {
@@ -472,7 +547,12 @@ function ProviderCard({ info, onRefetch }: ProviderCardProps) {
   const [error, setError] = useState<string | null>(null);
   const [confirmRemove, setConfirmRemove] = useState(false);
 
-  const statusLabel = info.connected ? "CONNECTED" : "NOT CONNECTED";
+  // Ollama says which of its three states it is in; a cloud provider is
+  // connected once its key is set.
+  const ollamaState: OllamaLocal["state"] | null = meta.isLocal
+    ? (info.connected ? "running" : info.local?.state ?? "not_installed")
+    : null;
+  const statusLabel = ollamaState ? OLLAMA_STATUS[ollamaState] : info.connected ? "CONNECTED" : "NOT CONNECTED";
   const statusCls = info.connected ? "power-on" : "power-off";
 
   async function saveKey() {
@@ -558,11 +638,22 @@ function ProviderCard({ info, onRefetch }: ProviderCardProps) {
         )}
 
         {isOllama ? (
-          info.connected ? (
+          ollamaState === "running" ? (
             // Ollama connected: show pull UI + local library
-            <OllamaPanel onRefetch={onRefetch} />
+            <>
+              {info.local?.started_here && (
+                <div className="prov-ollama-note">
+                  <Icon name="information-circle-outline" />
+                  <span>Started by Boltjar, which stops it again when it exits</span>
+                </div>
+              )}
+              <OllamaPanel onRefetch={onRefetch} />
+            </>
+          ) : ollamaState === "stopped" && info.local ? (
+            // installed here, not running: start it
+            <OllamaStart local={info.local} onStarted={onRefetch} />
           ) : (
-            // Ollama not running: show install note
+            // Ollama not installed: the official download page
             <div className="prov-ollama-note">
               <Icon name="hardware-chip-outline" />
               <span>
