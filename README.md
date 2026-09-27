@@ -10,6 +10,8 @@ Boltjar is a visual, node-based builder for always-on systems. Every trigger, mo
 
 The start script creates `.venv`, installs `requirements.txt` whenever the file changes, builds the editor when it is missing, then starts the server and opens http://127.0.0.1:8770. Ctrl+C stops it: every running graph is turned off cleanly on the way out.
 
+**Startup settings:** the gear in the top bar opens Settings on its General tab, with three options that stay off until you turn them on. **Launch with system** starts Boltjar when you log in, without opening the browser, through one entry in your own account (a `Boltjar.cmd` in the Windows Startup folder, `~/Library/LaunchAgents/link.boltjar.plist` on macOS, `~/.config/autostart/boltjar.desktop` on Linux); turning it off deletes that file, and it can be changed only from this computer. **Start Ollama with Boltjar** starts an installed Ollama that is not running, and Boltjar stops it again when it exits. **Resume workflows after launch** turns back On the graphs that were On when Boltjar last stopped, as they ran; one that no longer validates stays Off and the editor says why.
+
 In the editor, hit **On** and type in the Chat Input node (the `chat` example graph loads by default).
 
 **Updating:** `update.bat` or `./update.sh` pulls the latest code (fast-forward only), rebuilds the editor when it changed, and starts Boltjar.
@@ -25,6 +27,7 @@ Arguments given to the start script pass through to `python -m boltjar serve`, f
 | `--port 8771` | listen on another port (the default is 8770) |
 | `--no-browser` | do not open the editor in a browser |
 | `--verbose` | also print the web server's own lines, every request and full tracebacks |
+| `--no-resume` | leave Off, for this launch only, the graphs that were On when Boltjar last stopped (with **Resume workflows after launch** on, they are turned back On) |
 | `--host 0.0.0.0 --allow-remote` | listen where other machines can reach it. Another machine opens `http://<name>:8770/?token=<token>` once, with a name the boot checklist lists and the token from `user/data/token`; bound to one address (`--host 192.168.1.20`), the ready line prints that link itself. Any host but loopback is refused without `--allow-remote`, and [SECURITY.md](SECURITY.md#exposing-the-server) says to keep it on loopback |
 
 ### Manual setup

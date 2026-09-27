@@ -39,11 +39,13 @@ npm run build --prefix editor
 
 `requirements-dev.txt` installs everything in `requirements.txt` plus pytest. The commands on this page assume the venv is active. If PowerShell refuses to run `Activate.ps1`, call the venv's Python directly instead: `.\.venv\Scripts\python.exe -m ...`.
 
-Start the server. It opens the editor at http://127.0.0.1:8770 (`--no-browser` skips that, `--verbose` prints every request and full tracebacks):
+Start the server. It opens the editor at http://127.0.0.1:8770 (`--no-browser` skips that, `--verbose` prints every request and full tracebacks, `--no-resume` leaves Off the graphs that were On when it last stopped):
 
 ```
 python -m boltjar serve
 ```
+
+The startup settings (Settings > General) act only when Boltjar starts through `python -m boltjar serve` or the start scripts: once the ready line is out, it starts Ollama, refreshes the local model lists and resumes the graphs that were On. A server started with `uvicorn boltjar.server:app` does none of that. Tests never write a real login entry or run Ollama: `tests/conftest.py` points the settings, the resume record and the autostart account at a temporary folder.
 
 The server serves the built editor from `editor/dist`, so rebuild after an editor change. For hot reload while you work on the editor, keep the server running, start Vite in a second terminal and open http://localhost:5173. Vite forwards `/api` and `/ws` to port 8770.
 

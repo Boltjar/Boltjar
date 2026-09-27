@@ -48,7 +48,9 @@ else made can:
   that takes a secret, HTTP Request's URL, headers and body included.
 
 Read a graph before you press **On**. A graph keeps running after you close
-the browser tab; only stopping the server stops it.
+the browser tab; only stopping the server stops it. With **Resume workflows
+after launch** on (Settings, General), a graph that was On when the server
+stopped starts again at the next launch, with nobody pressing On.
 
 Treat webhook bodies, chat messages, HTTP responses and LLM output as
 untrusted. The DB node binds a wired `{tag}` as a value, never as SQL, but a
@@ -71,6 +73,11 @@ adds the bind address). A proxy that rewrites the `Host` to `127.0.0.1` and adds
 no `X-Forwarded-For` makes every client it serves look like a browser on this
 machine, and each one gets the cookie. Never port-forward or tunnel the whole
 server.
+
+**Launch with system** writes a login entry that runs Boltjar on this computer,
+so only a browser on this computer can turn it on or off. A browser on another
+machine (through the token link, or a proxy that passes on the original `Host`
+or an `X-Forwarded-For`) sees the setting but cannot change it.
 
 To receive webhooks, expose only `/hook/*`. Those routes skip the token and
 host checks because outside services call them, so give every Webhook node a
