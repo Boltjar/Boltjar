@@ -3058,9 +3058,10 @@ class Sync:
             self._seen.add(fired)
         ctx = getattr(self, "_ctx", None)
         wired = ctx.wired_input_ports() if ctx is not None else set(ins)
-        # count only this node's `in`/`in_*` trigger sockets (the growable base),
-        # so a future static input would not be miscounted as a branch.
-        total = sum(1 for p in wired if p == "in" or p.startswith("in"))
+        # every socket of the growable `in` is a branch, whatever its name, found
+        # the way the runtime fires it (NodeSpec.growable_base), so a future
+        # static input would not be miscounted as one.
+        total = sum(1 for p in wired if self._spec.growable_base(p) is not None)
         if total > 0 and len(self._seen) >= total:
             self._seen = set()
             return {"out": True}

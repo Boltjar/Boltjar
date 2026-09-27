@@ -303,6 +303,35 @@ def test_sync_barrier_real_fire_path() -> None:
     assert len(fired) == 1, f"Sync fires once when both loops finish, got {len(fired)}"
 
 
+def test_sync_counts_a_socket_whatever_it_is_named() -> None:
+    # validation and the runtime take any socket of `in` as a branch (a graph
+    # written by hand may name one `left`), so the barrier counts it too.
+    events: list[dict] = []
+    rt = Runtime(observer=events.append)
+    rt.build({
+        "nodes": [{"id": "a", "type": "core.trigger.chat"},
+                  {"id": "b", "type": "core.trigger.chat"},
+                  {"id": "sy", "type": "core.flow.sync", "config": {}},
+                  {"id": "out", "type": "core.output.log", "config": {"label": "both"}}],
+        "edges": [{"src": "a", "src_port": "trigger", "dst": "sy", "dst_port": "left"},
+                  {"src": "b", "src_port": "trigger", "dst": "sy", "dst_port": "in0"},
+                  {"src": "sy", "src_port": "out", "dst": "out", "dst_port": "in"}],
+    })
+
+    async def drive() -> list[str]:
+        await rt.run()
+        rt.send_chat("a", "x")
+        await asyncio.sleep(0.05)
+        early = [e["message"] for e in events if e["kind"] == "log"]
+        rt.send_chat("b", "y")
+        await asyncio.sleep(0.05)
+        await rt.stop()
+        return early
+
+    assert asyncio.run(drive()) == [], "one of two branches: keep waiting"
+    assert [e["message"] for e in events if e["kind"] == "log"] == ["both: True"]
+
+
 def test_sync_no_wired_ins_never_fires() -> None:
     rt = Runtime()
     rt.build({"nodes": [{"id": "sy", "type": "core.flow.sync", "config": {}}], "edges": []})
