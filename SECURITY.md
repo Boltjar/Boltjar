@@ -28,9 +28,10 @@ They do not keep out other accounts on this machine: anyone who can connect to
 `127.0.0.1` can ask for the cookie. Do not run Boltjar on a machine you share
 with people you do not trust.
 
-Browsers send a cookie to every port of the host that set it, so every local web
-server your browser visits at `127.0.0.1` or `localhost` receives the Boltjar
-cookie. A server that keeps it can call the API with the editor's full access.
+Browsers send a cookie to every port of the host name that set it, so every
+other local web server you open under the editor's host name (`127.0.0.1` or
+`localhost`, whichever you use) receives the Boltjar cookie. A server that keeps
+it can call the API with the editor's full access.
 
 ## A graph is code
 
@@ -43,7 +44,8 @@ else made can:
   Window);
 - call any URL with HTTP Request, including `localhost`, your LAN and cloud
   metadata addresses;
-- send your keys anywhere, since `{{secret.NAME}}` resolves inside any field.
+- send your keys anywhere, since `{{secret.NAME}}` resolves inside every field
+  that takes a secret, HTTP Request's URL, headers and body included.
 
 Read a graph before you press **On**. A graph keeps running after you close
 the browser tab; only stopping the server stops it.
