@@ -11,6 +11,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "../lib/icons";
 import { useSecrets } from "../hooks/useSecrets";
+import { useAutoGrow } from "../lib/useAutoGrow";
 
 interface SecretAutocompleteFieldProps {
   value: string;
@@ -20,8 +21,8 @@ interface SecretAutocompleteFieldProps {
   rows?: number;
   /** when true, the inline textarea auto-grows to its content (caps at 320px). */
   inline?: boolean;
-  /** auto-grow the inline textarea to its content. Off for an `expand` field whose
-   *  height is driven by the node's resize/flex layout (so the two don't fight). */
+  /** auto-grow the inline textarea to its content. Off for an `expand` field on a
+   *  resized node, whose height the node's flex layout drives (so the two don't fight). */
   autoGrow?: boolean;
   /** when set, a single `{` opens a TAGS popover with these suggestions (the
    *  source nodes wired into a Template-shaped node, like the HTTP `tag` port). */
@@ -153,19 +154,8 @@ export function SecretAutocompleteField({
     }
   };
 
-  useLayoutEffect(() => {
-    if (!multiline || !inline || !autoGrow) return;
-    const el = ref.current as HTMLTextAreaElement | null;
-    if (!el) return;
-    // grow to content, capped generously (then the textarea scrolls internally).
-    const fit = () => { el.style.height = "auto"; el.style.height = `${Math.min(el.scrollHeight + 2, 320)}px`; };
-    fit();
-    // recompute when the textarea width changes (node mount/resize re-wraps the
-    // text), so the last line is never left clipped behind an internal scroll.
-    const ro = new ResizeObserver(fit);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [draft, multiline, inline]);
+  // grow to content (lib/useAutoGrow), re-fit when a resize re-wraps the text.
+  useAutoGrow(ref, multiline && inline && autoGrow, draft);
 
   const onChangeEvt = (e: React.ChangeEvent<HTMLTextAreaElement | HTMLInputElement>) => {
     emit(e.target.value);

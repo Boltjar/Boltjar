@@ -282,13 +282,20 @@ button{font-family:inherit;}
 .node.resizable{width:100%; height:100%; display:flex; flex-direction:column;}
 .node.resizable .node-head, .node.resizable .ports, .node.resizable .node-foot{flex:none;}
 .node.resizable .node-special, .node.resizable .node-body{flex:1 1 auto; min-height:0; display:flex; flex-direction:column; overflow:hidden;}
-/* only an `expand` code field (and the Template's single field) takes the extra
-   height; several expand fields split it proportionally. Every non-expand field
-   keeps its natural height (flex:none) so knobs/short fields are never squeezed. */
-.node.resizable .ib.code.expand, .node.resizable .tplfield{flex:1 1 0; min-height:64px; display:flex; flex-direction:column; overflow:hidden;}
+/* With no saved size (no .sized) the node sits at its natural height: every
+   field keeps its own height and each text surface is as tall as its text
+   (lib/useAutoGrow, capped, then it scrolls), so nothing is cut by the card.
+   With a saved size (.sized) only an `expand` code field (and the Template's
+   single field) takes the extra height, several expand fields splitting it
+   proportionally; every non-expand field keeps its natural height (flex:none)
+   so knobs and short fields are never squeezed. */
+.node.resizable .ib.code.expand, .node.resizable .tplfield{flex:none; display:flex; flex-direction:column;}
 .node.resizable .ib.code:not(.expand){flex:none;}
 .node.resizable .ib.code.expand textarea, .node.resizable .tplfield textarea,
-.node.resizable .ib.code.expand .secret-ac, .node.resizable .ib.code.expand .secret-ac textarea{flex:1 1 0; max-height:none; min-height:0;}
+.node.resizable .ib.code.expand .secret-ac textarea{max-height:none;}
+.node.resizable.sized .ib.code.expand, .node.resizable.sized .tplfield{flex:1 1 0; min-height:64px; overflow:hidden;}
+.node.resizable.sized .ib.code.expand textarea, .node.resizable.sized .tplfield textarea,
+.node.resizable.sized .ib.code.expand .secret-ac, .node.resizable.sized .ib.code.expand .secret-ac textarea{flex:1 1 0; min-height:0;}
 /* the Preview / Chat bodies grow to fill a resized node too (not just text blocks) */
 .node.resizable .node-special{flex:1 1 auto; min-height:0; display:flex; flex-direction:column;}
 /* knob rows under a surface keep their own height; the surface takes the rest */
@@ -1831,12 +1838,14 @@ button{font-family:inherit;}
    HTTP url or a secret token wants left-aligned text. Override here. */
 .secret-ac{position:relative; width:100%; display:flex; flex-direction:column;}
 /* needs `.node-body .ib` in the selector to outweigh the generic
-   `.node-body .ib input{text-align:right}` knob rule. */
+   `.node-body .ib input{text-align:right}` knob rule. The field keeps the
+   height it is given (lib/useAutoGrow sets it to its text); only a resized
+   node's expand field stretches it (the .sized rule). */
 .node-body .ib .secret-ac input,
 .node-body .ib .secret-ac textarea,
 .secret-ac input,
 .secret-ac textarea{
-  flex:1; min-width:0; width:100%; background:none; border:none; outline:none;
+  flex:none; min-width:0; width:100%; background:none; border:none; outline:none;
   text-align:left; font-family:var(--font-mono); font-size:var(--fs-xs);
   color:var(--ink); caret-color:var(--accent); resize:none; padding:2px 0;
 }

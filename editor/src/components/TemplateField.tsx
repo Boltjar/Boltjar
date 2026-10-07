@@ -9,6 +9,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "../lib/icons";
+import { useAutoGrow } from "../lib/useAutoGrow";
 
 interface TemplateFieldProps {
   value: string;
@@ -18,7 +19,7 @@ interface TemplateFieldProps {
   rows?: number;
   /** compact styling for the node body vs the inspector. */
   variant?: "inline" | "inspector";
-  /** the node is resizable: fill its height instead of auto-growing to content. */
+  /** the node was given a height (a resized node): fill it instead of growing to content. */
   fill?: boolean;
   placeholder?: string;
 }
@@ -145,14 +146,9 @@ export function TemplateField({
     }
   };
 
-  // auto-grow the inline textarea to its content (keeps the node compact).
-  useLayoutEffect(() => {
-    if (variant !== "inline" || fill) return;
-    const el = taRef.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 132)}px`;
-  }, [draft, variant, fill]);
+  // auto-grow the inline textarea to its content (lib/useAutoGrow), unless it
+  // fills a resized node's height.
+  useAutoGrow(taRef, variant === "inline" && !fill, draft);
 
   return (
     <div className={`tplfield ${variant}`}>

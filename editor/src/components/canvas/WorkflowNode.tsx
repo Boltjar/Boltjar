@@ -11,7 +11,7 @@
 //   • a status footer reflecting live run telemetry.
 // ============================================================================
 import { memo, useEffect, useRef, useState, type CSSProperties } from "react";
-import { Handle, NodeResizer, Position, useReactFlow, useUpdateNodeInternals, type NodeProps } from "@xyflow/react";
+import { Handle, NodeResizer, Position, useInternalNode, useReactFlow, useUpdateNodeInternals, type NodeProps } from "@xyflow/react";
 import type { Widget } from "../../types/protocol";
 import { RESIZABLE_TYPES, type WFNodeData } from "../../lib/graphAdapter";
 import { useEditor, type InboundWire } from "../../lib/editorContext";
@@ -21,6 +21,7 @@ import { typeColorVar, typesCompatible } from "../../lib/types";
 import { Icon, hasIcon } from "../../lib/icons";
 import { bodySummary, headerSubline } from "../../lib/nodeMeta";
 import { useDraft } from "../../lib/useDraft";
+import { useAutoGrow } from "../../lib/useAutoGrow";
 import { convertAction } from "../../lib/knobOptions";
 import {
   concreteInputs,
@@ -237,6 +238,13 @@ function WorkflowNodeImpl({ id, data, selected }: NodeProps) {
   // resizable = a special single-surface body (Preview / Chat / Template) OR any
   // node with >=1 expandable field (Text / Compute / DB / KV). Declared, not a list.
   const resizable = (RESIZABLE_TYPES.has(def.id) || expandWidgets.length > 0) && !isAudioPreview;
+  // a resizable node with a saved height fills it (its text surfaces share the
+  // room and scroll); one with no saved size sits at its natural height, every
+  // text surface as tall as its text (lib/useAutoGrow), so nothing is cut.
+  // (NodeProps' height is the MEASURED one; the node's own `height` is the size
+  // it was given: saved, a type's default, or dragged with the resizer.)
+  const givenHeight = useInternalNode(id)?.height;
+  const fill = resizable && typeof givenHeight === "number";
 
   // minimum resize floor: never let a node shrink below the room its header, port
   // rows, footer and body actually need, so dragging can't clip the contents.
@@ -296,6 +304,7 @@ function WorkflowNodeImpl({ id, data, selected }: NodeProps) {
         disabled ? "disabled" : "",
         status === "error" ? "error" : "",
         resizable ? "resizable" : "",
+        fill ? "sized" : "",
       ].join(" ").trim()}
       // a resizable card fills its React Flow wrapper (width:100%), and a node
       // with no saved size has a wrapper only as wide as its content: the floor
@@ -454,7 +463,7 @@ function WorkflowNodeImpl({ id, data, selected }: NodeProps) {
           {isTemplate && (
             <TemplateField
               variant="inline"
-              fill={resizable}
+              fill={fill}
               value={String(nd.config[TEMPLATE_TEXT] ?? "")}
               suggestions={tagSuggestionsFor(def, inboundSources.get(id) ?? [], String(nd.config.template ?? ""))}
               onChange={(v) => updateConfig(id, TEMPLATE_TEXT, v)}
@@ -471,6 +480,7 @@ function WorkflowNodeImpl({ id, data, selected }: NodeProps) {
             inboundSources={inboundSources}
             onChange={(k, v) => updateConfig(id, k, v)}
             onPromote={(name) => promoteWidget(id, name)}
+            fill={fill}
           />
         </div>
       )}
@@ -486,6 +496,7 @@ function WorkflowNodeImpl({ id, data, selected }: NodeProps) {
           inboundSources={inboundSources}
           onChange={(k, v) => updateConfig(id, k, v)}
           onPromote={(name) => promoteWidget(id, name)}
+          fill={fill}
         >
           {isTool && (
             <ToolHints callWired={outSet.has("call")} resultWired={inSet.has("result")} />
@@ -738,6 +749,7 @@ function InlineKnobs({
   inboundSources,
   onChange,
   onPromote,
+  fill = false,
   children,
 }: {
   def: import("../../types/protocol").NodeDef;
@@ -752,6 +764,8 @@ function InlineKnobs({
   inboundSources: Map<string, InboundWire[]>;
   onChange: (key: string, value: unknown) => void;
   onPromote: (name: string) => void;
+  /** the node was given a height: its expand fields fill it rather than grow */
+  fill?: boolean;
   children?: React.ReactNode;
 }) {
   if (widgets.length === 0) {
@@ -788,6 +802,7 @@ function InlineKnobs({
           tagSuggestions={tagSuggestions}
           onChange={(v) => onChange(w.name, v)}
           onPromote={() => onPromote(w.name)}
+          fill={fill}
         />
       ))}
       {children}
@@ -803,6 +818,7 @@ function InlineWidget({
   tagSuggestions,
   onChange,
   onPromote,
+  fill,
 }: {
   widget: Widget;
   nodeId: string;
@@ -811,6 +827,7 @@ function InlineWidget({
   tagSuggestions?: string[];
   onChange: (v: unknown) => void;
   onPromote: () => void;
+  fill: boolean;
 }) {
   const label = widget.label || widget.name;
   const { storeKeyForInput, wirelessInOwners } = useEditor();
@@ -830,6 +847,11 @@ function InlineWidget({
   const placeholder = widget.placeholder || undefined;
   // draft buffer so the caret holds while the code value round-trips through state.
   const [draft, emitDraft] = useDraft(String(value ?? widget.default ?? ""), onChange as (v: string) => void);
+  // a code field grows to its text, except an expand field on a resized node,
+  // which fills the height the node was given (lib/useAutoGrow).
+  const grows = !(widget.expand && fill);
+  const codeRef = useRef<HTMLTextAreaElement>(null);
+  useAutoGrow(codeRef, widget.kind === "code" && grows, draft);
 
   // a field whose value may reference {{secret.NAME}} renders through the
   // SecretAutocompleteField so typing `{{` opens the secret picker. Declared.
@@ -882,14 +904,16 @@ function InlineWidget({
             multiline
             rows={2}
             inline
-            // an expand field is sized by the node's flex layout; autogrow off so
-            // the two don't fight. A non-expand field autogrows to its content.
-            autoGrow={!widget.expand}
+            // an expand field on a resized node is sized by the node's flex
+            // layout (autogrow off so the two don't fight); every other field
+            // grows to its content.
+            autoGrow={grows}
             placeholder={placeholder}
             tagSuggestions={tagSuggestions}
           />
         ) : (
           <textarea
+            ref={codeRef}
             className="nodrag nowheel"
             value={draft}
             rows={2}
