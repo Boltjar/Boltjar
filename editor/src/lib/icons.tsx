@@ -134,6 +134,14 @@ import {
   IoKeyOutline,
   IoPlanetOutline,
   IoCompassOutline,
+  IoCheckmarkOutline,
+  IoCloseCircleOutline,
+  IoLibraryOutline,
+  IoLogoElectron,
+  IoMusicalNoteOutline,
+  IoOpenOutline,
+  IoRemoveCircleOutline,
+  IoSwapHorizontalOutline,
 } from "react-icons/io5";
 import type { ComponentType } from "react";
 
@@ -280,6 +288,15 @@ const REGISTRY: Record<string, IconCmp> = {
   "book-outline": IoBookOutline,
   "bug-outline": IoBugOutline,
   "heart-outline": IoHeartOutline,
+  // menus, settings and providers
+  "checkmark-outline": IoCheckmarkOutline,
+  "close-circle-outline": IoCloseCircleOutline,
+  "remove-circle-outline": IoRemoveCircleOutline,
+  "swap-horizontal-outline": IoSwapHorizontalOutline,
+  "library-outline": IoLibraryOutline,
+  "open-outline": IoOpenOutline,
+  "musical-note-outline": IoMusicalNoteOutline,
+  "logo-electron": IoLogoElectron,
 };
 
 // A purpose-built close (×) icon with NO internal padding, drawn on a perfect
