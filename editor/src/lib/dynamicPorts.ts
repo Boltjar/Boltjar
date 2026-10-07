@@ -32,15 +32,29 @@ export const KV_ID = "core.kv";
 /** The consolidated DB node id; same template + operation-reshape contract as KV. */
 export const DB_ID = "core.db";
 
+/** A knob's value as the node runs with it: the saved value, else (the key is
+ *  absent or null) the widget's declared default. A node saved untouched
+ *  (`config: {}`, normal for graphs written through the API or MCP) shows its
+ *  defaults, and the backend merges them the same way (runtime.node_config). */
+export function configValue(
+  widgets: readonly { name: string; default?: unknown }[],
+  config: Record<string, unknown>,
+  name: string,
+): unknown {
+  return config[name] ?? widgets.find((w) => w.name === name)?.default;
+}
+
 /** Op-shaping, read from the declaration (no per-id table): a widget or port is
- *  visible when it declares no op_field, or when config[op_field] is one of its
- *  op_values. Used for the inline knobs and the input and output reshape. */
+ *  visible when it declares no op_field, or when the operation (configValue:
+ *  the saved value, else the knob's default) is one of its op_values. Used for
+ *  the inline knobs and the input and output reshape, so all three agree. */
 export function opVisible(
   d: { op_field?: string | null; op_values?: string[] },
   config: Record<string, unknown>,
+  widgets: readonly { name: string; default?: unknown }[],
 ): boolean {
   if (!d.op_field) return true;
-  const current = String(config[d.op_field] ?? "");
+  const current = String(configValue(widgets, config, d.op_field) ?? "");
   return (d.op_values ?? []).includes(current);
 }
 
@@ -66,7 +80,7 @@ export function knobRowWidgets(
   const promoted = new Set(nodePromoted(config));
   return def.widgets.filter((w) =>
     onBody(w) && w.kind !== "model" && !drawnBySurface.includes(w.name)
-    && opVisible(w, config) && !promoted.has(w.name));
+    && opVisible(w, config, def.widgets) && !promoted.has(w.name));
 }
 
 /** The Build JSON node id; each wired named input becomes a key in the json object. */
@@ -322,9 +336,8 @@ export function hasGrowable(def: NodeDef): boolean {
  *
  * A declared input whose op_field names other operations is left out, as an
  * op-shaped output is (a Vectors `embedding` under clear): the backend does not
- * require it there either. The operation is read as the backend reads it, the
- * saved value else the knob's declared default, so a node saved untouched
- * (`config: {}`) shows the inputs its default operation needs.
+ * require it there either. The operation is read as the backend reads it
+ * (opVisible: the saved value else the knob's declared default).
  */
 export function concreteInputs(
   def: NodeDef,
@@ -333,11 +346,8 @@ export function concreteInputs(
   models?: ModelLookup,
 ): ConcretePort[] {
   const ports = inputsFor(def, config, connectedPortNames, models);
-  const running = (field: string) => ({
-    [field]: config[field] ?? def.widgets.find((w) => w.name === field)?.default,
-  });
   const hidden = new Set(def.inputs
-    .filter((p) => !p.growable && p.op_field && !opVisible(p, running(p.op_field)))
+    .filter((p) => !p.growable && p.op_field && !opVisible(p, config, def.widgets))
     .map((p) => p.name));
   return hidden.size ? ports.filter((p) => p.dynamic || !hidden.has(p.name)) : ports;
 }
@@ -746,7 +756,7 @@ export function concreteOutputs(
   // never sees a dead port for an op that doesn't write it.
   if (def.id !== LLM_ID) {
     return def.outputs
-      .filter((p) => opVisible(p, config))
+      .filter((p) => opVisible(p, config, def.widgets))
       .map((p) => ({ name: p.name, type: p.type }));
   }
   const manifest = models?.get(llmModelId(config));
