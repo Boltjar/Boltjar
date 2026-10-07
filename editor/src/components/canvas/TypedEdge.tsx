@@ -1,22 +1,33 @@
 // ============================================================================
-// TypedEdge: a typed bezier wire. Coloured by the SOURCE
+// TypedEdge: a typed wire. Coloured by the SOURCE
 // port's data type. Layers: a dark under-stroke (machined channel), the main
 // type-coloured stroke, an accent selection glow, and the comets: each time
 // THIS wire carries a value (a `carry` event names it, see lib/wirePulse), a
 // comet slides from the source port to the target port, never because its
-// source has other wires that did.
+// source has other wires that did. A forward wire is a bezier; a wire back to
+// the left goes around its two nodes (lib/wireRoute).
 // ============================================================================
 import { memo, useEffect, useRef, type CSSProperties } from "react";
-import { getBezierPath, type EdgeProps } from "@xyflow/react";
+import { getBezierPath, useInternalNode, type EdgeProps, type InternalNode } from "@xyflow/react";
 import type { WFEdgeData } from "../../lib/graphAdapter";
 import { typeColorVar } from "../../lib/types";
 import { useEditor } from "../../lib/editorContext";
 import { liveGatePasses } from "../../lib/liveClassify";
 import { mountComets, onWirePulse } from "../../lib/wirePulse";
+import { backWirePath, type Box } from "../../lib/wireRoute";
+
+/** A node's measured box in flow coordinates, or null before it is measured. */
+function nodeBox(n: InternalNode | undefined): Box | null {
+  const w = n?.measured?.width, h = n?.measured?.height;
+  if (!n || !w || !h) return null;
+  const p = n.internals.positionAbsolute;
+  return { x: p.x, y: p.y, width: w, height: h };
+}
 
 function TypedEdgeImpl({
   id,
   source,
+  target,
   sourceHandleId,
   sourceX,
   sourceY,
@@ -33,9 +44,18 @@ function TypedEdgeImpl({
   // effective source/type, not the stale declared edge type.
   const wl = effectiveOutput(source, sourceHandleId ?? "");
 
+  // a wire back to the left goes around both its nodes instead of through them.
+  const srcNode = useInternalNode(source);
+  const tgtNode = useInternalNode(target);
+  const back = backWirePath(
+    { x: sourceX, y: sourceY },
+    { x: targetX, y: targetY },
+    nodeBox(srcNode),
+    nodeBox(tgtNode),
+  );
   // the control distance aims for k = max(48, |dx|*0.5). React Flow's bezier uses a
   // curvature factor; 0.35 over the default 0.25 keeps wires leaving ports perpendicular.
-  const [path] = getBezierPath({
+  const [bezier] = getBezierPath({
     sourceX,
     sourceY,
     targetX,
@@ -44,6 +64,7 @@ function TypedEdgeImpl({
     targetPosition,
     curvature: 0.35,
   });
+  const path = back ?? bezier;
 
   const ed = data as WFEdgeData | undefined;
   const color = typeColorVar(wl ? wl.type : ed?.type);
