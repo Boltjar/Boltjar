@@ -990,13 +990,13 @@ button{font-family:inherit;}
 /* param knobs */
 .knobs{display:flex; flex-direction:column; gap:var(--knob-gap); width:100%;}
 .knob{position:relative;}
-.knob-lbl{font-family:var(--font-mono); font-size:9px; text-transform:uppercase; letter-spacing:var(--tr-label); color:var(--ink-dim); flex:none;}
+.knob-lbl{font-family:var(--font-mono); font-size:9px; text-transform:uppercase; letter-spacing:var(--tr-label); color:var(--ink-dim); flex:none; max-width:100%;}
 /* number knob */
 .knob.num{background:var(--bg-2); border:1px solid var(--line); border-radius:var(--radius-sm); padding:6px 9px;
   transition:border-color var(--dur-2), box-shadow var(--dur-2);}
 .knob.num:focus-within{border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-glow);}
 .knob-numrow{display:flex; align-items:center; gap:8px;}
-.knob-numrow input{flex:1; min-width:0; background:none; border:none; outline:none; text-align:right;
+.knob-numrow input{flex:1 1 calc(var(--vlen, 4) * 1ch + 4px); min-width:0; background:none; border:none; outline:none; text-align:right;
   color:var(--ink); font-family:var(--font-mono); font-size:var(--fs-xs);}
 .knob-slider{margin-top:7px; width:100%; -webkit-appearance:none; appearance:none; height:4px; border-radius:2px; outline:none;
   background:linear-gradient(90deg, var(--accent) calc(var(--frac,0) * 100%), var(--line-2) calc(var(--frac,0) * 100%));}
@@ -1008,7 +1008,7 @@ button{font-family:inherit;}
 .knob.text{display:flex; align-items:center; gap:8px; background:var(--bg-2); border:1px solid var(--line); border-radius:var(--radius-sm); padding:6px 9px;
   transition:border-color var(--dur-2), box-shadow var(--dur-2);}
 .knob.text:focus-within{border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-glow);}
-.knob.text input{flex:1; min-width:0; background:none; border:none; outline:none; text-align:right;
+.knob.text input{flex:1 1 calc(var(--vlen, 4) * 1ch + 4px); min-width:0; background:none; border:none; outline:none; text-align:right;
   color:var(--ink); font-family:var(--font-mono); font-size:var(--fs-xs);}
 /* select knob: a polished, mono-typed native select. Chrome ignores most
    <option> styling, so we paint the closed control and let the OS menu carry
@@ -1029,6 +1029,12 @@ button{font-family:inherit;}
 .knob.select select::-ms-expand{display:none;}
 .knob.select select option{background:var(--panel); color:var(--ink); padding:4px 8px; font-family:var(--font-mono);}
 .knob.select svg{width:12px; height:12px; color:var(--ink-dim); pointer-events:none; flex:none;}
+/* A knob never hides its value: label and value share the row while both fit
+   (the value asks for --vlen characters of the mono face), else the value wraps
+   under the label, full width and aligned left (Knob marks the row .stacked). */
+.knob.text, .knob-numrow, .knob.select{flex-wrap:wrap; row-gap:5px;}
+.knob.text.stacked input, .knob-numrow.stacked input{text-align:left;}
+.knob.select.stacked .knob-selwrap, .knob.select.stacked .wf-select{margin-left:0;}
 /* bool knob */
 .knob.bool{display:flex; align-items:center; gap:7px; background:var(--bg-2); border:1px solid var(--line); border-radius:var(--radius-sm); padding:6px 9px;}
 .knob-toggle{display:flex; align-items:center; gap:9px; flex:1; cursor:pointer; background:none; border:none; padding:0;}

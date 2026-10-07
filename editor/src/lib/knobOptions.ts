@@ -34,3 +34,11 @@ export function knobBool(value: unknown, fallback?: unknown): boolean {
 export function convertAction<T>(promotable: boolean | undefined, onPromote: T): T | undefined {
   return promotable === false ? undefined : onPromote;
 }
+
+/** The width a knob's value asks for on its row, in characters of the mono
+ *  face: its own length, never less than `min` (room to type into an empty
+ *  field). A label and a value that do not fit together wrap the value under
+ *  the label, so a knob never hides its own value. */
+export function valueChars(value: unknown, min = 4): number {
+  return Math.max(min, String(value ?? "").length);
+}

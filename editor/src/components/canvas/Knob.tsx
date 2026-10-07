@@ -5,11 +5,17 @@
 // bool a toggle, a select a dropdown, text an input. There is NO inline convert
 // icon: "Convert to input" (promote to a typed port) and "Reset to default" live
 // on the knob's own RIGHT-CLICK menu, which never leaks the node's menu.
+//
+// A knob never hides its own value. The label and the value share one row
+// while both fit; when they do not (a long label, a long value, a narrow node),
+// the value wraps onto its own row under the label, full width and aligned
+// left, the way a code field reads. The value asks for its own width
+// (`--vlen`, in characters of the mono face) so the row knows when to wrap.
 // ============================================================================
-import { useState, type CSSProperties, type MouseEvent } from "react";
+import { useLayoutEffect, useRef, useState, type CSSProperties, type MouseEvent, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { useDraft } from "../../lib/useDraft";
-import { declaredOption, knobBool } from "../../lib/knobOptions";
+import { declaredOption, knobBool, valueChars } from "../../lib/knobOptions";
 import { Icon } from "../../lib/icons";
 import { ContextMenu, type MenuItem } from "../ContextMenu";
 import { Select, type SelectOption } from "./Select";
@@ -34,9 +40,36 @@ export interface KnobProps {
   disabled?: boolean;
 }
 
+/** Has the row's value wrapped under its label? Read after every render and
+ *  whenever the row changes size (a node resized, a font loaded). */
+function useStacked(row: RefObject<HTMLElement>): boolean {
+  const [stacked, setStacked] = useState(false);
+  const measure = () => {
+    const el = row.current;
+    const lbl = el?.querySelector(":scope > .knob-lbl");
+    const val = lbl?.nextElementSibling;
+    if (!lbl || !val) return;
+    const next = val.getBoundingClientRect().top >= lbl.getBoundingClientRect().bottom - 1;
+    setStacked((was) => (was === next ? was : next));
+  };
+  useLayoutEffect(measure);
+  useLayoutEffect(() => {
+    const el = row.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return stacked;
+}
+
 export function Knob(props: KnobProps) {
   const { label, kind, value, onChange, onConvert, onReset, disabled } = props;
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const rowRef = useRef<HTMLDivElement>(null);
+  const stacked = useStacked(rowRef);
+  const stack = stacked ? " stacked" : "";
   // a draft buffer for the text knob so the caret holds while the value round-trips.
   const [textDraft, emitText] = useDraft(String(value ?? props.default ?? ""), onChange as (v: string) => void);
 
@@ -79,7 +112,7 @@ export function Knob(props: KnobProps) {
 
   if (kind === "select") {
     return (
-      <div className="knob select" onContextMenu={openMenu}>
+      <div ref={rowRef} className={`knob select${stack}`} onContextMenu={openMenu}>
         <span className="knob-lbl">{label}</span>
         <Select
           value={String(value ?? props.default ?? "")}
@@ -99,12 +132,13 @@ export function Knob(props: KnobProps) {
 
   if (kind === "text") {
     return (
-      <div className="knob text" onContextMenu={openMenu}>
+      <div ref={rowRef} className={`knob text${stack}`} onContextMenu={openMenu}>
         <span className="knob-lbl">{label}</span>
         <input
           className="nodrag"
           type="text"
           value={textDraft}
+          style={{ ["--vlen" as string]: String(valueChars(textDraft)) } as CSSProperties}
           spellCheck={false}
           onChange={(e) => emitText(e.target.value)}
           onKeyDown={(e) => e.stopPropagation()}
@@ -124,12 +158,14 @@ export function Knob(props: KnobProps) {
   const frac = bounded && max !== min ? Math.max(0, Math.min(1, (num - min) / (max - min))) : 0;
   return (
     <div className="knob num" onContextMenu={openMenu}>
-      <div className="knob-numrow">
+      <div ref={rowRef} className={`knob-numrow${stack}`}>
         <span className="knob-lbl">{label}</span>
         <input
           className="nodrag"
           type="number"
           value={Number.isFinite(num) ? num : ""}
+          // two more characters for the spin buttons a hovered number shows
+          style={{ ["--vlen" as string]: String(valueChars(Number.isFinite(num) ? num : "", 2) + 2) } as CSSProperties}
           min={min ?? undefined}
           max={max ?? undefined}
           step={step}
