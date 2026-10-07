@@ -8,8 +8,12 @@
 // left under (or over) them, and enters its target from the left. The corners
 // are rounded, so it reads as one deliberate line.
 //
-// Pure geometry, no React: TypedEdge feeds it the two sockets and the two
-// endpoint nodes' boxes (flow coordinates).
+// Several back wires between the same two nodes (an LLM's trigger and its
+// response going back into one node) take parallel lanes LANE_SPACING apart on
+// every segment, nested so they never cross (pairLanes).
+//
+// Pure geometry, no React: TypedEdge feeds it the two sockets, the two
+// endpoint nodes' boxes (flow coordinates) and the pair's other back wires.
 // ============================================================================
 
 export interface Point { x: number; y: number }
@@ -24,18 +28,71 @@ export function isBackWire(s: Point, t: Point): boolean {
   return t.x < s.x;
 }
 
-/** The corner points of a back wire from socket `s` (on node box `sb`) to
- *  socket `t` (on node box `tb`): source, four corners, target. The run sits
- *  `margin` below the lower node's bottom or above the upper node's top,
- *  whichever makes the shorter wire (below on a tie); the two upright legs sit
- *  `margin` right of the source's node and left of the target's, and step out
- *  further when the other endpoint node stands in a leg's way. */
-export function backWirePoints(s: Point, t: Point, sb: Box, tb: Box, margin: number = BACK_WIRE.margin): Point[] {
+export type Side = "below" | "above";
+
+/** Which side of its two nodes a back wire runs on: `margin` below the lower
+ *  node's bottom or above the upper node's top, whichever makes the shorter
+ *  wire (below on a tie). */
+export function backWireSide(s: Point, t: Point, sb: Box, tb: Box, margin: number = BACK_WIRE.margin): Side {
   const below = Math.max(sb.y + sb.height, tb.y + tb.height) + margin;
   const above = Math.min(sb.y, tb.y) - margin;
   const costBelow = (below - s.y) + (below - t.y);
   const costAbove = (s.y - above) + (t.y - above);
-  const runY = costAbove < costBelow ? above : below;
+  return costAbove < costBelow ? "above" : "below";
+}
+
+/** A back wire's place among the back wires between the same two nodes, so
+ *  parallel wires never draw over each other. Lane 0 hugs the nodes, each next
+ *  lane sits `spacing` further out. `src` sets the right leg and the run, `tgt`
+ *  the left leg, and all of them share one `side`. */
+export interface Lane { side: Side; src: number; tgt: number; spacing: number }
+
+/** Gap between two parallel back wires (CSS px in flow units). */
+export const LANE_SPACING = 9;
+
+/** One back wire of a node pair: its edge id and its two sockets' heights. */
+export interface PairWire { id: string; sy: number; ty: number }
+
+/** The lanes of the back wires between one pair of nodes. They share a side
+ *  (chosen from their middle socket heights), and nest so they never cross:
+ *  the wire whose source socket is nearest the run takes the inner lane of the
+ *  right leg and the run, the wire whose target socket is nearest the run the
+ *  inner lane of the left leg. When the two orders agree, no two wires cross;
+ *  when they disagree, a crossing is forced by the sockets themselves, and it
+ *  happens once. Ties fall back to the edge id, so every wire gets one place. */
+export function pairLanes(
+  wires: readonly PairWire[], sx: number, tx: number, sb: Box, tb: Box,
+  spacing: number = LANE_SPACING, margin: number = BACK_WIRE.margin,
+): Map<string, Lane> {
+  const lanes = new Map<string, Lane>();
+  if (wires.length === 0) return lanes;
+  const mid = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
+  const side = backWireSide({ x: sx, y: mid(wires.map((w) => w.sy)) }, { x: tx, y: mid(wires.map((w) => w.ty)) }, sb, tb, margin);
+  // nearest the run first: below, the lowest socket; above, the highest
+  const near = (a: number, b: number) => (side === "below" ? b - a : a - b);
+  const byId = (a: PairWire, b: PairWire) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+  const src = [...wires].sort((a, b) => near(a.sy, b.sy) || byId(a, b));
+  const tgt = [...wires].sort((a, b) => near(a.ty, b.ty) || byId(a, b));
+  for (const w of wires) {
+    lanes.set(w.id, { side, src: src.indexOf(w), tgt: tgt.indexOf(w), spacing });
+  }
+  return lanes;
+}
+
+/** The corner points of a back wire from socket `s` (on node box `sb`) to
+ *  socket `t` (on node box `tb`): source, four corners, target. The run sits
+ *  `margin` beyond the nodes on its side (backWireSide, or the lane's side);
+ *  the two upright legs sit `margin` right of the source's node and left of the
+ *  target's, and step out further when the other endpoint node stands in a
+ *  leg's way. A lane moves each segment out by its own lane number. */
+export function backWirePoints(
+  s: Point, t: Point, sb: Box, tb: Box, margin: number = BACK_WIRE.margin, lane?: Lane,
+): Point[] {
+  const side = lane?.side ?? backWireSide(s, t, sb, tb, margin);
+  const out = (n: number) => n * (lane?.spacing ?? 0);
+  const runY = side === "above"
+    ? Math.min(sb.y, tb.y) - margin - out(lane?.src ?? 0)
+    : Math.max(sb.y + sb.height, tb.y + tb.height) + margin + out(lane?.src ?? 0);
 
   // a leg is the upright segment between a socket's height and the run; it must
   // not cross the OTHER endpoint node either (a wide node, a target lower down).
@@ -45,8 +102,10 @@ export function backWirePoints(s: Point, t: Point, sb: Box, tb: Box, margin: num
 
   let right = Math.max(s.x, sb.x + sb.width) + margin;
   if (legHits(right, s.y, runY, tb)) right = Math.max(right, tb.x + tb.width + margin);
+  right += out(lane?.src ?? 0);
   let left = Math.min(t.x, tb.x) - margin;
   if (legHits(left, t.y, runY, sb)) left = Math.min(left, sb.x - margin);
+  left -= out(lane?.tgt ?? 0);
 
   return [
     { x: s.x, y: s.y },
@@ -86,7 +145,7 @@ export function roundedPath(pts: Point[], radius: number = BACK_WIRE.radius): st
 
 /** The drawn path of a back wire, or null when the wire goes forward (it keeps
  *  its bezier) or a node's box is not known yet. */
-export function backWirePath(s: Point, t: Point, sb: Box | null, tb: Box | null): string | null {
+export function backWirePath(s: Point, t: Point, sb: Box | null, tb: Box | null, lane?: Lane): string | null {
   if (!isBackWire(s, t) || !sb || !tb) return null;
-  return roundedPath(backWirePoints(s, t, sb, tb));
+  return roundedPath(backWirePoints(s, t, sb, tb, BACK_WIRE.margin, lane));
 }

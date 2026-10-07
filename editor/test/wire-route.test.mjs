@@ -21,7 +21,7 @@ const src = readFileSync(resolve(here, "../src/lib/wireRoute.ts"), "utf8");
 const js = ts.transpileModule(src, {
   compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 },
 }).outputText;
-const { isBackWire, backWirePoints, roundedPath, backWirePath, BACK_WIRE } =
+const { isBackWire, backWirePoints, roundedPath, backWirePath, BACK_WIRE, pairLanes, LANE_SPACING } =
   await import("data:text/javascript," + encodeURIComponent(js));
 
 let failures = 0;
@@ -138,11 +138,78 @@ check("a back wire whose nodes are not measured yet gets no route",
   check("a straight line has no corners", roundedPath([{ x: 0, y: 0 }, { x: 10, y: 0 }]), "M0,0 L10,0");
 }
 
+// ── parallel back wires between the same two nodes take their own lanes ──
+// segments of two routes: do they cross, or lie on top of each other?
+const segs = (pts) => pts.slice(0, -1).map((p, i) => [p, pts[i + 1]]);
+function meets([a, b], [c, d]) {
+  const h1 = a.y === b.y, h2 = c.y === d.y;
+  const [ax0, ax1] = [Math.min(a.x, b.x), Math.max(a.x, b.x)], [ay0, ay1] = [Math.min(a.y, b.y), Math.max(a.y, b.y)];
+  const [cx0, cx1] = [Math.min(c.x, d.x), Math.max(c.x, d.x)], [cy0, cy1] = [Math.min(c.y, d.y), Math.max(c.y, d.y)];
+  if (h1 && h2) return a.y === c.y && Math.min(ax1, cx1) > Math.max(ax0, cx0) ? "overlap" : null;
+  if (!h1 && !h2) return a.x === c.x && Math.min(ay1, cy1) > Math.max(ay0, cy0) ? "overlap" : null;
+  const [h, v] = h1 ? [[ax0, ax1, a.y], [c.x, cy0, cy1]] : [[cx0, cx1, c.y], [a.x, ay0, ay1]];
+  return v[0] > h[0] && v[0] < h[1] && h[2] > v[1] && h[2] < v[2] ? "cross" : null;
+}
+// the inner stubs on a socket's own row are excluded: wires leave one node side by side
+const meetings = (p, q) => {
+  const out = [];
+  for (const x of segs(p)) for (const y of segs(q)) { const m = meets(x, y); if (m) out.push(m); }
+  return out;
+};
+{
+  // an LLM (right, row 1) sends trigger + response back into a node in row 2
+  const sb = box(600, 0, 290, 200), tb = box(0, 300, 290, 200);
+  const trig = { id: "trig", sy: 50, ty: 350 }, resp = { id: "resp", sy: 80, ty: 380 };
+  const lanes = pairLanes([trig, resp], 890, 0, sb, tb);
+  const route = (w) => backWirePoints({ x: 890, y: w.sy }, { x: 0, y: w.ty }, sb, tb, BACK_WIRE.margin, lanes.get(w.id));
+  const a = route(trig), b = route(resp);
+  check("two wires of one pair share a side", lanes.get("trig").side === lanes.get("resp").side, true);
+  check("they take different lanes", [lanes.get("trig").src, lanes.get("resp").src].sort(), [0, 1]);
+  check("they never lie on top of each other", meetings(a, b).includes("overlap"), false);
+  check("and never cross", meetings(a, b).includes("cross"), false);
+  const gap = (p, q, i, axis) => Math.abs(p[i][axis] - q[i][axis]);
+  check("every segment is one lane apart", [gap(a, b, 1, "x"), gap(a, b, 2, "y"), gap(a, b, 3, "x")], [LANE_SPACING, LANE_SPACING, LANE_SPACING]);
+  check("both stay clear of the nodes", clearOfNodes(a, sb, tb) && clearOfNodes(b, sb, tb), true);
+  const alone = backWirePoints({ x: 890, y: 50 }, { x: 0, y: 350 }, sb, tb);
+  check("lane 0 is where a lone wire runs", route(lanes.get("trig").src === 0 ? trig : resp)[2].y, alone[2].y);
+}
+{
+  // four wires, any order of ids: nested, no two cross or overlap
+  const sb = box(600, 0, 290, 260), tb = box(0, 320, 290, 260);
+  const ws = [0, 1, 2, 3].map((i) => ({ id: `w${3 - i}`, sy: 40 + 30 * i, ty: 360 + 30 * i }));
+  const lanes = pairLanes(ws, 890, 0, sb, tb);
+  const routes = ws.map((w) => backWirePoints({ x: 890, y: w.sy }, { x: 0, y: w.ty }, sb, tb, BACK_WIRE.margin, lanes.get(w.id)));
+  let bad = 0;
+  for (let i = 0; i < routes.length; i++) for (let j = i + 1; j < routes.length; j++) bad += meetings(routes[i], routes[j]).length;
+  check("four parallel wires never cross or overlap", bad, 0);
+  check("each has its own lane", new Set([...lanes.values()].map((l) => l.src)).size, 4);
+}
+{
+  // above: the highest sockets take the inner lanes
+  const sb = box(600, 300, 290, 200), tb = box(0, 0, 290, 400);
+  const ws = [{ id: "a", sy: 320, ty: 20 }, { id: "b", sy: 350, ty: 50 }];
+  const lanes = pairLanes(ws, 890, 0, sb, tb);
+  const routes = ws.map((w) => backWirePoints({ x: 890, y: w.sy }, { x: 0, y: w.ty }, sb, tb, BACK_WIRE.margin, lanes.get(w.id)));
+  check("a pair above nests from the top", [lanes.get("a").side, lanes.get("a").src, lanes.get("b").src], ["above", 0, 1]);
+  check("and does not cross", meetings(routes[0], routes[1]).length, 0);
+}
+{
+  // sockets in opposite orders force one crossing, never an overlap
+  const sb = box(600, 0, 290, 200), tb = box(0, 300, 290, 200);
+  const ws = [{ id: "a", sy: 50, ty: 380 }, { id: "b", sy: 80, ty: 350 }];
+  const lanes = pairLanes(ws, 890, 0, sb, tb);
+  const routes = ws.map((w) => backWirePoints({ x: 890, y: w.sy }, { x: 0, y: w.ty }, sb, tb, BACK_WIRE.margin, lanes.get(w.id)));
+  const m = meetings(routes[0], routes[1]);
+  check("crossed sockets cross once and never overlap", [m.filter((x) => x === "cross").length, m.includes("overlap")], [1, false]);
+}
+
 // ── TypedEdge draws it ──
 {
   const edge = readFileSync(resolve(here, "../src/components/canvas/TypedEdge.tsx"), "utf8");
   check("TypedEdge routes back wires with backWirePath", /backWirePath\(/.test(edge), true);
   check("TypedEdge reads both endpoint nodes' boxes", /useInternalNode\(source\)/.test(edge) && /useInternalNode\(target\)/.test(edge), true);
+  check("TypedEdge gives each wire of a pair its lane", /pairLanes\(wires, sourceX, targetX, sb, tb\)\.get\(id\)/.test(edge), true);
+  check("TypedEdge gives each wire of a pair its lane", /pairLanes\(wires, sourceX, targetX, sb, tb\)\.get\(id\)/.test(edge), true);
   check("a forward wire keeps the bezier", /back \?\? bezier/.test(edge), true);
 }
 
