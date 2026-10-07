@@ -297,7 +297,11 @@ function WorkflowNodeImpl({ id, data, selected }: NodeProps) {
         status === "error" ? "error" : "",
         resizable ? "resizable" : "",
       ].join(" ").trim()}
-      style={{ ["--kc" as string]: functionColorVar(def) } as CSSProperties}
+      // a resizable card fills its React Flow wrapper (width:100%), and a node
+      // with no saved size has a wrapper only as wide as its content: the floor
+      // is its width then. Rendered, never written, so opening a graph keeps it
+      // clean; a saved size below the floor is lifted by the clamp above.
+      style={{ ["--kc" as string]: functionColorVar(def), ...(resizable ? { minWidth: minNodeW } : {}) } as CSSProperties}
       data-typeid={def.id}
     >
       {resizable && (
