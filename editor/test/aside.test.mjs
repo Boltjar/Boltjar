@@ -57,11 +57,37 @@ check("showing the older copy puts the saved file aside", [there.role, there.sho
 const back = swapped(there, graph(14));
 check("going back puts the older copy aside again", [back.role, back.graph.nodes.length], ["older", 14]);
 
+// ---- why the copy was set aside: the console says what happened. Revert to
+// the saved file set the changes aside here, and the line said "was saved
+// elsewhere", which nothing was.
+const elsewhere = { role: "edits", graph: graph(15) };
+const reverted = { role: "edits", graph: graph(15), why: "reverted" };
+check("changes set aside by a save elsewhere say so", asideWords("chat", elsewhere, 16).message,
+  "chat was saved elsewhere: showing the saved file (16 nodes); your unsaved changes (15 nodes) are kept");
+check("changes set aside by a revert say only what is shown and kept", asideWords("chat", reverted, 16).message,
+  "chat: showing the saved file (16 nodes); your unsaved changes (15 nodes) are kept");
+check("a revert's buttons are the same as ever", [asideWords("chat", reverted, 16).swap, asideWords("chat", reverted, 16).end],
+  ["Show my unsaved changes (15 nodes)", "Delete my unsaved changes"]);
+check("why round-trips", parseAside(serializeAside(reverted))?.why, "reverted");
+check("a record from before why reads as saved elsewhere",
+  parseAside(JSON.stringify({ role: "edits", graph: graph(15) }))?.why, "saved-elsewhere");
+check("an unknown why reads as saved elsewhere",
+  parseAside(JSON.stringify({ role: "edits", graph: graph(15), why: "x" }))?.why, "saved-elsewhere");
+check("the saved file aside keeps why too",
+  parseAside(serializeAside({ role: "saved", graph: graph(16), shown: "edits", why: "reverted" }))?.why, "reverted");
+const out = swapped(reverted, graph(16));
+const home = swapped(parseAside(serializeAside(out)), graph(15));
+check("why survives a swap and the swap back", [out.why, home.why, home.role], ["reverted", "reverted", "edits"]);
+check("so the line after swapping back still tells the revert", asideWords("chat", home, 16).message,
+  "chat: showing the saved file (16 nodes); your unsaved changes (15 nodes) are kept");
+
 // ---- the editor uses it
 const app = read("../src/App.tsx");
 check("the console buttons take the words from asideWords", /asideWords\(slug, kept, canvasNodes\)/.test(app), true);
 check("a swap keeps the canvas copy aside", /writeAside\(slug, swapped\(kept, canvas\)\)/.test(app), true);
 check("Revert keeps unsaved changes aside", /Revert to the saved file[\s\S]{0,300}writeAside\(activeSlug, \{ role: "edits"/.test(app), true);
+check("Revert marks them as reverted", /Revert to the saved file[\s\S]{0,300}writeAside\(activeSlug, \{ role: "edits", graph: toGraph\(\), why: "reverted" \}/.test(app), true);
+check("a save elsewhere marks them as that", (app.match(/why: "saved-elsewhere"/g) || []).length, 2);
 
 if (failures) {
   console.error(`\n${failures} failing check(s)`);

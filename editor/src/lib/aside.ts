@@ -8,25 +8,36 @@
 // choice is always a swap: showing the other copy puts the canvas copy aside
 // in its place, so every answer but Delete can be taken back with one click.
 //
-// Stored in localStorage under `boltjar:aside:<slug>` as {role, graph, shown}.
+// It also happens on Revert to the saved file: the canvas shows the saved
+// file again and the unsaved changes made here are kept aside the same way.
+//
+// Stored in localStorage under `boltjar:aside:<slug>` as {role, graph, why, shown}.
 // `role` says what the kept copy IS, so the buttons can say it plainly:
 //   older   an older copy this browser held (a draft from before versions
 //           were tracked: whether it held edits cannot be known)
 //   edits   unsaved changes made here on a copy that was then saved over
 //   saved   the saved file, set aside while one of the others is shown
 // `shown` (only with `saved`) says which of the other two is on the canvas.
-// An entry written before roles existed (a bare graph) reads as `older`.
+// `why` says how the copy came to be set aside, so the console tells it true:
+//   saved-elsewhere  the file was saved since, somewhere else
+//   reverted         Revert to the saved file, here
+// It travels through every swap. An entry written before roles existed (a bare
+// graph) reads as `older`; one written before `why` existed reads as
+// saved-elsewhere, the only way a copy was set aside then.
 // ============================================================================
 import type { Graph } from "../types/protocol";
 
 export type CopyRole = "older" | "edits";
 export type AsideRole = CopyRole | "saved";
+export type AsideWhy = "saved-elsewhere" | "reverted";
 
 export interface Aside {
   role: AsideRole;
   graph: Graph;
   /** with role `saved`: what the canvas shows instead */
   shown?: CopyRole;
+  /** how the copy came to be set aside (absent: saved-elsewhere) */
+  why?: AsideWhy;
 }
 
 function isGraph(g: unknown): g is Graph {
@@ -39,23 +50,28 @@ export function parseAside(raw: string | null): Aside | null {
   try { data = JSON.parse(raw); } catch { return null; }
   if (isGraph(data)) return { role: "older", graph: data };
   if (!data || typeof data !== "object") return null;
-  const { role, graph, shown } = data as { role?: unknown; graph?: unknown; shown?: unknown };
+  const { role, graph, shown, why: rawWhy } = data as { role?: unknown; graph?: unknown; shown?: unknown; why?: unknown };
   if (!isGraph(graph)) return null;
-  if (role === "older" || role === "edits") return { role, graph };
-  if (role === "saved") return { role, graph, shown: shown === "older" ? "older" : "edits" };
+  const why: AsideWhy = rawWhy === "reverted" ? "reverted" : "saved-elsewhere";
+  if (role === "older" || role === "edits") return { role, graph, why };
+  if (role === "saved") return { role, graph, shown: shown === "older" ? "older" : "edits", why };
   return null;
 }
 
 export function serializeAside(a: Aside): string {
-  return JSON.stringify(a.role === "saved" ? { role: a.role, graph: a.graph, shown: a.shown ?? "edits" } : { role: a.role, graph: a.graph });
+  const why = a.why ?? "saved-elsewhere";
+  return JSON.stringify(a.role === "saved"
+    ? { role: a.role, graph: a.graph, shown: a.shown ?? "edits", why }
+    : { role: a.role, graph: a.graph, why });
 }
 
 /** The record after a swap: what was on the canvas goes aside, what was aside
  *  goes on the canvas. `canvas` is the graph leaving the canvas. */
 export function swapped(kept: Aside, canvas: Graph): Aside {
+  const why = kept.why ?? "saved-elsewhere";
   return kept.role === "saved"
-    ? { role: kept.shown ?? "edits", graph: canvas }
-    : { role: "saved", graph: canvas, shown: kept.role };
+    ? { role: kept.shown ?? "edits", graph: canvas, why }
+    : { role: "saved", graph: canvas, shown: kept.role, why };
 }
 
 function nodes(n: number): string {
@@ -90,8 +106,9 @@ export function asideWords(slug: string, kept: Aside, canvasNodes: number): Asid
       end: "Delete the older copy",
     };
   }
+  const how = kept.why === "reverted" ? `${slug}:` : `${slug} was saved elsewhere:`;
   return {
-    message: `${slug} was saved elsewhere: showing the saved file (${nodes(canvasNodes)}); your unsaved changes (${nodes(keptNodes)}) are kept`,
+    message: `${how} showing the saved file (${nodes(canvasNodes)}); your unsaved changes (${nodes(keptNodes)}) are kept`,
     swap: `Show my unsaved changes (${nodes(keptNodes)})`,
     end: "Delete my unsaved changes",
   };

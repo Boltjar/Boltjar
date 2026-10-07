@@ -443,7 +443,7 @@ export default function App() {
       setGraphLoading(false);
       const shownNodes = (plan === "draft" && draft ? draft.graph : saved?.graph)?.nodes.length ?? 0;
       if (plan === "server-offer" && draft) {
-        writeAside(target, { role: draft.dirty === undefined ? "older" : "edits", graph: draft.graph });
+        writeAside(target, { role: draft.dirty === undefined ? "older" : "edits", graph: draft.graph, why: "saved-elsewhere" });
         offerAside(target, shownNodes);
       } else {
         const kept = readAside(target);
@@ -724,7 +724,7 @@ export default function App() {
     for (const w of removed) socket.notice(deadWireNotice(w), "warn");
     if (kept) {
       // what the canvas held: the older copy when that was the one shown
-      writeAside(slug, { role: prior?.role === "saved" ? prior.shown ?? "edits" : "edits", graph: kept });
+      writeAside(slug, { role: prior?.role === "saved" ? prior.shown ?? "edits" : "edits", graph: kept, why: "saved-elsewhere" });
       offerAside(slug, clean.nodes.length);
     } else {
       socket.notice(`${slug} was saved elsewhere: showing the saved copy`, "info");
@@ -1537,7 +1537,7 @@ export default function App() {
       { id: "connections", label: "Open AI Providers", hint: "provider keys, endpoints and local models", icon: "git-network-outline", run: () => setSettingsTab(SETTINGS_LINKS.openConnections) },
       // Revert: the saved file back on the canvas. Unsaved changes are kept
       // aside (lib/aside), never dropped, so the console offers them back.
-      { id: "reset", label: "Revert to the saved file", hint: "show the saved file; unsaved changes are kept aside", icon: "refresh-outline", run: () => { if (activeSlug) { if (dirty) writeAside(activeSlug, { role: "edits", graph: toGraph() }); try { localStorage.removeItem(draftKey(activeSlug)); } catch { /* ignore */ } } window.location.reload(); } },
+      { id: "reset", label: "Revert to the saved file", hint: "show the saved file; unsaved changes are kept aside", icon: "refresh-outline", run: () => { if (activeSlug) { if (dirty) writeAside(activeSlug, { role: "edits", graph: toGraph(), why: "reverted" }); try { localStorage.removeItem(draftKey(activeSlug)); } catch { /* ignore */ } } window.location.reload(); } },
       ...(nodes.length >= 2
         ? [{
             id: "tidy",
