@@ -546,13 +546,24 @@ button{font-family:inherit;}
   background:var(--bg-2); border-top:1px solid var(--line);
   font-family:var(--font-mono); font-size:var(--fs-xs); color:var(--ink-faint);
 }
-.sb-line{display:flex; align-items:center; gap:var(--space-4); padding:0 var(--space-4); height:var(--status-h); flex:none;}
-.sb-tail{display:flex; align-items:center; gap:9px; min-width:0; flex:1;}
+.sb-line{display:flex; align-items:center; gap:var(--space-4); padding:0 var(--space-4); height:var(--status-h); flex:none;
+  container-type:inline-size; container-name:statusline;}
+/* the latest line shrinks first and never paints past its own box; the
+   counters and the right-hand items keep their room (StatusBar, lib/statusFit) */
+.sb-tail{display:flex; align-items:center; gap:9px; min-width:0; flex:1 1 auto; overflow:hidden; position:relative;
+  --sb-msg-min:32ch;}
+.sb-tail .log-offer{flex:none;}
+.sb-tail .sb-measure{position:absolute; left:0; top:0; visibility:hidden; pointer-events:none;}
+.sb-tail .sb-msg-min{display:block; width:var(--sb-msg-min); height:1px;}
+/* collapsed to "N choices": that one button keeps its room and the message
+   takes what is left, however little, so the button is never cut */
+.sb-tail.collapsed .msg{min-width:0;}
+.sb-mid, .sb-right{flex:none; white-space:nowrap;}
 .sb-tail .ts{color:var(--ink-faint); flex:none;}
 .sb-tail .lvl{display:grid; place-items:center; flex:none;}
 .sb-tail .lvl svg{width:12px; height:12px;}
 .sb-tail .lvl.info{color:var(--info);} .sb-tail .lvl.ok{color:var(--good);} .sb-tail .lvl.warn{color:var(--warn);} .sb-tail .lvl.bad{color:var(--bad);}
-.sb-tail .msg{color:var(--ink-dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.sb-tail .msg{color:var(--ink-dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:0 1 auto; min-width:var(--sb-msg-min);}
 .sb-tail .msg .hl{color:var(--ink);}
 .sb-tail .msg .ty{color:var(--t-event);}
 .sb-tail .empty{color:var(--ink-ghost);}
@@ -569,6 +580,10 @@ button{font-family:inherit;}
 .sb-right .sb-btn.active{color:var(--accent);}
 .sb-right .saved{color:var(--good);}
 .sb-right .unsaved{color:var(--warn);}
+/* a narrow bar keeps every item whole: first the cursor coordinates go, then
+   the counters and the console button drop their words (their titles keep them) */
+@container statusline (max-width: 1180px){ .sb-right .coord.cursor{display:none;} }
+@container statusline (max-width: 940px){ .sb-mid .tl, .sb-right .sb-btn .tl{display:none;} .sb-mid{gap:10px;} }
 
 /* console pane (expanded) */
 .console{border-top:1px solid var(--line); height:220px; display:flex; flex-direction:column; background:var(--bg-2);}

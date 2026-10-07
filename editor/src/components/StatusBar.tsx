@@ -7,8 +7,16 @@
 // (lib/consoleFeed). Rows are memoised by entry, so an event redraws only the
 // row it adds or counts, and the view follows new lines only while it sits at
 // the bottom.
+//
+// Nothing in the collapsed line overlaps at any width: the counters and the
+// right-hand items keep their room (narrow bars drop the cursor coordinates,
+// then the counter words, by container query), and the latest line shrinks
+// first: its message ellipsizes to a readable minimum, and answer buttons that
+// still do not fit collapse into one "N choices" button (lib/statusFit) that
+// opens the console, where the line shows in full with its buttons.
 // ============================================================================
 import { memo, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { choicesLabel, offerFits } from "../lib/statusFit";
 import { Icon } from "../lib/icons";
 import { latestEntry, visibleEntries, type ConsoleEntry, type ConsoleFeed, type ConsoleLevel, type NoticeAction } from "../lib/consoleFeed";
 
@@ -48,6 +56,36 @@ export function StatusBar(props: StatusBarProps) {
   // the choice is made, so newer lines never push it out of sight.
   const offer = useMemo(() => [...log.readable].reverse().find((e) => e.actions && e.actions.length > 0), [log]);
   const tail = useMemo(() => offer ?? latestEntry(entries), [offer, entries]);
+
+  // the line's buttons at full size only while they fit beside the readable
+  // minimum of its message; measured from the bar itself (lib/statusFit).
+  const tailRef = useRef<HTMLDivElement>(null);
+  const offerMeasureRef = useRef<HTMLSpanElement>(null);
+  const msgMinRef = useRef<HTMLSpanElement>(null);
+  const [collapsed, setCollapsed] = useState(false);
+  const offerKey = tail?.actions?.map((a) => a.label).join("\u0000") ?? "";
+  useLayoutEffect(() => {
+    const el = tailRef.current;
+    if (!el || !offerKey) { setCollapsed(false); return; }
+    const fit = () => {
+      const measure = offerMeasureRef.current;
+      const probe = msgMinRef.current;
+      if (!measure || !probe) return;
+      const gap = parseFloat(getComputedStyle(el).columnGap) || 0;
+      const fixed = [...el.querySelectorAll<HTMLElement>(":scope > .ts, :scope > .lvl")]
+        .reduce((w, x, i) => w + x.offsetWidth + (i ? gap : 0), 0);
+      // the readable minimum, read off a probe (the message itself drops its
+      // minimum once the buttons collapse, so it cannot be the yardstick)
+      const msgMin = probe.offsetWidth;
+      const next = !offerFits(el.clientWidth, fixed, msgMin, measure.offsetWidth, gap);
+      setCollapsed((was) => (was === next ? was : next));
+    };
+    fit();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [offerKey]);
 
   const filtered = useMemo(() => {
     if (levelFilter.size === 0) return entries;
@@ -122,7 +160,7 @@ export function StatusBar(props: StatusBarProps) {
       )}
 
       <div className="sb-line">
-        <div className="sb-tail">
+        <div className={"sb-tail" + (collapsed && tail?.actions ? " collapsed" : "")} ref={tailRef}>
           {tail ? (
             <>
               <span className="ts">{tail.ts}</span>
@@ -133,7 +171,26 @@ export function StatusBar(props: StatusBarProps) {
                 {tail.node && <span className="hl">{tail.node}</span>} {tail.message}
                 {tail.count > 1 && ` ×${tail.count}`}
               </span>
-              {tail.actions && <OfferButtons actions={tail.actions} />}
+              {tail.actions && (collapsed ? (
+                <span className="log-offer">
+                  <button
+                    type="button"
+                    className="chip"
+                    title={`${tail.actions.map((a) => a.label).join(" · ")}: open the console to choose`}
+                    onClick={() => setOpen(true)}
+                  >
+                    {choicesLabel(tail.actions.length)}
+                  </button>
+                </span>
+              ) : <OfferButtons actions={tail.actions} />)}
+              {/* the buttons at full size, measured out of sight, so the line
+                  knows when they fit again as the bar widens */}
+              {tail.actions && (
+                <span className="log-offer sb-measure" ref={offerMeasureRef} aria-hidden="true">
+                  {tail.actions.map((a) => <span key={a.label} className="chip">{a.label}</span>)}
+                </span>
+              )}
+              {tail.actions && <span className="sb-measure sb-msg-min" ref={msgMinRef} aria-hidden="true" />}
             </>
           ) : (
             <span className="empty">idle · no events streamed yet</span>
@@ -143,27 +200,27 @@ export function StatusBar(props: StatusBarProps) {
         <div className="sb-mid">
           <span className="ti" title={`${nodeCount} node${nodeCount === 1 ? "" : "s"} on this canvas`}>
             <Icon name="cube-outline" />
-            <b>{nodeCount}</b> nodes
+            <b>{nodeCount}</b><span className="tl"> nodes</span>
           </span>
-          <span className={`ti ${running ? "live" : ""}`}>
+          <span className={`ti ${running ? "live" : ""}`} title={`${eventsPerSec.toFixed(1)} events per second`}>
             <Icon name="pulse-outline" style={running ? { color: "var(--accent)" } : undefined} />
-            <b>{eventsPerSec.toFixed(1)}</b> ev/s
+            <b>{eventsPerSec.toFixed(1)}</b><span className="tl"> ev/s</span>
           </span>
-          <span className="ti">
+          <span className="ti" title={`${inFlight} in flight`}>
             <Icon name="layers-outline" />
-            <b>{inFlight}</b> in-flight
+            <b>{inFlight}</b><span className="tl"> in-flight</span>
           </span>
         </div>
 
         <div className="sb-right">
-          <span className="coord">
+          <span className="coord cursor">
             x <b>{cursor.x}</b> · y <b>{cursor.y}</b>
           </span>
           <span className="coord">
             zoom <b>{Math.round(zoom * 100)}%</b>
           </span>
-          <button className={`sb-btn ${open ? "active" : ""}`} onClick={() => setOpen((o) => !o)}>
-            <Icon name="terminal-outline" /> console
+          <button className={`sb-btn ${open ? "active" : ""}`} onClick={() => setOpen((o) => !o)} title="console">
+            <Icon name="terminal-outline" /><span className="tl"> console</span>
           </button>
           <span className={`sb-btn ${dirty ? "unsaved" : "saved"}`}>
             <Icon name="git-commit-outline" /> {savedLabel}
