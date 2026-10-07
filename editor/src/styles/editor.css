@@ -2351,8 +2351,10 @@ button{font-family:inherit;}
 }
 .store-hints--unwired{
   font-family:var(--font-mono); font-size:9.5px; color:var(--ink-ghost);
-  font-style:italic;
+  font-style:italic; overflow-wrap:anywhere;
 }
+/* a hint that is a body row of its own (the Tool's) takes the body's row gap */
+.node-body > .store-hints{ margin-top:0; }
 .store-hint{
   font-family:var(--font-mono); font-size:10px;
   padding:2px 8px; border-radius:999px; cursor:pointer;

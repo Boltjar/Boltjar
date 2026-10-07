@@ -482,11 +482,11 @@ function WorkflowNodeImpl({ id, data, selected }: NodeProps) {
           inboundSources={inboundSources}
           onChange={(k, v) => updateConfig(id, k, v)}
           onPromote={(name) => promoteWidget(id, name)}
-        />
-      )}
-
-      {isTool && (
-        <ToolHints callWired={outSet.has("call")} resultWired={inSet.has("result")} />
+        >
+          {isTool && (
+            <ToolHints callWired={outSet.has("call")} resultWired={inSet.has("result")} />
+          )}
+        </InlineKnobs>
       )}
 
     </div>
@@ -723,7 +723,8 @@ function LLMBody({
 }
 
 /** A node's knob rows, editable in place (text/number/bool/select, a code or
- *  store-sourced field), else a snippet of its config (`bodyRows`). */
+ *  store-sourced field), else a snippet of its config (`bodyRows`). `children`
+ *  (a hint under the knobs) is the body's last row, inside its padding. */
 function InlineKnobs({
   def,
   nodeId,
@@ -733,6 +734,7 @@ function InlineKnobs({
   inboundSources,
   onChange,
   onPromote,
+  children,
 }: {
   def: import("../../types/protocol").NodeDef;
   nodeId: string;
@@ -746,9 +748,10 @@ function InlineKnobs({
   inboundSources: Map<string, InboundWire[]>;
   onChange: (key: string, value: unknown) => void;
   onPromote: (name: string) => void;
+  children?: React.ReactNode;
 }) {
   if (widgets.length === 0) {
-    if (bodyRows.length === 0) return null;
+    if (bodyRows.length === 0 && !children) return null;
     return (
       <div className="node-body">
         {bodyRows.map((row) => (
@@ -757,6 +760,7 @@ function InlineKnobs({
             <span className={`cv ${row.value.length > 12 ? "code" : ""}`}>{row.value}</span>
           </div>
         ))}
+        {children}
       </div>
     );
   }
@@ -782,6 +786,7 @@ function InlineKnobs({
           onPromote={() => onPromote(w.name)}
         />
       ))}
+      {children}
     </div>
   );
 }
