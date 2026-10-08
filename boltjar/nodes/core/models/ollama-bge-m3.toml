@@ -12,9 +12,5 @@ context = 8192
 # NB: inputs/outputs modalities are only load-bearing for the LLM node (it reshapes
 # its ports from them). Embed/Rerank own their ports, so this manifest does not
 # declare them; the node's declared embedding/trigger ports are the truth.
-
-[[params]]
-name = "dim"
-type = "int"
-default = 1024
-label = "dimensions"
+# bge-m3 always returns 1024-d vectors and /api/embed takes no size, so the
+# manifest declares no settings: a knob here would change nothing.
