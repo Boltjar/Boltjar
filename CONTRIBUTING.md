@@ -88,7 +88,7 @@ editor/                  React + React Flow editor, built with Vite
   src/lib/               graph logic the canvas shares (ports, wires, renames)
   test/                  editor tests, plain Node scripts
 examples/                graphs that ship with Boltjar (read-only)
-packs/                   drop-in folder for third-party node packs
+custom_nodes/            drop-in folder for custom nodes
 tests/                   the pytest suite
 tools/                   small dev scripts
 user/                    your graphs, snapshots, stores and secrets (gitignored)
@@ -98,7 +98,7 @@ user/                    your graphs, snapshots, stores and secrets (gitignored)
 
 A node is a Python class with a `@node(...)` decorator. It declares its ports and knobs, and the editor draws it from that declaration. A new node needs no editor code.
 
-Core (`boltjar/nodes/core/`) is for general building blocks that many graphs need. Anything tied to one service or one niche workflow belongs in a pack, which ships on its own schedule and under its own license.
+Core (`boltjar/nodes/core/`) is for general building blocks that many graphs need. Anything tied to one service or one niche workflow belongs in a custom node, which ships on its own schedule and under its own license.
 
 ### A core node
 
@@ -118,7 +118,7 @@ class Upper:
 A few things to know:
 
 - `pulled=True` makes a data node. It runs on demand, when a fired node needs its value, so keep it free of side effects. A node that does work takes an input with `trigger=True` instead: it fires when an event arrives and pulls its other inputs at that moment. A pulled node can take a trigger too, as the Template does: each fire runs it and passes the trigger on, and a node that reads it in the same turn gets that fire's value.
-- A trigger fires the node and must be wired. A graph with an unwired trigger input does not turn On, and `@node` refuses a trigger declared `optional=True`, naming the node, so the pack is skipped with that reason. `optional=True` is for data inputs that may stay unwired.
+- A trigger fires the node and must be wired. A graph with an unwired trigger input does not turn On, and `@node` refuses a trigger declared `optional=True`, naming the node, so the custom node is skipped with that reason. `optional=True` is for data inputs that may stay unwired.
 - Knobs are annotated class attributes (`seconds: float = 2.0`) or `Widget` values from `boltjar.sdk` (`select`, `slider`, `code`). In the editor, a right-click turns a knob into an input, unless its `Widget` sets `promotable=False`.
 - Put behavior on the `Port` and `Widget` declarations (`growable`, `optional`, `op_field` and the rest). The editor reads those generically.
 - `icon=` and `subline=` on `@node` set how the node looks. `icon` is an Ionicons name the editor ships (the list is in `editor/src/lib/icons.tsx`). `subline` is the line under the title, a template over the node's knobs such as `every · {seconds}s`, with the filters listed in `SUBLINE_FILTERS` in `boltjar/sdk.py`. Leave `icon` out and the node draws its kind's icon. Leave `subline` out and a node with a model widget shows its model (`provider · model`), any other its category in lower case.
@@ -130,15 +130,15 @@ A few things to know:
 
 A new model from a provider Boltjar already supports needs no code and no file: once the provider lists it (Ollama has it installed, or your key's account offers it), it shows up in the model picker with knobs from its reported capabilities. A TOML manifest in `boltjar/nodes/core/models/` is optional enrichment: copy the closest one to give a model its own label, knobs or capabilities, and restart the server. The LLM node reshapes its inputs, outputs and knobs to the selected model.
 
-A node that calls a model declares its picker as a widget, `model("tts")` (the family it lists), and gets the same picker and per-model knobs as the LLM node. The picker starts empty, because a model can cost money and only the person picks one: `@node` refuses a picker that passes a default model or the old `auto=True`, naming the node, and the pack is skipped. A graph with the node turns On once a model is picked; `model("llm", optional=True)` declares a node that runs with none (the LLM answers with its offline mock).
+A node that calls a model declares its picker as a widget, `model("tts")` (the family it lists), and gets the same picker and per-model knobs as the LLM node. The picker starts empty, because a model can cost money and only the person picks one: `@node` refuses a picker that passes a default model or the old `auto=True`, naming the node, and the custom node is skipped. A graph with the node turns On once a model is picked; `model("llm", optional=True)` declares a node that runs with none (the LLM answers with its offline mock).
 
-### A node pack
+### A custom node
 
-A pack is a folder in `packs/` with a `pack.toml` manifest and an `__init__.py` that registers its nodes. Drop the folder in, restart, and its nodes show up in the library. Every node id starts with the pack's id and a dot (`yourpack.upper` in a pack whose id is `yourpack`), and a pack can't redefine a core node or an existing pipe type. A pack that fails to load is skipped and listed with its error; the rest keep working.
+A custom node is a folder in `custom_nodes/` with a `custom_node.toml` manifest and an `__init__.py` that registers its nodes. Drop the folder in, restart, and its nodes show up in the library. Every node id starts with the custom node's id and a dot (`yournodes.upper` in a custom node whose id is `yournodes`), and a custom node can't redefine a core node or an existing pipe type. A custom node that fails to load is skipped and listed with its error; the rest keep working.
 
-Start from `examples/packs/hello/`: one pulled node, one fired node (its `trigger` input fires it and must be wired, like every trigger), and a `pack.toml` with every field (`id`, `name`, `version`, `author`, `license`, `description`, `homepage`, `min_boltjar`). The examples folder is MIT-0, so copy it freely.
+Start from `examples/custom_nodes/hello/`: one pulled node, one fired node (its `trigger` input fires it and must be wired, like every trigger), and a `custom_node.toml` with every field (`id`, `name`, `version`, `author`, `license`, `description`, `homepage`, `min_boltjar`). The examples folder is MIT-0, so copy it freely.
 
-A custom node is yours: license it however you want, open or closed. Boltjar is Apache-2.0, so building on its SDK asks nothing of your code; if you copy parts of Boltjar into it, keep their license notice and the [NOTICE](NOTICE). Packs can ship model manifests too, in a `models/` folder next to `pack.toml`.
+A custom node is yours: license it however you want, open or closed. Boltjar is Apache-2.0, so building on its SDK asks nothing of your code; if you copy parts of Boltjar into it, keep their license notice and the [NOTICE](NOTICE). Custom nodes can ship model manifests too, in a `models/` folder next to `custom_node.toml`.
 
 ## Pull requests
 
@@ -152,7 +152,7 @@ A custom node is yours: license it however you want, open or closed. Boltjar is 
 
 The subject reads `area: what is true now`.
 
-- `area` is one of `runtime`, `editor`, `server`, `nodes`, `sdk`, `packs`, `examples`, `mcp`, `models`, `docs`, `readme`, `deps`, `tests`, `ci`, `security`, `release`, `license`, `site`, `brand`, `community`, or a node's name as the editor shows it (`Preview:`, `Database:`).
+- `area` is one of `runtime`, `editor`, `server`, `nodes`, `sdk`, `custom nodes`, `examples`, `mcp`, `models`, `docs`, `readme`, `deps`, `tests`, `ci`, `security`, `release`, `license`, `site`, `brand`, `community`, or a node's name as the editor shows it (`Preview:`, `Database:`).
 - After the colon it is lowercase (node names and proper nouns keep their case), present tense, about 60 characters and 72 at most, with no period. It says how things are once the commit lands. Plain verbs (add, drop, bump) are fine for mechanical changes.
 - No `feat:` or `fix:` prefixes.
 - A body is optional: one to three lines with the symptom and the reason. Any number in it is one you measured.

@@ -18,4 +18,4 @@ For a bug, the smallest graph that reproduces it gets it fixed fastest. Remove A
 
 ## Supporting the project
 
-Boltjar is free and open source. If it saves you time, you can sponsor it on [GitHub Sponsors](https://github.com/sponsors/Boltjar). Clear bug reports and node packs help just as much =)
+Boltjar is free and open source. If it saves you time, you can sponsor it on [GitHub Sponsors](https://github.com/sponsors/Boltjar). Clear bug reports and custom nodes help just as much =)

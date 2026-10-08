@@ -57,8 +57,8 @@ untrusted. The DB node binds a wired `{tag}` as a value, never as SQL, but a
 URL built from a tag goes wherever the tag says. An LLM wired to HTTP, DB or
 file tools can be steered by instructions hidden in the text it reads.
 
-Third-party node packs in `packs/` are Python code that runs with your
-permissions: install only packs you trust. The MCP server gives the connected
+Custom nodes in `custom_nodes/` are Python code that runs with your
+permissions: install only custom nodes you trust. The MCP server gives the connected
 AI the same control of the API that the editor has.
 
 ## Exposing the server

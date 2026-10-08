@@ -7,7 +7,7 @@ they are getting.
 ## Fine without asking
 
 - Talking about Boltjar, writing tutorials, videos and reviews about it.
-- Saying your pack, graph or product "works with Boltjar" or is "built with Boltjar".
+- Saying your custom node, graph or product "works with Boltjar" or is "built with Boltjar".
 - Sharing unmodified copies of Boltjar under its own name.
 - Using the logo to link to this project.
 
