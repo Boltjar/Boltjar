@@ -549,21 +549,15 @@ button{font-family:inherit;}
 .sb-line{display:flex; align-items:center; gap:var(--space-4); padding:0 var(--space-4); height:var(--status-h); flex:none;
   container-type:inline-size; container-name:statusline;}
 /* the latest line shrinks first and never paints past its own box; the
-   counters and the right-hand items keep their room (StatusBar, lib/statusFit) */
-.sb-tail{display:flex; align-items:center; gap:9px; min-width:0; flex:1 1 auto; overflow:hidden; position:relative;
-  --sb-msg-min:32ch;}
-.sb-tail .log-offer{flex:none;}
-.sb-tail .sb-measure{position:absolute; left:0; top:0; visibility:hidden; pointer-events:none;}
-.sb-tail .sb-msg-min{display:block; width:var(--sb-msg-min); height:1px;}
-/* collapsed to "N choices": that one button keeps its room and the message
-   takes what is left, however little, so the button is never cut */
-.sb-tail.collapsed .msg{min-width:0;}
+   counters and the right-hand items keep their room (StatusBar). Words only:
+   a choice is asked by a toast (components/Toast). */
+.sb-tail{display:flex; align-items:center; gap:9px; min-width:0; flex:1 1 auto; overflow:hidden;}
 .sb-mid, .sb-right{flex:none; white-space:nowrap;}
 .sb-tail .ts{color:var(--ink-faint); flex:none;}
 .sb-tail .lvl{display:grid; place-items:center; flex:none;}
 .sb-tail .lvl svg{width:12px; height:12px;}
 .sb-tail .lvl.info{color:var(--info);} .sb-tail .lvl.ok{color:var(--good);} .sb-tail .lvl.warn{color:var(--warn);} .sb-tail .lvl.bad{color:var(--bad);}
-.sb-tail .msg{color:var(--ink-dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:0 1 auto; min-width:var(--sb-msg-min);}
+.sb-tail .msg{color:var(--ink-dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:0 1 auto; min-width:0;}
 .sb-tail .msg .hl{color:var(--ink);}
 .sb-tail .msg .ty{color:var(--t-event);}
 .sb-tail .empty{color:var(--ink-ghost);}
@@ -641,15 +635,36 @@ button{font-family:inherit;}
 .pal-row.active .pr-kbd{display:none;}
 .pal-empty{padding:18px 16px; font-family:var(--font-mono); font-size:var(--fs-xs); color:var(--ink-ghost); text-align:center;}
 
-/* toast for connection rejection (full border + tint, never a single stripe) */
-.reject-toast{
-  position:absolute; bottom:calc(var(--space-5) + 26px); left:50%; transform:translateX(-50%);
-  z-index:8; display:flex; align-items:center; gap:8px;
-  font-family:var(--font-mono); font-size:var(--fs-xs); color:var(--bad);
-  background:rgba(var(--bad-rgb),0.10); border:1px solid rgba(var(--bad-rgb),0.45); border-radius:var(--radius-sm);
-  padding:7px 12px; box-shadow:var(--shadow-2); animation:rise var(--dur-3) var(--ease-snap) both;
-}
-.reject-toast svg{width:14px; height:14px; flex:none;}
+/* ============================================================================
+   TOASTS (components/Toast, lib/toasts): bottom right of the canvas, stacked
+   above the minimap and the zoom cluster, newest at the bottom. A tinted card
+   with a full border in its level's colour, never a single-side stripe.
+   ========================================================================== */
+.toasts{position:fixed; z-index:var(--z-toast); width:360px; max-width:calc(100vw - 32px);
+  display:flex; flex-direction:column; gap:8px; pointer-events:none;}
+.toast{--lvl:var(--info); --lvl-rgb:var(--info-rgb);
+  pointer-events:auto; display:grid; grid-template-columns:16px minmax(0,1fr) 22px; column-gap:10px; align-items:start;
+  padding:11px 9px 12px 12px; border-radius:var(--radius-md);
+  background:color-mix(in srgb, var(--lvl) 9%, var(--bg-2)); border:1px solid rgba(var(--lvl-rgb),0.5);
+  box-shadow:var(--shadow-3); font-family:var(--font-sans); font-size:var(--fs-sm); color:var(--ink);
+  animation:fadeup var(--dur-2) var(--ease-out) both;}
+.toast.ok{--lvl:var(--good); --lvl-rgb:var(--good-rgb);}
+.toast.warn{--lvl:var(--warn); --lvl-rgb:var(--warn-rgb);}
+.toast.bad{--lvl:var(--bad); --lvl-rgb:var(--bad-rgb);}
+.toast-icon{display:grid; place-items:center; height:19px; color:var(--lvl);}
+.toast-icon svg{width:16px; height:16px;}
+.toast-msg{line-height:19px; overflow-wrap:anywhere; padding-top:0;}
+.toast-close{display:grid; place-items:center; width:22px; height:22px; margin-top:-2px; padding:0; cursor:pointer;
+  background:none; border:1px solid transparent; border-radius:var(--radius-xs); color:var(--ink-faint);
+  transition:color var(--dur-1), background var(--dur-1);}
+.toast-close:hover{color:var(--ink-bright); background:rgba(var(--lvl-rgb),0.14);}
+.toast-close svg{width:12px; height:12px;}
+.toast :focus-visible{outline:1px solid var(--accent); outline-offset:1px;}
+/* the shared confirm buttons; a row that wraps fills its line, so answers
+   too long to share a row stack at the same width */
+.toast .toast-actions{grid-column:2 / 4; justify-content:flex-start; flex-wrap:wrap; margin-top:10px; padding-right:3px;}
+.toast .toast-actions button{flex:1 1 auto;}
+@media (prefers-reduced-motion: reduce){ .toast{animation:none;} }
 
 /* ============================================================================
    EVENT vs DATA PIPES (control / push vs data / pull)

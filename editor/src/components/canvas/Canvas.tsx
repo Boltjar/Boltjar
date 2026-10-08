@@ -85,7 +85,6 @@ interface CanvasProps {
   /** the canvas writes here how it brings a flow-space box into view: nothing
    *  when the box is already in view, else a fit to it (Tidy up's last step). */
   showRef?: React.MutableRefObject<((box: FlowBox, duration: number) => void) | null>;
-  rejectionReason: string | null;
   loading: boolean;
   /** changes each time a graph is opened on the canvas, which frames it anew
    *  (and remembers where the graph it leaves was, by `graphName`). */
@@ -140,7 +139,6 @@ export function Canvas(props: CanvasProps) {
     onConnectingChange,
     fitRef,
     showRef,
-    rejectionReason,
     loading,
     viewKey,
     liveCount,
@@ -585,12 +583,6 @@ export function Canvas(props: CanvasProps) {
       >
         <Icon name="hand-left-outline" /> drag to pan · scroll to zoom
       </div>
-
-      {rejectionReason && (
-        <div className="reject-toast" key={rejectionReason + Date.now()}>
-          <Icon name="close-circle" /> {rejectionReason}
-        </div>
-      )}
 
       <div className="zoom-ctrl" ref={zoomRef}>
         <button className="icon-btn" title="Zoom in" onClick={zoomIn}>

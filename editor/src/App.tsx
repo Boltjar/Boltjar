@@ -44,6 +44,8 @@ import { CommandPalette, type PaletteAction } from "./components/CommandPalette"
 import { ContextMenu, type MenuItem } from "./components/ContextMenu";
 import { ProblemsPanel } from "./components/ProblemsPanel";
 import { StatusBar } from "./components/StatusBar";
+import { Toaster } from "./components/Toast";
+import { toasts } from "./lib/toasts";
 import { ConnectionsWindow } from "./components/ConnectionsWindow";
 import { SaveAsDialog } from "./components/SaveAsDialog";
 import { GEAR_TAB, SETTINGS_LINKS, type SettingsTab } from "./lib/settingsTabs";
@@ -1637,16 +1639,9 @@ export default function App() {
     ],
   );
 
-  const rejectionReason = useMemo(() => {
-    if (!rejection) return null;
-    if (Date.now() - rejection.at > 2600) return null;
-    return rejection.reason;
-  }, [rejection]);
-  const [, force] = useState(0);
+  // a refused wire says why in a plain toast (lib/toasts), which hides itself
   useEffect(() => {
-    if (!rejection) return;
-    const t = window.setTimeout(() => force((n) => n + 1), 2700);
-    return () => window.clearTimeout(t);
+    if (rejection) toasts.raise({ level: "bad", message: rejection.reason });
   }, [rejection]);
 
   // surface the problems panel automatically when an `invalid` arrives via ws
@@ -1768,7 +1763,6 @@ export default function App() {
                 onCursorMove={(x, y) => setCursor({ x, y })}
                 onContextRequest={onContextRequest}
                 onConnectingChange={setConnecting}
-                rejectionReason={rejectionReason}
                 loading={graphLoading}
                 viewKey={openedGraphs}
                 graphName={graphName}
@@ -1816,6 +1810,7 @@ export default function App() {
           lastSaved={lastSaved}
           onClear={socket.clearLog}
         />
+        <Toaster />
       </div>
 
       {problemsOpen && problems.length > 0 && (

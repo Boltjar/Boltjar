@@ -17,14 +17,23 @@
 export type ConsoleLevel = "info" | "ok" | "warn" | "bad";
 export type ConsoleStream = "readable" | "values";
 
-/** One line as it arrives. `kind` is the ws event kind it came from, or
- *  "notice" for a line the editor posts itself. */
-/** A button on a console line: one answer to a choice the editor offers. */
+/** The icon each level shows, on a console line and on a toast. */
+export const LEVEL_ICON: Record<ConsoleLevel, string> = {
+  info: "information-circle-outline",
+  ok: "checkmark-circle",
+  warn: "alert-circle-outline",
+  bad: "close-circle",
+};
+
+/** A button on a console line: one answer to a choice the editor offers (the
+ *  same buttons show on its toast, lib/toasts). */
 export interface NoticeAction {
   label: string;
   run: () => void;
 }
 
+/** One line as it arrives. `kind` is the ws event kind it came from, or
+ *  "notice" for a line the editor posts itself. */
 export interface ConsoleLineIn {
   kind: string;
   ts: string;

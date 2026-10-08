@@ -28,6 +28,7 @@ import { pulseWires } from "../lib/wirePulse";
 import { RunConnection } from "../lib/runConnection";
 import { isReplayed } from "../lib/replayedValues";
 import { appendLine, EMPTY_FEED, settleOffer, type ConsoleFeed, type ConsoleLevel, type ConsoleLineIn, type NoticeAction } from "../lib/consoleFeed";
+import { toasts } from "../lib/toasts";
 
 export type NodeRunStatus = "idle" | "running" | "ok" | "warn" | "error";
 export type { Power };
@@ -336,14 +337,27 @@ export function useRunSocket(slug: string = "_default"): RunSocketState {
     [send],
   );
 
-  const notice = useCallback(
-    (message: string, level: ConsoleLevel = "info", offer?: { id: string; actions: NoticeAction[] }) =>
-      pushLine({ kind: "notice", ts: nowStamp(), level, message, ...(offer ? { offer: offer.id, actions: offer.actions } : {}) }),
-    [pushLine],
-  );
+  // the offer `id` is answered: the console line loses its buttons and the
+  // toast leaves (lib/toasts), wherever the answer came from.
   const settleNotice = useCallback((id: string) => {
     setLog((prev) => settleOffer(prev, id));
+    toasts.settle(id);
   }, []);
+  // A notice that offers a choice asks it with a toast too (lib/toasts), the
+  // same words and buttons as its console line. Every button settles the offer
+  // before it runs, so the choice is made once, from whichever place.
+  const notice = useCallback(
+    (message: string, level: ConsoleLevel = "info", offer?: { id: string; actions: NoticeAction[] }) => {
+      if (!offer || offer.actions.length === 0) {
+        pushLine({ kind: "notice", ts: nowStamp(), level, message });
+        return;
+      }
+      const actions = offer.actions.map((a) => ({ label: a.label, run: () => { settleNotice(offer.id); a.run(); } }));
+      pushLine({ kind: "notice", ts: nowStamp(), level, message, offer: offer.id, actions });
+      toasts.raise({ level, message, offer: offer.id, actions });
+    },
+    [pushLine, settleNotice],
+  );
 
   const clearLog = useCallback(() => setLog(EMPTY_FEED), []);
   const clearProblems = useCallback(() => setProblems([]), []);
