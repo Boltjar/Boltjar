@@ -206,8 +206,8 @@ function WorkflowNodeImpl({ id, data, selected }: NodeProps) {
     : undefined;
   const isAudioPreview = !!inWire && (inWire.srcType === "audio" || inWire.srcType === "pcm-audio");
   const isLLM = def.id === LLM_ID;
-  // any node that declares a model widget (LLM, TTS, STT, Embed, Rerank, a pack's
-  // own) gets the same picker + per-model param knobs; the list is filtered to
+  // any node that declares a model widget (LLM, TTS, STT, Embed, Rerank, a custom
+  // node's own) gets the same picker + per-model param knobs; the list is filtered to
   // the family the widget declares (model_kind).
   const modelWidget = modelWidgetOf(def);
   const isModelNode = modelWidget !== null;

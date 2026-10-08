@@ -682,7 +682,7 @@ button{font-family:inherit;}
    ========================================================================== */
 .node-special{padding:0 11px 10px;}
 /* a node's other knobs, as rows under its surface (Chat Input's placeholder under
-   the send box, a pack model node's own knobs under its params): the surface's
+   the send box, a custom model node's own knobs under its params): the surface's
    inset, and the same gap as the params above so every knob under the picker
    sits the same distance apart */
 .node-special > .node-body{padding:var(--knob-gap) 0 0; gap:var(--knob-gap);}

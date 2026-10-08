@@ -9,7 +9,7 @@
 // the graph JSON. The core nodes come from
 // fixtures/core-nodes.json, the served definitions (tests/test_node_look.py
 // keeps that file equal to the live registry), so a declaration change on
-// @node shows up here. The pack cases are built by hand: they test the generic
+// @node shows up here. The custom node cases are built by hand: they test the generic
 // mechanism, which no core node is required to exercise.
 //
 // It also reads WorkflowNode.tsx, the call site: a surface node must render
@@ -68,7 +68,7 @@ check("a Respond to Webhook knob promoted to a port is no longer a row",
   rows(core("core.output.respond_webhook"), { promoted: ["last"] }),
   ["status", "content_type", "headers"]);
 
-// ── the generic mechanism, on pack nodes ──
+// ── the generic mechanism, on custom nodes ──
 const widget = (name, kind, extra = {}) => ({
   name, kind, default: "", options: [], label: name, surface: "body", promotable: true,
   op_field: null, op_values: [], model_kind: null, ...extra,
@@ -77,7 +77,7 @@ const def = (id, widgets) => ({
   id, name: id, kind: "transform", pulled: false, category: "AI", version: "0.1.0", summary: "",
   inputs: [], outputs: [], widgets, colors: {},
 });
-check("a pack model node draws its own knobs under its picker, found by kind",
+check("a custom model node draws its own knobs under its picker, found by kind",
   rows(def("acme.voice", [widget("voice_model", "model", { model_kind: "tts" }), widget("speed", "number")])),
   ["speed"]);
 check("a modal widget is not a row",

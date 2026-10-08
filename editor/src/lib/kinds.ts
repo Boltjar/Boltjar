@@ -36,7 +36,7 @@ export function kindStyle(kind: NodeKind): KindStyle {
 
 /** The identity glyph for a node definition: the icon its @node declares, else
  *  its kind glyph. `known` says whether the editor ships an icon by that name
- *  (lib/icons `hasIcon`), so a pack naming one it does not ship draws the kind
+ *  (lib/icons `hasIcon`), so a custom node naming one it does not ship draws the kind
  *  glyph rather than the neutral dot an unknown name renders as. */
 export function nodeIcon(def: NodeDef, known: (name: string) => boolean): string {
   const declared = def.icon ?? "";
@@ -60,7 +60,7 @@ export const GROUP_ORDER = [
 /**
  * Which library group a definition belongs to. We honour the backend's
  * `category` when it is a known group, otherwise bucket by kind. The core
- * pack uses categories Values / Triggers / Sensors / Data / Logic / AI / Store /
+ * nodes use categories Values / Triggers / Sensors / Data / Logic / AI / Store /
  * Output / Inspect, which we normalise onto the palette's groups.
  */
 export function libraryGroup(def: NodeDef): string {

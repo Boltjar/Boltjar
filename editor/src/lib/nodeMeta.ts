@@ -22,7 +22,7 @@ function preview(value: unknown, max = 22): string {
  */
 export function headerSubline(def: NodeDef, config: Record<string, unknown>): string {
   if (def.subline) return renderSubline(def, config);
-  // a model node that declares no subline (any pack's): the model picked in
+  // a model node that declares no subline (any custom node's): the model picked in
   // it. A model picker never holds a model nobody picked (a model can cost
   // money), so an empty one reads as none picked.
   const modelWidget = modelWidgetOf(def);
@@ -83,7 +83,7 @@ export function sublineFields(def: NodeDef): string[] {
 
 /** A model id as a subline: `xai/tts` -> `xai · tts`, a bare id -> `model · id`,
  *  nothing picked -> `model · none picked`, the one wording every model node
- *  (LLM, TTS, STT, Embed, Rerank, a pack's) shows with no model picked. */
+ *  (LLM, TTS, STT, Embed, Rerank, a custom node's) shows with no model picked. */
 export function modelSubline(id: string): string {
   if (!id) return "model · none picked";
   // split at the FIRST slash only: an endpoint model id keeps its own slashes

@@ -48,8 +48,8 @@ const QUEUE = def("core.flow.queue",
 const SYNC = def("core.flow.sync", [port("in", "event", { growable: true, trigger: true })]);
 const COMPUTE = def("core.data.compute", [port("value", "any", { growable: true })],
   [{ name: "expression", kind: "code", default: "value", options: [], label: "Expression" }]);
-// a pack node with two growable inputs: a socket belongs to the base it starts with.
-const TWO = def("pack.two", [port("in", "event", { growable: true, trigger: true }), port("tag", "any", { growable: true })]);
+// a custom node with two growable inputs: a socket belongs to the base it starts with.
+const TWO = def("custom.two", [port("in", "event", { growable: true, trigger: true }), port("tag", "any", { growable: true })]);
 
 const shape = (ports) => ports.map((p) => ({
   name: p.name, type: p.type, trigger: p.trigger, base: p.base ?? null,

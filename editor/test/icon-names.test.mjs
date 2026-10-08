@@ -13,7 +13,7 @@
 //    items, palette actions, provider rows), across src/;
 //  - the nodes: the `icon` of every served core node (fixtures/core-nodes.json,
 //    kept equal to the live registry by tests/test_node_look.py) and of the
-//    example packs (examples/packs/*/nodes.py, `icon="..."`).
+//    example custom nodes (examples/custom_nodes/*/nodes.py, `icon="..."`).
 // ============================================================================
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -91,12 +91,12 @@ for (const file of walk(srcDir)) {
 // ── what the shipped nodes ask for ──
 const core = JSON.parse(readFileSync(resolve(here, "fixtures/core-nodes.json"), "utf8"));
 for (const d of core) if (d.icon) use(d.icon, `node ${d.id}`);
-const packs = resolve(here, "../../examples/packs");
-if (existsSync(packs)) {
-  for (const pack of readdirSync(packs)) {
-    const f = join(packs, pack, "nodes.py");
+const customNodes = resolve(here, "../../examples/custom_nodes");
+if (existsSync(customNodes)) {
+  for (const folder of readdirSync(customNodes)) {
+    const f = join(customNodes, folder, "nodes.py");
     if (!existsSync(f)) continue;
-    for (const m of readFileSync(f, "utf8").matchAll(/\bicon\s*=\s*"([^"]+)"/g)) use(m[1], `examples/packs/${pack}/nodes.py`);
+    for (const m of readFileSync(f, "utf8").matchAll(/\bicon\s*=\s*"([^"]+)"/g)) use(m[1], `examples/custom_nodes/${folder}/nodes.py`);
   }
 }
 

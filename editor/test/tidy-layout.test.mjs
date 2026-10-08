@@ -212,9 +212,9 @@ check("a node well below stays put", down.low, undefined);
 check("after that move nothing overlaps", tooClose(stacked, down), []);
 
 // ── room for nodes that grow ──
-const llmDef = { id: "pack.chat", widgets: [{ name: "model", kind: "model", model_kind: "llm" }], inputs: [{ name: "prompt", growable: false }] };
-const tplDef = { id: "pack.fill", widgets: [{ name: "template", kind: "code" }], inputs: [{ name: "tag", growable: true }] };
-const plainDef = { id: "pack.plain", widgets: [], inputs: [{ name: "in", growable: false }] };
+const llmDef = { id: "custom.chat", widgets: [{ name: "model", kind: "model", model_kind: "llm" }], inputs: [{ name: "prompt", growable: false }] };
+const tplDef = { id: "custom.fill", widgets: [{ name: "template", kind: "code" }], inputs: [{ name: "tag", growable: true }] };
+const plainDef = { id: "custom.plain", widgets: [], inputs: [{ name: "in", growable: false }] };
 const num = (name, min = 0, max = 1) => ({ name, type: "float", min, max });
 const manifests = [
   { id: "a/small", kind: "llm", params: [num("temperature")] },

@@ -231,12 +231,12 @@ for (const d of defs) {
   check(`${d.id} draws the icon it declares`, nodeIcon(d, known), d.icon);
 }
 
-// ---- a pack node's icon: declared, unknown, or none
-const pack = (extra) => ({ id: "pack.x", kind: "service", category: "Pack", widgets: [], inputs: [], ...extra });
-check("a pack node draws the icon it declares", nodeIcon(pack({ icon: "globe-outline" }), known), "globe-outline");
-check("a pack icon the editor does not ship draws the kind glyph",
-  nodeIcon(pack({ icon: "rocket-outline" }), known), kindStyle("service").icon);
-check("a pack node that declares none draws the kind glyph", nodeIcon(pack({}), known), kindStyle("service").icon);
+// ---- a custom node's icon: declared, unknown, or none
+const custom = (extra) => ({ id: "custom.x", kind: "service", category: "Custom", widgets: [], inputs: [], ...extra });
+check("a custom node draws the icon it declares", nodeIcon(custom({ icon: "globe-outline" }), known), "globe-outline");
+check("a custom node icon the editor does not ship draws the kind glyph",
+  nodeIcon(custom({ icon: "rocket-outline" }), known), kindStyle("service").icon);
+check("a custom node that declares none draws the kind glyph", nodeIcon(custom({}), known), kindStyle("service").icon);
 
 // ---- every core subline reads as it did before
 for (const [id, config, want] of SUBLINE_BEFORE) {
@@ -250,7 +250,7 @@ for (const [id, config, want] of BODY_BEFORE) {
 
 // ---- the subline filters, one by one
 const W = (name, kind, dflt) => ({ name, kind, label: name, default: dflt });
-const node = (subline, widgets, inputs = []) => ({ id: "pack.x", kind: "transform", category: "Pack", subline, widgets, inputs });
+const node = (subline, widgets, inputs = []) => ({ id: "custom.x", kind: "transform", category: "Custom", subline, widgets, inputs });
 check("text outside a placeholder is kept", renderSubline(node("fetch · once", []), {}), "fetch · once");
 check("an unset field reads as its default", renderSubline(node("{n}", [W("n", "number", 4)]), {}), "4");
 check("a set field wins over its default", renderSubline(node("{n}", [W("n", "number", 4)]), { n: 0 }), "0");
@@ -271,7 +271,7 @@ check("tags counts the {tags} of a template",
 check("tags leaves out a name a declared port owns",
   renderSubline(node("{t|tags}", [W("t", "code", "")], [{ name: "trigger", growable: false }]), { t: "{trigger} {a}" }), "1 tag");
 check("an unknown filter passes the value on", renderSubline(node("{t|shout}", [W("t", "text", "")]), { t: "a" }), "a");
-check("a node without a subline shows its category", headerSubline(node("", []), {}), "pack");
+check("a node without a subline shows its category", headerSubline(node("", []), {}), "custom");
 check("the subline fields, in order", sublineFields(node("{a} · {b|clip:3} · {a}", [])), ["a", "b", "a"]);
 
 if (failures) {

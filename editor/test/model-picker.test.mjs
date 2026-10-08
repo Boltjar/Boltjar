@@ -51,13 +51,13 @@ const served = [
   model("xai/tts", { kind: "tts", source: "manifest" }),
   model("fish/s2", { kind: "tts", available: false, reason: "no Fish Audio key: add it in Settings, AI Providers", source: "manifest" }),
   // an older TOML with no kind is an LLM.
-  { ...model("pack/legacy"), kind: undefined },
+  { ...model("acme/legacy"), kind: undefined },
 ];
 
 // ---- the list: runnable models of the node's family only
 check("an LLM picker lists runnable chat models, never an unavailable one",
   runnableModels(served, "llm").map((m) => m.id),
-  ["ollama/gemma4:e4b", "ollama/llama3.2:latest", "anthropic/claude-opus-5", "xai/grok-4.7", "pack/legacy"]);
+  ["ollama/gemma4:e4b", "ollama/llama3.2:latest", "anthropic/claude-opus-5", "xai/grok-4.7", "acme/legacy"]);
 check("a TTS picker lists runnable TTS models only",
   runnableModels(served, "tts").map((m) => m.id), ["xai/tts"]);
 check("an embed picker lists embed models",
@@ -69,7 +69,7 @@ check("groups keep the served provider order",
   [["ollama", ["ollama/gemma4:e4b", "ollama/llama3.2:latest"]],
    ["anthropic", ["anthropic/claude-opus-5"]],
    ["xai", ["xai/grok-4.7"]],
-   ["pack", ["pack/legacy"]]]);
+   ["acme", ["acme/legacy"]]]);
 check("a search narrows the groups (label, id, provider or summary)",
   pickerGroups(served, "llm", "GROK").map((g) => g.provider), ["xai"]);
 check("a search by summary", searchModels(served, "listed by").map((m) => m.id), ["xai/grok-4.7"]);
@@ -81,7 +81,7 @@ check("an empty search keeps every row", searchModels(served, "  ").length, serv
 const rowsOf = (list) => list.kind === "models" ? list.groups.flatMap((g) => g.models.map((m) => m.id)) : list.kind;
 check("an LLM picker lists its runnable models and nothing above them",
   rowsOf(pickerList(served, "llm", "")),
-  ["ollama/gemma4:e4b", "ollama/llama3.2:latest", "anthropic/claude-opus-5", "xai/grok-4.7", "pack/legacy"]);
+  ["ollama/gemma4:e4b", "ollama/llama3.2:latest", "anthropic/claude-opus-5", "xai/grok-4.7", "acme/legacy"]);
 check("searching auto finds no Auto row", pickerList(served, "llm", "auto"), { kind: "empty" });
 check("a search that hides every runnable model says so", pickerList(served, "llm", "qwen3:14b"), { kind: "empty" });
 check("with nothing connected an LLM picker offers Add a connection",

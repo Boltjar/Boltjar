@@ -68,7 +68,7 @@ export function onBody(w: { surface?: string }): boolean {
 /** The widgets a node draws as knob rows on its body: each body widget shown
  *  for the current operation and not promoted to a port. A node with a surface
  *  of its own draws its knob rows too, under the surface, so Chat Input's
- *  placeholder and a pack model node's own knobs are on the canvas like any
+ *  placeholder and a custom model node's own knobs are on the canvas like any
  *  knob. Left out is what a surface already draws: the model picker draws the
  *  model widget (kind "model"), and `drawnBySurface` names any widget another
  *  surface edits. */
@@ -116,7 +116,7 @@ export const LLM_ID = "core.ai.llm";
 export const HTTP_ID = "core.net.http";
 
 /** A node's model picker: its first `model` widget, or null for a node without
- *  one. Declared on the widget, never keyed off a node id, so any pack node that
+ *  one. Declared on the widget, never keyed off a node id, so any custom node that
  *  declares a model widget gets the picker and its per-model knobs. */
 export function modelWidgetOf(def: NodeDef): Widget | null {
   return def.widgets.find((w) => w.kind === "model") ?? null;

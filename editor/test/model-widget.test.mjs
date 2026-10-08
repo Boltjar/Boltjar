@@ -1,7 +1,7 @@
 // ============================================================================
 // Framework-free test script for which nodes carry a model picker: it is
 // declared on the model widget (kind "model" plus the family it lists,
-// model_kind), never keyed off a node id, so any pack node can have one. Drives
+// model_kind), never keyed off a node id, so any custom node can have one. Drives
 // the REAL src/lib/dynamicPorts.ts, transpiled with the installed TypeScript
 // compiler (its only imports are type-only). Run: `npm run test`.
 // ============================================================================
@@ -34,7 +34,7 @@ const def = (id, widgets) => ({
   id, name: id, kind: "transform", pulled: false, category: "AI", version: "0.1.0", summary: "",
   inputs: [], outputs: [], widgets, colors: {},
 });
-check("a pack node's model widget declares its family",
+check("a custom node's model widget declares its family",
   modelKindOf(def("acme.voice", [widget("voice_model", "model", { model_kind: "tts" })])), "tts");
 check("a model widget with no family lists LLMs",
   modelKindOf(def("acme.chat", [widget("model", "model")])), "llm");
