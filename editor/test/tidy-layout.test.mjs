@@ -17,14 +17,18 @@ import { dirname, resolve } from "node:path";
 import ts from "typescript";
 
 const here = dirname(fileURLToPath(import.meta.url));
-async function load(rel) {
+// a module as a data: URL, its relative imports (./wireRoute) inlined the same way
+function url(rel) {
   const src = readFileSync(resolve(here, "../src/lib", rel), "utf8");
-  const js = ts.transpileModule(src, {
+  let js = ts.transpileModule(src, {
     compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 },
   }).outputText;
-  return import("data:text/javascript," + encodeURIComponent(js));
+  js = js.replace(/from "\.\/(\w+)"/g, (_, name) => `from "${url(`${name}.ts`)}"`);
+  return "data:text/javascript," + encodeURIComponent(js);
 }
+const load = (rel) => import(url(rel));
 const { tidyLayout, tidyGraph, TIDY_DEFAULTS } = await load("tidyLayout.ts");
+const { wireSamples, pairLanes, forwardWireControls, WIRE_CURVATURE } = await load("wireRoute.ts");
 const { tidyRoom, modelRoom, TIDY_ROOM } = await load("tidyRoom.ts");
 
 let failures = 0;
@@ -228,6 +232,103 @@ check("a model node with a model picked keeps no room (its size is real)", tidyR
 check("a model that adds port rows adds their height", modelRoom([manifests[0]], () => 6, 4) - modelRoom([manifests[0]], () => 4, 4), 2 * TIDY_ROOM.portPitch);
 check("a node with a growable socket keeps a modest allowance", tidyRoom(tplDef, {}, manifests, rows), TIDY_ROOM.growRows * TIDY_ROOM.portPitch);
 check("any other node keeps none", tidyRoom(plainDef, {}, manifests, rows), 0);
+
+// ── fewer wires behind nodes, and no scattering for it ──
+// The shipped examples and two graphs with fan-out and a loop, at the sizes and
+// socket positions the editor measured for them (fixtures/tidy-graphs.json,
+// read from the rendered editor), wired port to port. Every drawn wire is
+// traced with the geometry TypedEdge draws: React Flow's bezier forward (its
+// control points checked against @xyflow/system below), the route around its
+// two nodes back (lib/wireRoute, in its lane beside the pair's other back wires).
+// Measured against the plain layered layout (the one before wires were
+// cleared, PLAIN below): wires behind nodes go down, crossings never go up,
+// the height grows 15% at most, and it stays fast.
+const { getBezierPath, Position } = await import("@xyflow/system");
+const [rfPath] = getBezierPath({ sourceX: 10, sourceY: 20, targetX: 410, targetY: 300,
+  sourcePosition: Position.Right, targetPosition: Position.Left, curvature: WIRE_CURVATURE });
+const ours = forwardWireControls({ x: 10, y: 20 }, { x: 410, y: 300 });
+check("the forward wire traced is React Flow's bezier", rfPath,
+  `M10,20 C${ours[1].x},${ours[1].y} ${ours[2].x},${ours[2].y} 410,300`);
+const edgeSrc = readFileSync(resolve(here, "../src/components/canvas/TypedEdge.tsx"), "latin1");
+check("and the editor draws it with that curvature", /curvature: WIRE_CURVATURE/.test(edgeSrc), true);
+
+/** Each drawn wire that passes through the box of a node that is not one of its ends. */
+function wiresBehind(nodes, edges, pos) {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const box = (id) => ({ x: pos[id].x, y: pos[id].y, width: byId.get(id).width, height: byId.get(id).height });
+  const end = (id, side, port) => {
+    const o = byId.get(id).sockets[side][port];
+    return { x: pos[id].x + o.x, y: pos[id].y + o.y };
+  };
+  const drawn = edges.filter((e) => e.drawn !== false).map((e, i) => ({
+    ...e, key: `w${String(i).padStart(3, "0")}`, s: end(e.source, "out", e.sourceHandle), t: end(e.target, "in", e.targetHandle) }));
+  const lanes = new Map();
+  for (const e of drawn) {
+    if (e.t.x >= e.s.x || lanes.has(e.key)) continue;
+    const pair = drawn.filter((w) => w.source === e.source && w.target === e.target && w.t.x < w.s.x);
+    const got = pairLanes(pair.map((w) => ({ id: w.key, sy: w.s.y, ty: w.t.y })), e.s.x, e.t.x, box(e.source), box(e.target));
+    for (const w of pair) lanes.set(w.key, got.get(w.key));
+  }
+  const bad = [];
+  for (const e of drawn) {
+    const pts = wireSamples(e.s, e.t, box(e.source), box(e.target), lanes.get(e.key), 2);
+    for (const n of nodes) {
+      if (n.id === e.source || n.id === e.target) continue;
+      const b = box(n.id);
+      if (pts.some((p) => p.x > b.x && p.x < b.x + b.width && p.y > b.y && p.y < b.y + b.height)) {
+        bad.push(`${e.source}.${e.sourceHandle} -> ${e.target}.${e.targetHandle} behind ${n.id}`);
+      }
+    }
+  }
+  return bad;
+}
+const measured = JSON.parse(readFileSync(resolve(here, "fixtures/tidy-graphs.json"), "utf8"));
+// the chat example again, every node piled up near the origin in reverse order
+measured["chat, scrambled"] = {
+  nodes: [...measured.chat.nodes].reverse().map((n, i) => ({ ...n, x: (i * 37) % 300, y: (i * 53) % 260 })),
+  edges: measured.chat.edges,
+};
+/** Pairs of forward wires between the same two columns whose ends swap order. */
+function wireCrossings(nodes, edges, pos) {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const end = (id, side, port) => pos[id].y + byId.get(id).sockets[side][port].y;
+  const ws = edges.filter((e) => e.drawn !== false && pos[e.target].x > pos[e.source].x);
+  let n = 0;
+  for (let a = 0; a < ws.length; a++) for (let b = a + 1; b < ws.length; b++) {
+    const p = ws[a], q = ws[b];
+    if (p.source === q.source || p.target === q.target) continue;
+    if (pos[p.source].x !== pos[q.source].x || pos[p.target].x !== pos[q.target].x) continue;
+    if ((end(p.source, "out", p.sourceHandle) - end(q.source, "out", q.sourceHandle))
+      * (end(p.target, "in", p.targetHandle) - end(q.target, "in", q.targetHandle)) < 0) n++;
+  }
+  return n;
+}
+const heightOf = (nodes, pos) => Math.max(...nodes.map((n) => pos[n.id].y + n.height)) - Math.min(...nodes.map((n) => pos[n.id].y));
+// the plain layered layout of each graph (main before this change): wires
+// behind nodes, crossings, height; and the most wires behind nodes allowed now
+const PLAIN = {
+  chat: { behind: 10, crossings: 1, height: 1036, most: 5 },
+  demo: { behind: 0, crossings: 0, height: 676, most: 0 },
+  fanout: { behind: 1, crossings: 3, height: 952, most: 0 },
+  loop: { behind: 1, crossings: 0, height: 616, most: 0 },
+  "chat, scrambled": { behind: 18, crossings: 1, height: 928, most: 7 },
+};
+for (const [name, g] of Object.entries(measured)) {
+  const t1 = performance.now();
+  const laid = tidyLayout(g.nodes, g.edges);
+  const ms = performance.now() - t1;
+  const was = PLAIN[name];
+  const behind = wiresBehind(g.nodes, g.edges, laid);
+  check(`${name}: at most ${was.most} wires behind other nodes (the plain layout had ${was.behind})`,
+    behind.length <= was.most || behind, true);
+  check(`${name}: no more crossings than the plain layout`, wireCrossings(g.nodes, g.edges, laid) <= was.crossings, true);
+  check(`${name}: at most 15% taller than the plain layout`, heightOf(g.nodes, laid) <= was.height * 1.15, true);
+  check(`${name}: no two nodes overlap and the row gap holds`, tooClose(g.nodes, laid, ROW - 0.001), []);
+  check(`${name}: wires still run left to right`,
+    g.edges.filter((e) => e.drawn !== false && laid[e.target].x <= laid[e.source].x)
+      .every((e) => e.target === "Each" || g.edges.some((f) => f.source === e.target && f.target === e.source)), true);
+  check(`${name}: it lays out in under 100 ms`, ms < 100, true);
+}
 
 // ── the command is offered where it should be ──
 const app = readFileSync(resolve(here, "../src/App.tsx"), "utf8");

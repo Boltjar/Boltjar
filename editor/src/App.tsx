@@ -29,7 +29,7 @@ import {
   withTabClosed, withTabOpened, withTabRenamed, withTabSaved, type StoredDraft, type TabsState,
 } from "./lib/tabs";
 import { mod, altShift } from "./lib/platform";
-import { tidyGraph, type TidyNode } from "./lib/tidyLayout";
+import { tidyGraph, type TidyEdge, type TidyNode, type TidySockets } from "./lib/tidyLayout";
 import { tidyRoom } from "./lib/tidyRoom";
 import { concreteInputs, concreteOutputs } from "./lib/dynamicPorts";
 import { DOCS_URL, FEEDBACK_URL, SPONSOR_URL, bugReportUrl, copyText, diagnosticsText, openExternal, osName } from "./lib/help";
@@ -1091,6 +1091,7 @@ export default function App() {
   //    the room kept below nodes that grow (lib/tidyRoom). One undo step; the
   //    nodes glide there and the view follows when they left it. ──
   const showRef = useRef<((box: FlowBox, duration: number) => void) | null>(null);
+  const socketsRef = useRef<((id: string) => TidySockets | undefined) | null>(null);
   const tidyUp = useCallback(() => {
     if (nodes.length < 2) return;
     const scope = selectedIds.length >= 2 ? selectedIds : [];
@@ -1111,16 +1112,19 @@ export default function App() {
         height: n.measured?.height ?? n.height ?? 0,
         room: def ? tidyRoom(def, n.data.config ?? {}, manifests, rows) : 0,
         group: groupOf.get(n.id) ?? null,
+        sockets: socketsRef.current?.(n.id),
       };
     });
     // a Wireless In and the Outs on its channel are one wire to the layout,
-    // one that may share a column (the Out sits under its In, not after it)
-    const wires: Array<{ source: string; target: string; span?: number }> =
-      edges.map((e) => ({ source: e.source, target: e.target }));
+    // one that may share a column (the Out sits under its In, not after it),
+    // and one the editor does not draw
+    const wires: TidyEdge[] = edges.map((e) => ({
+      source: e.source, target: e.target, sourceHandle: e.sourceHandle, targetHandle: e.targetHandle,
+    }));
     for (const n of nodes) {
       if (n.data.typeId !== WIRELESS_OUT_ID) continue;
       const from = wirelessInOwners.get(String(n.data.config.channel ?? "1"));
-      if (from) wires.push({ source: from, target: n.id, span: 0 });
+      if (from) wires.push({ source: from, target: n.id, span: 0, drawn: false });
     }
     const moved = tidyGraph(laid, wires, scope, { groupPad: GROUP_BOX });
     // what to keep in view: the tidied nodes and any node they pushed along
@@ -1777,6 +1781,7 @@ export default function App() {
                 onPrimary={() => void onPrimary()}
                 fitRef={fitRef}
                 showRef={showRef}
+                socketsRef={socketsRef}
               />
             </ReactFlowProvider>
           ) : (

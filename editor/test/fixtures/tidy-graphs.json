@@ -1,0 +1,1354 @@
+{
+ "chat": {
+  "nodes": [
+   {
+    "id": "chat",
+    "x": -888,
+    "y": -108,
+    "width": 290.0,
+    "height": 162.4,
+    "sockets": {
+     "in": {},
+     "out": {
+      "trigger": {
+       "x": 290.0,
+       "y": 73.4
+      },
+      "text": {
+       "x": 290.0,
+       "y": 97.4
+      }
+     }
+    }
+   },
+   {
+    "id": "Prompt Template",
+    "x": 360,
+    "y": -252,
+    "width": 374.0,
+    "height": 640.0,
+    "sockets": {
+     "in": {
+      "trigger": {
+       "x": 0,
+       "y": 73.4
+      },
+      "username": {
+       "x": 0,
+       "y": 97.4
+      },
+      "clock": {
+       "x": 0,
+       "y": 121.4
+      },
+      "chat_history": {
+       "x": 0,
+       "y": 145.4
+      },
+      "chat": {
+       "x": 0,
+       "y": 169.4
+      },
+      "tag\u00b7+": {
+       "x": 0,
+       "y": 193.4
+      }
+     },
+     "out": {
+      "trigger": {
+       "x": 374.0,
+       "y": 73.4
+      },
+      "out": {
+       "x": 374.0,
+       "y": 97.4
+      }
+     }
+    }
+   },
+   {
+    "id": "LLM",
+    "x": 1728,
+    "y": -180,
+    "width": 290.0,
+    "height": 253.9,
+    "sockets": {
+     "in": {
+      "trigger": {
+       "x": 0,
+       "y": 73.4
+      },
+      "prompt": {
+       "x": 0,
+       "y": 97.4
+      }
+     },
+     "out": {
+      "trigger": {
+       "x": 290.0,
+       "y": 73.4
+      },
+      "response": {
+       "x": 290.0,
+       "y": 97.4
+      },
+      "reasoning": {
+       "x": 290.0,
+       "y": 121.4
+      },
+      "error": {
+       "x": 290.0,
+       "y": 145.4
+      }
+     }
+    }
+   },
+   {
+    "id": "Response Preview",
+    "x": 2124,
+    "y": 12,
+    "width": 290.0,
+    "height": 280.0,
+    "sockets": {
+     "in": {
+      "trigger": {
+       "x": 0,
+       "y": 73.4
+      },
+      "in": {
+       "x": 0,
+       "y": 97.4
+      }
+     },
+     "out": {
+      "trigger": {
+       "x": 290.0,
+       "y": 73.4
+      },
+      "out": {
+       "x": 290.0,
+       "y": 97.4
+      }
+     }
+    }
+   },
+   {
+    "id": "clock",
+    "x": -492,
+    "y": -576,
+    "width": 290.0,
+    "height": 202.4,
+    "sockets": {
+     "in": {},
+     "out": {
+      "out": {
+       "x": 290.0,
+       "y": 73.4
+      }
+     }
+    }
+   },
+   {
+    "id": "database",
+    "x": -888,
+    "y": -456,
+    "width": 290.0,
+    "height": 297.2,
+    "sockets": {
+     "in": {},
+     "out": {
+      "db": {
+       "x": 290.0,
+       "y": 73.4
+      }
+     }
+    }
+   },
+   {
+    "id": "Chat Append (Assistant)",
+    "x": 2124,
+    "y": -492,
+    "width": 290.0,
+    "height": 404.0,
+    "sockets": {
+     "in": {
+      "trigger": {
+       "x": 0,
+       "y": 73.4
+      },
+      "db": {
+       "x": 0,
+       "y": 97.4
+      },
+      "tag0": {
+       "x": 0,
+       "y": 121.4
+      },
+      "tag1": {
+       "x": 0,
+       "y": 145.4
+      },
+      "tag\u00b7+": {
+       "x": 0,
+       "y": 169.4
+      }
+     },
+     "out": {
+      "trigger": {
+       "x": 290.0,
+       "y": 73.4
+      },
+      "row_id": {
+       "x": 290.0,
+       "y": 97.4
+      }
+     }
+    }
+   },
+   {
+    "id": "Chat History",
+    "x": -492,
+    "y": -324,
+    "width": 353.0,
+    "height": 306.0,
+    "sockets": {
+     "in": {
+      "trigger": {
+       "x": 0,
+       "y": 73.4
+      },
+      "db": {
+       "x": 0,
+       "y": 97.4
+      },
+      "tag\u00b7+": {
+       "x": 0,
+       "y": 121.4
+      }
+     },
+     "out": {
+      "trigger": {
+       "x": 353.0,
+       "y": 73.4
+      },
+      "rows": {
+       "x": 353.0,
+       "y": 97.4
+      }
+     }
+    }
+   },
+   {
+    "id": "Chat Append (User)",
+    "x": -36,
+    "y": -156,
+    "width": 290.0,
+    "height": 430.0,
+    "sockets": {
+     "in": {
+      "trigger": {
+       "x": 0,
+       "y": 73.4
+      },
+      "db": {
+       "x": 0,
+       "y": 97.4
+      },
+      "tag0": {
+       "x": 0,
+       "y": 121.4
+      },
+      "tag1": {
+       "x": 0,
+       "y": 145.4
+      },
+      "username": {
+       "x": 0,
+       "y": 169.4
+      },
+      "tag\u00b7+": {
+       "x": 0,
+       "y": 193.4
+      }
+     },
+     "out": {
+      "trigger": {
+       "x": 290.0,
+       "y": 73.4
+      },
+      "row_id": {
+       "x": 290.0,
+       "y": 97.4
+      }
+     }
+    }
+   },
+   {
+    "id": "TTS",
+    "x": 2520,
+    "y": 24,
+    "width": 290.0,
+    "height": 229.9,
+    "sockets": {
+     "in": {
+      "trigger": {
+       "x": 0,
+       "y": 73.4
+      },
+      "text": {
+       "x": 0,
+       "y": 97.4
+      },
+      "lang": {
+       "x": 0,
+       "y": 121.4
+      }
+     },
+     "out": {
+      "trigger": {
+       "x": 290.0,
+       "y": 73.4
+      },
+      "audio": {
+       "x": 290.0,
+       "y": 97.4
+      }
+     }
+    }
+   },
+   {
+    "id": "Context",
+    "x": 1236,
+    "y": -132,
+    "width": 386.0,
+    "height": 640.0,
+    "sockets": {
+     "in": {
+      "trigger": {
+       "x": 0,
+       "y": 73.4
+      },
+      "in": {
+       "x": 0,
+       "y": 97.4
+      }
+     },
+     "out": {
+      "trigger": {
+       "x": 386.0,
+       "y": 73.4
+      },
+      "out": {
+       "x": 386.0,
+       "y": 97.4
+      }
+     }
+    }
+   },
+   {
+    "id": "format_list",
+    "x": -36,
+    "y": -432,
+    "width": 290.0,
+    "height": 226.4,
+    "sockets": {
+     "in": {
+      "list": {
+       "x": 0,
+       "y": 73.4
+      }
+     },
+     "out": {
+      "out": {
+       "x": 290.0,
+       "y": 73.4
+      }
+     }
+    }
+   },
+   {
+    "id": "Username",
+    "x": -492,
+    "y": 84,
+    "width": 290.0,
+    "height": 248.0,
+    "sockets": {
+     "in": {},
+     "out": {
+      "out": {
+       "x": 290.0,
+       "y": 73.4
+      }
+     }
+    }
+   },
+   {
+    "id": "Audio Preview",
+    "x": 2916,
+    "y": 24,
+    "width": 290.0,
+    "height": 293.8,
+    "sockets": {
+     "in": {
+      "trigger": {
+       "x": 0,
+       "y": 73.4
+      },
+      "in": {
+       "x": 0,
+       "y": 97.4
+      }
+     },
+     "out": {
+      "trigger": {
+       "x": 290.0,
+       "y": 73.4
+      },
+      "out": {
+       "x": 290.0,
+       "y": 97.4
+      }
+     }
+    }
+   },
+   {
+    "id": "wireless_in",
+    "x": 840,
+    "y": -336,
+    "width": 290.0,
+    "height": 200.4,
+    "sockets": {
+     "in": {
+      "prompt_template.trigger": {
+       "x": 0,
+       "y": 73.4
+      },
+      "prompt_template.out": {
+       "x": 0,
+       "y": 97.4
+      },
+      "in\u00b7+": {
+       "x": 0,
+       "y": 121.4
+      }
+     },
+     "out": {}
+    }
+   },
+   {
+    "id": "wireless_out",
+    "x": 840,
+    "y": -36,
+    "width": 290.0,
+    "height": 176.4,
+    "sockets": {
+     "in": {},
+     "out": {
+      "prompt_template.trigger": {
+       "x": 290.0,
+       "y": 73.4
+      },
+      "prompt_template.out": {
+       "x": 290.0,
+       "y": 97.4
+      }
+     }
+    }
+   }
+  ],
+  "edges": [
+   {
+    "source": "chat",
+    "target": "Prompt Template",
+    "sourceHandle": "text",
+    "targetHandle": "chat"
+   },
+   {
+    "source": "database",
+    "target": "Chat History",
+    "sourceHandle": "db",
+    "targetHandle": "db"
+   },
+   {
+    "source": "chat",
+    "target": "Chat History",
+    "sourceHandle": "trigger",
+    "targetHandle": "trigger"
+   },
+   {
+    "source": "clock",
+    "target": "Prompt Template",
+    "sourceHandle": "out",
+    "targetHandle": "clock"
+   },
+   {
+    "source": "chat",
+    "target": "Chat Append (User)",
+    "sourceHandle": "text",
+    "targetHandle": "tag0"
+   },
+   {
+    "source": "LLM",
+    "target": "Chat Append (Assistant)",
+    "sourceHandle": "response",
+    "targetHandle": "tag0"
+   },
+   {
+    "source": "LLM",
+    "target": "Chat Append (Assistant)",
+    "sourceHandle": "trigger",
+    "targetHandle": "trigger"
+   },
+   {
+    "source": "database",
+    "target": "Chat Append (User)",
+    "sourceHandle": "db",
+    "targetHandle": "db"
+   },
+   {
+    "source": "database",
+    "target": "Chat Append (Assistant)",
+    "sourceHandle": "db",
+    "targetHandle": "db"
+   },
+   {
+    "source": "clock",
+    "target": "Chat Append (User)",
+    "sourceHandle": "out",
+    "targetHandle": "tag1"
+   },
+   {
+    "source": "clock",
+    "target": "Chat Append (Assistant)",
+    "sourceHandle": "out",
+    "targetHandle": "tag1"
+   },
+   {
+    "source": "Response Preview",
+    "target": "TTS",
+    "sourceHandle": "trigger",
+    "targetHandle": "trigger"
+   },
+   {
+    "source": "Chat History",
+    "target": "format_list",
+    "sourceHandle": "rows",
+    "targetHandle": "list"
+   },
+   {
+    "source": "format_list",
+    "target": "Prompt Template",
+    "sourceHandle": "out",
+    "targetHandle": "chat_history"
+   },
+   {
+    "source": "Username",
+    "target": "Prompt Template",
+    "sourceHandle": "out",
+    "targetHandle": "username"
+   },
+   {
+    "source": "Username",
+    "target": "Chat Append (User)",
+    "sourceHandle": "out",
+    "targetHandle": "username"
+   },
+   {
+    "source": "Response Preview",
+    "target": "TTS",
+    "sourceHandle": "out",
+    "targetHandle": "text"
+   },
+   {
+    "source": "TTS",
+    "target": "Audio Preview",
+    "sourceHandle": "trigger",
+    "targetHandle": "trigger"
+   },
+   {
+    "source": "TTS",
+    "target": "Audio Preview",
+    "sourceHandle": "audio",
+    "targetHandle": "in"
+   },
+   {
+    "source": "Context",
+    "target": "LLM",
+    "sourceHandle": "trigger",
+    "targetHandle": "trigger"
+   },
+   {
+    "source": "Context",
+    "target": "LLM",
+    "sourceHandle": "out",
+    "targetHandle": "prompt"
+   },
+   {
+    "source": "LLM",
+    "target": "Response Preview",
+    "sourceHandle": "response",
+    "targetHandle": "in"
+   },
+   {
+    "source": "LLM",
+    "target": "Response Preview",
+    "sourceHandle": "trigger",
+    "targetHandle": "trigger"
+   },
+   {
+    "source": "Chat Append (User)",
+    "target": "Prompt Template",
+    "sourceHandle": "trigger",
+    "targetHandle": "trigger"
+   },
+   {
+    "source": "Chat History",
+    "target": "Chat Append (User)",
+    "sourceHandle": "trigger",
+    "targetHandle": "trigger"
+   },
+   {
+    "source": "Prompt Template",
+    "target": "wireless_in",
+    "sourceHandle": "trigger",
+    "targetHandle": "prompt_template.trigger"
+   },
+   {
+    "source": "Prompt Template",
+    "target": "wireless_in",
+    "sourceHandle": "out",
+    "targetHandle": "prompt_template.out"
+   },
+   {
+    "source": "wireless_out",
+    "target": "Context",
+    "sourceHandle": "prompt_template.trigger",
+    "targetHandle": "trigger"
+   },
+   {
+    "source": "wireless_out",
+    "target": "Context",
+    "sourceHandle": "prompt_template.out",
+    "targetHandle": "in"
+   },
+   {
+    "source": "wireless_in",
+    "target": "wireless_out",
+    "span": 0,
+    "drawn": false
+   }
+  ]
+ },
+ "demo": {
+  "nodes": [
+   {
+    "id": "Fire",
+    "x": 0,
+    "y": -24,
+    "width": 290.0,
+    "height": 144.4,
+    "sockets": {
+     "in": {},
+     "out": {
+      "trigger": {
+       "x": 290.0,
+       "y": 73.4
+      }
+     }
+    }
+   },
+   {
+    "id": "System prompt",
+    "x": 0,
+    "y": 168,
+    "width": 300.0,
+    "height": 208.0,
+    "sockets": {
+     "in": {},
+     "out": {
+      "out": {
+       "x": 300.0,
+       "y": 73.4
+      }
+     }
+    }
+   },
+   {
+    "id": "User message",
+    "x": 0,
+    "y": 432,
+    "width": 300.0,
+    "height": 208.0,
+    "sockets": {
+     "in": {},
+     "out": {
+      "out": {
+       "x": 300.0,
+       "y": 73.4
+      }
+     }
+    }
+   },
+   {
+    "id": "Prompt",
+    "x": 396,
+    "y": 192,
+    "width": 320.0,
+    "height": 260.0,
+    "sockets": {
+     "in": {
+      "trigger": {
+       "x": 0,
+       "y": 73.4
+      },
+      "system_prompt": {
+       "x": 0,
+       "y": 97.4
+      },
+      "user_message": {
+       "x": 0,
+       "y": 121.4
+      },
+      "tag\u00b7+": {
+       "x": 0,
+       "y": 145.4
+      }
+     },
+     "out": {
+      "trigger": {
+       "x": 320.0,
+       "y": 73.4
+      },
+      "out": {
+       "x": 320.0,
+       "y": 97.4
+      }
+     }
+    }
+   },
+   {
+    "id": "LLM",
+    "x": 816,
+    "y": 192,
+    "width": 290.0,
+    "height": 253.9,
+    "sockets": {
+     "in": {
+      "trigger": {
+       "x": 0,
+       "y": 73.4
+      },
+      "prompt": {
+       "x": 0,
+       "y": 97.4
+      }
+     },
+     "out": {
+      "trigger": {
+       "x": 290.0,
+       "y": 73.4
+      },
+      "response": {
+       "x": 290.0,
+       "y": 97.4
+      },
+      "reasoning": {
+       "x": 290.0,
+       "y": 121.4
+      },
+      "error": {
+       "x": 290.0,
+       "y": 145.4
+      }
+     }
+    }
+   },
+   {
+    "id": "Log",
+    "x": 1212,
+    "y": 192,
+    "width": 290.0,
+    "height": 142.4,
+    "sockets": {
+     "in": {
+      "in": {
+       "x": 0,
+       "y": 73.4
+      }
+     },
+     "out": {
+      "trigger": {
+       "x": 290.0,
+       "y": 73.4
+      }
+     }
+    }
+   }
+  ],
+  "edges": [
+   {
+    "source": "Fire",
+    "target": "Prompt",
+    "sourceHandle": "trigger",
+    "targetHandle": "trigger"
+   },
+   {
+    "source": "System prompt",
+    "target": "Prompt",
+    "sourceHandle": "out",
+    "targetHandle": "system_prompt"
+   },
+   {
+    "source": "User message",
+    "target": "Prompt",
+    "sourceHandle": "out",
+    "targetHandle": "user_message"
+   },
+   {
+    "source": "Prompt",
+    "target": "LLM",
+    "sourceHandle": "trigger",
+    "targetHandle": "trigger"
+   },
+   {
+    "source": "Prompt",
+    "target": "LLM",
+    "sourceHandle": "out",
+    "targetHandle": "prompt"
+   },
+   {
+    "source": "LLM",
+    "target": "Log",
+    "sourceHandle": "response",
+    "targetHandle": "in"
+   }
+  ]
+ },
+ "fanout": {
+  "nodes": [
+   {
+    "id": "Go",
+    "x": 0,
+    "y": 0,
+    "width": 290,
+    "height": 144.4,
+    "sockets": {
+     "in": {},
+     "out": {
+      "trigger": {
+       "x": 290,
+       "y": 73.4
+      }
+     }
+    }
+   },
+   {
+    "id": "Name",
+    "x": 0,
+    "y": 300,
+    "width": 290,
+    "height": 248.0,
+    "sockets": {
+     "in": {},
+     "out": {
+      "out": {
+       "x": 290,
+       "y": 73.4
+      }
+     }
+    }
+   },
+   {
+    "id": "A",
+    "x": 400,
+    "y": 0,
+    "width": 300,
+    "height": 280,
+    "sockets": {
+     "in": {
+      "trigger": {
+       "x": 0,
+       "y": 73.4
+      },
+      "name": {
+       "x": 0,
+       "y": 97.4
+      },
+      "tag\u00b7+": {
+       "x": 0,
+       "y": 121.4
+      }
+     },
+     "out": {
+      "trigger": {
+       "x": 300,
+       "y": 73.4
+      },
+      "out": {
+       "x": 300,
+       "y": 97.4
+      }
+     }
+    }
+   },
+   {
+    "id": "B",
+    "x": 400,
+    "y": 300,
+    "width": 300,
+    "height": 280,
+    "sockets": {
+     "in": {
+      "trigger": {
+       "x": 0,
+       "y": 73.4
+      },
+      "name": {
+       "x": 0,
+       "y": 97.4
+      },
+      "tag\u00b7+": {
+       "x": 0,
+       "y": 121.4
+      }
+     },
+     "out": {
+      "trigger": {
+       "x": 300,
+       "y": 73.4
+      },
+      "out": {
+       "x": 300,
+       "y": 97.4
+      }
+     }
+    }
+   },
+   {
+    "id": "C",
+    "x": 400,
+    "y": 600,
+    "width": 300,
+    "height": 280,
+    "sockets": {
+     "in": {
+      "trigger": {
+       "x": 0,
+       "y": 73.4
+      },
+      "name": {
+       "x": 0,
+       "y": 97.4
+      },
+      "tag\u00b7+": {
+       "x": 0,
+       "y": 121.4
+      }
+     },
+     "out": {
+      "trigger": {
+       "x": 300,
+       "y": 73.4
+      },
+      "out": {
+       "x": 300,
+       "y": 97.4
+      }
+     }
+    }
+   },
+   {
+    "id": "Join",
+    "x": 800,
+    "y": 0,
+    "width": 300,
+    "height": 300,
+    "sockets": {
+     "in": {
+      "trigger": {
+       "x": 0,
+       "y": 73.4
+      },
+      "a": {
+       "x": 0,
+       "y": 97.4
+      },
+      "b": {
+       "x": 0,
+       "y": 121.4
+      },
+      "c": {
+       "x": 0,
+       "y": 145.4
+      },
+      "name": {
+       "x": 0,
+       "y": 169.4
+      },
+      "tag\u00b7+": {
+       "x": 0,
+       "y": 193.4
+      }
+     },
+     "out": {
+      "trigger": {
+       "x": 300.0,
+       "y": 73.4
+      },
+      "out": {
+       "x": 300.0,
+       "y": 97.4
+      }
+     }
+    }
+   },
+   {
+    "id": "Show",
+    "x": 1200,
+    "y": 0,
+    "width": 290,
+    "height": 280,
+    "sockets": {
+     "in": {
+      "trigger": {
+       "x": 0,
+       "y": 73.4
+      },
+      "in": {
+       "x": 0,
+       "y": 97.4
+      }
+     },
+     "out": {
+      "trigger": {
+       "x": 290,
+       "y": 73.4
+      },
+      "out": {
+       "x": 290,
+       "y": 97.4
+      }
+     }
+    }
+   },
+   {
+    "id": "Log",
+    "x": 1200,
+    "y": 400,
+    "width": 290,
+    "height": 142.4,
+    "sockets": {
+     "in": {
+      "in": {
+       "x": 0,
+       "y": 73.4
+      }
+     },
+     "out": {
+      "trigger": {
+       "x": 290,
+       "y": 73.4
+      }
+     }
+    }
+   }
+  ],
+  "edges": [
+   {
+    "source": "Go",
+    "target": "A",
+    "sourceHandle": "trigger",
+    "targetHandle": "trigger"
+   },
+   {
+    "source": "Go",
+    "target": "B",
+    "sourceHandle": "trigger",
+    "targetHandle": "trigger"
+   },
+   {
+    "source": "Go",
+    "target": "C",
+    "sourceHandle": "trigger",
+    "targetHandle": "trigger"
+   },
+   {
+    "source": "Name",
+    "target": "A",
+    "sourceHandle": "out",
+    "targetHandle": "name"
+   },
+   {
+    "source": "Name",
+    "target": "B",
+    "sourceHandle": "out",
+    "targetHandle": "name"
+   },
+   {
+    "source": "Name",
+    "target": "C",
+    "sourceHandle": "out",
+    "targetHandle": "name"
+   },
+   {
+    "source": "Name",
+    "target": "Join",
+    "sourceHandle": "out",
+    "targetHandle": "name"
+   },
+   {
+    "source": "C",
+    "target": "Join",
+    "sourceHandle": "trigger",
+    "targetHandle": "trigger"
+   },
+   {
+    "source": "A",
+    "target": "Join",
+    "sourceHandle": "out",
+    "targetHandle": "a"
+   },
+   {
+    "source": "B",
+    "target": "Join",
+    "sourceHandle": "out",
+    "targetHandle": "b"
+   },
+   {
+    "source": "C",
+    "target": "Join",
+    "sourceHandle": "out",
+    "targetHandle": "c"
+   },
+   {
+    "source": "Join",
+    "target": "Show",
+    "sourceHandle": "trigger",
+    "targetHandle": "trigger"
+   },
+   {
+    "source": "Join",
+    "target": "Show",
+    "sourceHandle": "out",
+    "targetHandle": "in"
+   },
+   {
+    "source": "Join",
+    "target": "Log",
+    "sourceHandle": "out",
+    "targetHandle": "in"
+   }
+  ]
+ },
+ "loop": {
+  "nodes": [
+   {
+    "id": "Tick",
+    "x": 0,
+    "y": 0,
+    "width": 290.0,
+    "height": 144.4,
+    "sockets": {
+     "in": {},
+     "out": {
+      "trigger": {
+       "x": 290.0,
+       "y": 73.4
+      }
+     }
+    }
+   },
+   {
+    "id": "Items",
+    "x": 0,
+    "y": 260,
+    "width": 290.0,
+    "height": 92.4,
+    "sockets": {
+     "in": {
+      "item\u00b7+": {
+       "x": 0,
+       "y": 73.4
+      }
+     },
+     "out": {
+      "out": {
+       "x": 290.0,
+       "y": 73.4
+      }
+     }
+    }
+   },
+   {
+    "id": "Each",
+    "x": 360,
+    "y": 0,
+    "width": 290.0,
+    "height": 140.4,
+    "sockets": {
+     "in": {
+      "trigger": {
+       "x": 0,
+       "y": 73.4
+      },
+      "loop": {
+       "x": 0,
+       "y": 97.4
+      },
+      "list": {
+       "x": 0,
+       "y": 121.4
+      }
+     },
+     "out": {
+      "each": {
+       "x": 290.0,
+       "y": 73.4
+      },
+      "item": {
+       "x": 290.0,
+       "y": 97.4
+      },
+      "after_last": {
+       "x": 290.0,
+       "y": 121.4
+      }
+     }
+    }
+   },
+   {
+    "id": "Step",
+    "x": 760,
+    "y": 0,
+    "width": 300.0,
+    "height": 280.0,
+    "sockets": {
+     "in": {
+      "trigger": {
+       "x": 0,
+       "y": 73.4
+      },
+      "item": {
+       "x": 0,
+       "y": 97.4
+      },
+      "tag\u00b7+": {
+       "x": 0,
+       "y": 121.4
+      }
+     },
+     "out": {
+      "trigger": {
+       "x": 300.0,
+       "y": 73.4
+      },
+      "out": {
+       "x": 300.0,
+       "y": 97.4
+      }
+     }
+    }
+   },
+   {
+    "id": "Log",
+    "x": 1160,
+    "y": 0,
+    "width": 290.0,
+    "height": 142.4,
+    "sockets": {
+     "in": {
+      "in": {
+       "x": 0,
+       "y": 73.4
+      }
+     },
+     "out": {
+      "trigger": {
+       "x": 290.0,
+       "y": 73.4
+      }
+     }
+    }
+   },
+   {
+    "id": "Done",
+    "x": 1160,
+    "y": 400,
+    "width": 290.0,
+    "height": 280.0,
+    "sockets": {
+     "in": {
+      "trigger": {
+       "x": 0,
+       "y": 73.4
+      },
+      "in": {
+       "x": 0,
+       "y": 97.4
+      }
+     },
+     "out": {
+      "trigger": {
+       "x": 290.0,
+       "y": 73.4
+      },
+      "out": {
+       "x": 290.0,
+       "y": 97.4
+      }
+     }
+    }
+   }
+  ],
+  "edges": [
+   {
+    "source": "Tick",
+    "target": "Each",
+    "sourceHandle": "trigger",
+    "targetHandle": "trigger"
+   },
+   {
+    "source": "Items",
+    "target": "Each",
+    "sourceHandle": "out",
+    "targetHandle": "list"
+   },
+   {
+    "source": "Each",
+    "target": "Step",
+    "sourceHandle": "each",
+    "targetHandle": "trigger"
+   },
+   {
+    "source": "Each",
+    "target": "Step",
+    "sourceHandle": "item",
+    "targetHandle": "item"
+   },
+   {
+    "source": "Step",
+    "target": "Log",
+    "sourceHandle": "out",
+    "targetHandle": "in"
+   },
+   {
+    "source": "Log",
+    "target": "Each",
+    "sourceHandle": "trigger",
+    "targetHandle": "loop"
+   },
+   {
+    "source": "Each",
+    "target": "Done",
+    "sourceHandle": "after_last",
+    "targetHandle": "trigger"
+   },
+   {
+    "source": "Items",
+    "target": "Done",
+    "sourceHandle": "out",
+    "targetHandle": "in"
+   }
+  ]
+ }
+}

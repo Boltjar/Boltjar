@@ -30,6 +30,7 @@ import { typeColorVar } from "../../lib/types";
 import { mod } from "../../lib/platform";
 import { panHintCenter } from "../../lib/panHint";
 import { FIT_VIEW, viewMemory } from "../../lib/viewport";
+import type { TidySockets } from "../../lib/tidyLayout";
 import type { NodeDef } from "../../types/protocol";
 
 const nodeTypes: NodeTypes = { workflow: WorkflowNode };
@@ -85,6 +86,9 @@ interface CanvasProps {
   /** the canvas writes here how it brings a flow-space box into view: nothing
    *  when the box is already in view, else a fit to it (Tidy up's last step). */
   showRef?: React.MutableRefObject<((box: FlowBox, duration: number) => void) | null>;
+  /** the canvas writes here how to read a node's measured sockets (centres,
+   *  relative to the node's top-left), so Tidy up traces wires from them. */
+  socketsRef?: React.MutableRefObject<((id: string) => TidySockets | undefined) | null>;
   loading: boolean;
   /** changes each time a graph is opened on the canvas, which frames it anew
    *  (and remembers where the graph it leaves was, by `graphName`). */
@@ -139,6 +143,7 @@ export function Canvas(props: CanvasProps) {
     onConnectingChange,
     fitRef,
     showRef,
+    socketsRef,
     loading,
     viewKey,
     liveCount,
@@ -395,6 +400,18 @@ export function Canvas(props: CanvasProps) {
   useEffect(() => {
     if (showRef) showRef.current = show;
   }, [showRef, show]);
+  useEffect(() => {
+    if (!socketsRef) return;
+    socketsRef.current = (id) => {
+      const bounds = rf.getInternalNode(id)?.internals.handleBounds;
+      if (!bounds) return undefined;
+      // where React Flow starts and ends a wire: an output's right edge, an
+      // input's left edge, at the socket's mid height
+      const read = (hs: typeof bounds.source, right: boolean) => Object.fromEntries((hs ?? []).map((h) =>
+        [h.id ?? "", { x: h.x + (right ? h.width : 0), y: h.y + h.height / 2 }]));
+      return { in: read(bounds.target, false), out: read(bounds.source, true) };
+    };
+  }, [socketsRef, rf]);
 
   const nodeCount = nodes.length;
   void edges; // wire count is dropped from the overlay (low signal)

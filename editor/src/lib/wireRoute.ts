@@ -143,6 +143,51 @@ export function roundedPath(pts: Point[], radius: number = BACK_WIRE.radius): st
   return d + ` L${fmt(last.x)},${fmt(last.y)}`;
 }
 
+/** The curvature TypedEdge hands React Flow's getBezierPath. Over the default
+ *  0.25 it keeps a wire leaving its port perpendicular. */
+export const WIRE_CURVATURE = 0.35;
+
+/** The four points of the bezier React Flow's getBezierPath draws from a right
+ *  hand socket `s` to a left hand socket `t` (@xyflow/system: a control sits
+ *  half the gap out when the target is ahead, curvature * 25 * sqrt(gap) when
+ *  it is behind). */
+export function forwardWireControls(s: Point, t: Point, curvature: number = WIRE_CURVATURE): Point[] {
+  const offset = (d: number) => (d >= 0 ? 0.5 * d : curvature * 25 * Math.sqrt(-d));
+  return [
+    { x: s.x, y: s.y },
+    { x: s.x + offset(t.x - s.x), y: s.y },
+    { x: t.x - offset(t.x - s.x), y: t.y },
+    { x: t.x, y: t.y },
+  ];
+}
+
+/** Points along a wire as the editor draws it, at most `step` apart: the
+ *  bezier for a forward wire, the route around its two nodes for a back wire
+ *  (corners left square, which only widens it). Used to keep wires clear of
+ *  the nodes they do not connect (lib/tidyLayout). */
+export function wireSamples(s: Point, t: Point, sb: Box, tb: Box, lane?: Lane, step = 4): Point[] {
+  const out: Point[] = [];
+  if (isBackWire(s, t)) {
+    const pts = backWirePoints(s, t, sb, tb, BACK_WIRE.margin, lane);
+    out.push(pts[0]);
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1], b = pts[i];
+      const n = Math.max(1, Math.ceil(dist(a, b) / step));
+      for (let k = 1; k <= n; k++) out.push({ x: a.x + ((b.x - a.x) * k) / n, y: a.y + ((b.y - a.y) * k) / n });
+    }
+    return out;
+  }
+  const [p0, p1, p2, p3] = forwardWireControls(s, t);
+  const reach = dist(p0, p1) + dist(p1, p2) + dist(p2, p3);
+  const n = Math.max(2, Math.ceil(reach / step));
+  for (let k = 0; k <= n; k++) {
+    const u = k / n, v = 1 - u;
+    const a = v * v * v, b = 3 * v * v * u, c = 3 * v * u * u, d = u * u * u;
+    out.push({ x: a * p0.x + b * p1.x + c * p2.x + d * p3.x, y: a * p0.y + b * p1.y + c * p2.y + d * p3.y });
+  }
+  return out;
+}
+
 /** The drawn path of a back wire, or null when the wire goes forward (it keeps
  *  its bezier) or a node's box is not known yet. */
 export function backWirePath(s: Point, t: Point, sb: Box | null, tb: Box | null, lane?: Lane): string | null {
