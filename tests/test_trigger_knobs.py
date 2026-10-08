@@ -26,6 +26,19 @@ class _Broken:
         raise RuntimeError("no value today")
 
 
+_READS: list[str] = []
+
+
+@node(id="test.trigger_knobs.counted", name="Counted", kind=Kind.VALUE, category="Values",
+      pulled=True, summary="A text value that counts its reads.")
+class _Counted:
+    outputs = [Port("out", "text")]
+
+    def run(self, **_):
+        _READS.append("read")
+        return {"out": "s3cret"}
+
+
 def _run(graph: dict, seconds: float) -> tuple[Runtime, list[dict]]:
     events: list[dict] = []
     rt = Runtime(observer=events.append)
@@ -166,5 +179,28 @@ def test_a_webhook_answers_on_the_path_its_wire_gives():
     try:
         assert client.post(f"/hook/{slug}/from-wire", json={}).status_code == 200
         assert client.post(f"/hook/{slug}/foo", json={}).status_code == 404
+    finally:
+        _close(ws)
+
+
+def test_a_call_reads_the_secret_wire_of_the_webhook_it_is_for_only():
+    graph = _hook({}, [], [])
+    # the other Webhook comes first, so the call for `foo` walks past it.
+    graph["nodes"].insert(0, {"id": "other", "type": "core.trigger.webhook",
+                           "config": {"path": "bar", "method": "POST", "secret": "",
+                                      "promoted": ["secret"]}})
+    graph["nodes"].append({"id": "count", "type": "test.trigger_knobs.counted", "config": {}})
+    graph["edges"] += [{"src": "count", "src_port": "out", "dst": "other", "dst_port": "secret"},
+                       {"src": "other", "src_port": "trigger", "dst": "log", "dst_port": "in"}]
+    assert validate_graph(graph) == []
+    slug = "wh-secret-read-once"
+    ws = _power_on(slug, graph)
+    try:
+        before = len(_READS)
+        assert client.post(f"/hook/{slug}/foo", json={}).status_code == 200
+        assert len(_READS) == before
+        assert client.post(f"/hook/{slug}/bar", json={},
+                           headers={"X-Webhook-Secret": "s3cret"}).status_code == 200
+        assert len(_READS) == before + 1
     finally:
         _close(ws)

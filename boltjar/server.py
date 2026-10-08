@@ -1838,19 +1838,25 @@ _WEBHOOK_HEADER_DENYLIST = frozenset({
 })
 
 
+# the Webhook knobs that decide which node a call is for.
+_WEBHOOK_MATCH_KNOBS = frozenset({"path", "method"})
+
+
 def _find_webhook(runtime, path: str, method: str):
     """Walk a runtime's nodes and return the first WebhookTrigger instance whose
     live config matches the request. Match keys:
       - `spec.id == "core.trigger.webhook"`
       - `obj._node_cfg["path"]` (or the knob default) == request path
       - `obj._node_cfg["method"]` is "ANY" or == request method (uppercase).
-    Returns the NodeInstance or None. A knob converted to an input (a wired
-    `path`, `method` or `secret`) is read from its wire on every request.
+    Returns the NodeInstance or None. A knob converted to an input is read from
+    its wire on every request: a wired `path` or `method` on every Webhook (they
+    decide the match), any other (a wired `secret`) only on the one that matches,
+    so a call never reads the wires of a Webhook it is not for.
     """
     for inst in runtime.nodes.values():
         if inst.spec.id != "core.trigger.webhook":
             continue
-        runtime.pull_knobs(inst.id)
+        runtime.pull_knobs(inst.id, _WEBHOOK_MATCH_KNOBS)
         cfg = getattr(inst.obj, "_node_cfg", {}) or {}
         node_path = (cfg.get("path") if cfg.get("path") is not None
                      else getattr(inst.obj, "path", ""))
@@ -1861,6 +1867,10 @@ def _find_webhook(runtime, path: str, method: str):
         nm = str(node_method or "POST").upper()
         if nm != "ANY" and nm != method.upper():
             continue
+        promoted = (getattr(inst.obj, "_node_cfg", None) or {}).get("promoted") or ()
+        rest = {n for n in promoted if isinstance(n, str)} - _WEBHOOK_MATCH_KNOBS
+        if rest:
+            runtime.pull_knobs(inst.id, rest)
         return inst
     return None
 

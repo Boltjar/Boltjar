@@ -512,12 +512,14 @@ class Runtime:
                 found.append((src, src_port))
         return found
 
-    def pull_knobs(self, node_id: str) -> None:
+    def pull_knobs(self, node_id: str, names=None) -> None:
         """Set each knob `node_id` converted to an input (config.promoted) from
         its wire, pulled on a fresh turn. A fire does this for a fired or pulled
         node (_invoke, _pull_output); a trigger, which never fires, calls it
-        through Ctx.pull_knobs. A wire whose source fails leaves that knob at its
-        own value and reports the failure, like any node error."""
+        through Ctx.pull_knobs. `names` limits the pull to those knobs (the
+        webhook route reads `path` and `method` of every Webhook, the rest only
+        of the one that matches). A wire whose source fails leaves that knob at
+        its own value and reports the failure, like any node error."""
         inst = self.nodes.get(node_id)
         if inst is None:
             return
@@ -528,7 +530,7 @@ class Runtime:
         turn = self.new_turn()
         inputs: dict[str, Any] = {}
         for name in promoted:
-            if not isinstance(name, str):
+            if not isinstance(name, str) or (names is not None and name not in names):
                 continue
             try:
                 inputs[name] = self._pull_input(node_id, name, turn)
