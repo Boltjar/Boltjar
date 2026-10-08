@@ -257,6 +257,15 @@ button{font-family:inherit;}
   font-family:var(--font-sans); color:var(--ink);
   background:transparent; border:none; padding:0; border-radius:0; width:auto;
 }
+/* A card that sizes to its content (any .node that is not .resizable) is its own
+   box. React Flow writes a node's given width and height on this wrapper, and a
+   node can carry a saved size it does not use (a Preview saved as a text box
+   that now shows audio is auto-sized): the wrapper then stayed at the saved
+   280 px while the card grew to its content, so the card spilled past the box
+   React Flow measures (selection, wires, Tidy up, fit). The wrapper takes the
+   card's size instead; the saved size stays in the graph for when the node is
+   resizable again. */
+.canvas .react-flow__node:has(> .node:not(.resizable)){width:auto !important; height:auto !important;}
 .canvas .react-flow__node.selectable:focus,
 .canvas .react-flow__node.selectable:focus-visible{outline:none;}
 .canvas .react-flow__node-workflow{cursor:default;}

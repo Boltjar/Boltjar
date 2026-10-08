@@ -29,6 +29,12 @@ function check(label, ok) {
 }
 
 check("a resizable card fills its wrapper", /\.node\.resizable\{width:100%;/.test(css));
+// a card that sizes to its content (an audio Preview with a size saved from its
+// text days) is its own box: the wrapper ignores the given size, so the card
+// never spills past the box React Flow measures
+check("a content-sized card's wrapper takes the card's size, not a saved one",
+  /\.canvas \.react-flow__node:has\(> \.node:not\(\.resizable\)\)\{width:auto !important; height:auto !important;\}/.test(css));
+check("an audio Preview is a content-sized card", /const resizable = \([^;]*\) && !isAudioPreview;/.test(node));
 check("a resizable card renders at least its width floor",
   /style=\{\{[^}]*\.\.\.\(resizable \? \{ minWidth: minNodeW \} : \{\}\)/.test(node));
 check("the resizer drags down to the same floor", /<NodeResizer[^>]*minWidth=\{minNodeW\}/.test(node));
