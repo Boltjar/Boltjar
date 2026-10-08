@@ -5,7 +5,7 @@ boltjar.serve: `python -m boltjar serve`, the command that runs Boltjar.
                             [--verbose] [--allow-remote] [--no-resume]
 
 It prints the banner with the boot checklist beside it (Python and its
-virtualenv, the editor bundle, the port, the node packs): only facts that hold
+virtualenv, the editor bundle, the port, the nodes): only facts that hold
 for the whole run. Providers and keys change while it runs, in the editor's
 Settings, so the editor shows them and the terminal never does. It binds the
 port itself so a busy one is reported before anything starts, runs uvicorn in
@@ -258,22 +258,23 @@ def port_row(host: str, port: int, hosts: list[str]) -> console.Row:
                        + (f" as {', '.join(names)}" if names else ""), "warn", fixes=tuple(fixes))
 
 
-def packs_row(report: dict | None = None) -> console.Row:
-    """The node packs that loaded, with their node count, and any that did not."""
+def nodes_row(report: dict | None = None) -> console.Row:
+    """The core nodes and the custom nodes that loaded, with their node count,
+    and any custom node that did not."""
     if report is None:
-        from boltjar import packs
+        from boltjar import custom_nodes
 
-        report = packs.report()
+        report = custom_nodes.report()
     loaded = report.get("loaded", [])
     ids = ", ".join(str(p.get("id")) for p in loaded) or "none"
     count = sum(int(p.get("nodes") or 0) for p in loaded)
     aside = f"({count} node{'' if count == 1 else 's'})"
     failed = report.get("failed", [])
     if not failed:
-        return console.Row("Packs", ids, aside=aside)
+        return console.Row("Nodes", ids, aside=aside)
     names = ", ".join(str(f.get("id") or f.get("folder")) for f in failed)
-    return console.Row("Packs", f"{ids}; failed: {names}", "warn", aside=aside,
-                       fixes=("the reason is in the log line above, and at /api/packs",))
+    return console.Row("Nodes", f"{ids}; failed: {names}", "warn", aside=aside,
+                       fixes=("the reason is in the log line above, and at /api/custom-nodes",))
 
 
 # ---------------------------------------------------------------- the server
@@ -323,7 +324,7 @@ def make_server(config, shutdown_app: Callable[[], Awaitable[int]],
 
         async def stop_app(self) -> None:
             """shutdown_app() for GRACEFUL_SECONDS at most, and no longer once a
-            second Ctrl+C sets force_exit: a stop that never finishes (a pack
+            second Ctrl+C sets force_exit: a stop that never finishes (a custom
             node whose close hangs) must not hold the exit. Graphs still
             stopping by then are named and left behind."""
             before = len(running())
@@ -396,15 +397,15 @@ def _serve(out: console.Console, host: str, port: int, open_browser: bool,
     rows.append(port_row(host, port, hosts))
 
     try:
-        with out.pending("loading the node packs"):
+        with out.pending("loading the nodes"):
             from boltjar import server as app_module
-            rows.append(packs_row())
+            rows.append(nodes_row())
     except Exception as exc:
         sock.close()
         missing = isinstance(exc, ImportError)
         if verbose:
             _log.exception("the server could not load")
-        return refuse(console.Row("Packs", f"{type(exc).__name__}: {exc}", "bad", fixes=(
+        return refuse(console.Row("Nodes", f"{type(exc).__name__}: {exc}", "bad", fixes=(
             f"run {START} again to install what is missing" if missing
             else "run with --verbose for the full traceback",)), 1)
     out.banner(__version__, rows)

@@ -149,7 +149,7 @@ def test_llm_promoted_param_still_overrides_at_runtime() -> None:
 
 def test_a_model_picker_always_stays_a_knob() -> None:
     # the picked model reshapes its node (its knobs and inputs follow the pick),
-    # so no declaration can make a model picker an input, a pack's included.
+    # so no declaration can make a model picker an input, a custom node's included.
     from boltjar.sdk import NODE_REGISTRY, Widget
 
     assert Widget(kind="model", promotable=True).promotable is False

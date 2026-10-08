@@ -4,7 +4,7 @@
     run <graph.json> [seconds]   run one graph headless and print every live event
 
 `python -m boltjar <graph.json> [seconds]`, the original headless form, still
-runs a graph. The runner loads the core pack and every pack under packs/, and
+runs a graph. The runner loads the core nodes and every custom node under custom_nodes/, and
 migrates the graph like the server does: one this Boltjar cannot read (saved by
 a newer Boltjar) is refused before anything loads. Nothing heavy is imported
 until a command needs it, so `--help` works before the requirements are installed.
@@ -16,7 +16,7 @@ import asyncio
 import json
 import sys
 
-from boltjar import __version__, packs, secrets
+from boltjar import __version__, custom_nodes, secrets
 from boltjar.graph_format import GraphFormatError, migrate
 from boltjar.runtime import Runtime
 from boltjar.serve import DEFAULT_HOST, DEFAULT_PORT
@@ -27,7 +27,7 @@ COMMANDS = ("serve", "run")
 async def _run(path: str, seconds: float) -> None:
     with open(path, "r", encoding="utf-8") as fh:
         graph = migrate(json.load(fh))
-    packs.load_all()
+    custom_nodes.load_all()
     secrets.ensure_loaded()  # the graph's nodes read provider keys from os.environ
     runtime = Runtime(observer=lambda e: print(json.dumps(e)))
     runtime.build(graph)

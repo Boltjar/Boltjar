@@ -1,5 +1,5 @@
 """A model picker is declared on its widget, never keyed off a node id: the
-family of models it lists (`model_kind`), so any pack node can carry one.
+family of models it lists (`model_kind`), so any custom node can carry one.
 
 A model can cost money, so a picker never holds a model nobody picked: it has
 no default model and no special value, and @node refuses a declaration that
@@ -47,7 +47,7 @@ def test_only_the_llm_runs_with_no_model_picked():
 def test_a_family_is_served_on_model_widgets_only():
     nodes = client.get("/api/object_info").json()["nodes"]
     assert all(w["model_kind"] is None for n in nodes for w in n["widgets"] if w["kind"] != "model")
-    # a pack's model widget that names no family lists LLMs, the manifest default.
+    # a custom node's model widget that names no family lists LLMs, the manifest default.
     assert Widget(kind="model").as_dict()["model_kind"] == "llm"
     assert model("tts").as_dict()["default"] == ""
 

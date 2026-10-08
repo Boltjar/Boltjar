@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT-0
-"""The Hello pack's nodes. Knobs are explicit Widgets, so the editor draws each
+"""The Hello custom node's nodes. Knobs are explicit Widgets, so the editor draws each
 one exactly as declared. `icon` and `subline` set how a node looks: an Ionicons
 name the editor ships, and the line under the title, filled from the knobs."""
 from boltjar.sdk import Kind, Port, Widget, node

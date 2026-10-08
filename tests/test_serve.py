@@ -295,22 +295,22 @@ def test_a_bind_to_one_address_needs_no_token_fix():
     assert not any("token" in fix for fix in row.fixes)
 
 
-def test_packs_row_counts_the_nodes_of_every_pack():
+def test_nodes_row_counts_the_nodes_of_every_custom_node():
     report = {"loaded": [{"id": "core", "nodes": 63}, {"id": "hello", "nodes": 2}], "failed": []}
-    assert serve.packs_row(report) == console.Row("Packs", "core, hello", aside="(65 nodes)")
+    assert serve.nodes_row(report) == console.Row("Nodes", "core, hello", aside="(65 nodes)")
 
 
-def test_packs_row_names_a_pack_that_failed():
+def test_nodes_row_names_a_custom_node_that_failed():
     report = {"loaded": [{"id": "core", "nodes": 63}], "failed": [{"id": None, "folder": "broken"}]}
-    row = serve.packs_row(report)
+    row = serve.nodes_row(report)
     assert (row.tone, row.detail, row.aside) == ("warn", "core; failed: broken", "(63 nodes)")
-    assert "/api/packs" in row.fixes[0]
+    assert "/api/custom-nodes" in row.fixes[0]
 
 
-def test_packs_row_reads_the_loaded_packs():
-    from boltjar import packs
-    packs.load_all()
-    row = serve.packs_row()
+def test_nodes_row_reads_the_loaded_custom_nodes():
+    from boltjar import custom_nodes
+    custom_nodes.load_all()
+    row = serve.nodes_row()
     assert row.detail.startswith("core") and row.aside.endswith(" nodes)")
 
 
@@ -451,7 +451,7 @@ def test_allow_remote_hands_the_bind_to_the_server(boot, monkeypatch):
 
     monkeypatch.setattr(serve, "_machine_names", lambda: ["studio"])
     monkeypatch.setattr(serve, "bind", lambda host, port: socket.socket())
-    monkeypatch.setattr(serve, "packs_row", stop_here)  # the step right after the env is set
+    monkeypatch.setattr(serve, "nodes_row", stop_here)  # the step right after the env is set
     monkeypatch.setenv("BOLTJAR_ALLOWED_HOSTS", "")
     monkeypatch.setenv("BOLTJAR_PORT", "")
     assert boot(host="0.0.0.0", port=9001, open_browser=False, allow_remote=True) == 1
@@ -467,7 +467,7 @@ def test_a_remote_bind_lists_the_names_it_answers_to(boot, monkeypatch, capsys):
 
     monkeypatch.setattr(serve, "_machine_names", lambda: ["studio", "192.168.1.20"])
     monkeypatch.setattr(serve, "bind", lambda host, port: socket.socket())
-    monkeypatch.setattr(serve, "packs_row", stop_here)
+    monkeypatch.setattr(serve, "nodes_row", stop_here)
     monkeypatch.setenv("BOLTJAR_ALLOWED_HOSTS", "proxy.example")
     monkeypatch.setenv("BOLTJAR_PORT", "")
     boot(host="0.0.0.0", port=9001, open_browser=False, allow_remote=True)
@@ -503,7 +503,7 @@ def test_a_boot_over_ssh_leaves_the_browser_closed(boot, monkeypatch):
     monkeypatch.setattr(serve.webbrowser, "open", opened.append)
     monkeypatch.setattr(serve, "threading", types.SimpleNamespace(Thread=Thread))
     monkeypatch.setattr(serve, "bind", lambda host, port: socket.socket())
-    monkeypatch.setattr(serve, "packs_row", lambda: console.Row("Packs", "core"))
+    monkeypatch.setattr(serve, "nodes_row", lambda: console.Row("Nodes", "core"))
     monkeypatch.setattr(serve, "make_server", lambda config, shutdown_app, on_ready, **kw: Server(on_ready))
     assert boot(port=9001) == 0
     assert opened == []
@@ -533,11 +533,11 @@ def ready_boot(boot, monkeypatch, server=ReadyServer, **options):
     return boot(**{"port": 9001, "open_browser": False, **options})
 
 
-def test_the_checklist_is_python_editor_port_and_packs(boot, monkeypatch):
+def test_the_checklist_is_python_editor_port_and_nodes(boot, monkeypatch):
     shown: list = []
     monkeypatch.setattr(console.Console, "banner", lambda self, version, rows: shown.extend(rows))
     assert ready_boot(boot, monkeypatch) == 0
-    assert [row.label for row in shown] == ["Python", "Editor", "Port", "Packs"]
+    assert [row.label for row in shown] == ["Python", "Editor", "Port", "Nodes"]
 
 
 def test_the_ready_block_and_the_graphs_rule(boot, monkeypatch, capsys):

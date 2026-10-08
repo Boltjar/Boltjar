@@ -1,4 +1,4 @@
-"""The semantic-memory pack nodes: Chunk, Embed, Rerank, Vectors (index/search)."""
+"""The semantic memory nodes: Chunk, Embed, Rerank, Vectors (index/search)."""
 from __future__ import annotations
 
 import asyncio

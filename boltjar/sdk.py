@@ -27,7 +27,7 @@ keeps no side effects. One that also declares a trigger (the Template) runs on
 each fire as well and passes the trigger on; a read in the same turn gets that
 fire's value, and only a fire passes the trigger on.
 
-Nothing here imports a runtime; the SDK is the pure contract so node packs and
+Nothing here imports a runtime; the SDK is the pure contract so custom nodes and
 the server can be reasoned about in isolation.
 """
 from __future__ import annotations
@@ -153,7 +153,7 @@ class Widget:
     # system enforces a min so the node can never shrink to clip content.
     expand: bool = False
     # a model picker (kind="model") lists the models of this family: llm, tts, stt,
-    # embed or rerank (the manifest `kind`). Declared here so any pack node can
+    # embed or rerank (the manifest `kind`). Declared here so any custom node can
     # carry a model picker; the editor never keys the family off a node id. A
     # model picker never holds a model the person did not pick: it has no default
     # and no special values (@node refuses either), because a model can cost money.
@@ -224,7 +224,7 @@ def model(model_kind: str = "llm", *legacy: Any, label: str = "Model",
     none picked (the LLM answers with the offline mock); without it, a graph with
     this node turns On only once a model is picked.
 
-    There is no default model and no "auto". A pack still passing one (the old
+    There is no default model and no "auto". A custom node still passing one (the old
     `model("tts", "xai/tts")` or `auto=True`) gets it back on the widget only so
     that @node can refuse the declaration and name the node."""
     unknown = sorted(set(legacy_kw) - {"default", "auto"})
@@ -552,16 +552,18 @@ def node(*, id: str, name: str, kind: Kind, category: str,
 
         for p in inputs:
             if p.trigger and p.optional:
-                # checked here, not on the Port, so the error a pack author reads
-                # (the pack loader lists it) names the node as well as the port.
+                # checked here, not on the Port, so the error a custom node
+                # author reads (the custom node loader lists it) names the node
+                # as well as the port.
                 raise ValueError(f"node {id!r}: trigger input {p.name!r} cannot be optional: "
                                  f"a trigger fires the node and must be wired "
                                  f"(drop optional=True)")
 
         for w in widgets:
             if w.kind == "model" and (w.default or w.options):
-                # checked here, like the optional trigger, so the pack loader's
-                # error names the node. A model costs money: only a person picks one.
+                # checked here, like the optional trigger, so the custom node
+                # loader's error names the node. A model costs money: only a
+                # person picks one.
                 what = (f"a default model {w.default!r}" if w.default
                         else "the pick " + ", ".join(repr(o) for o in w.options))
                 raise ValueError(f"node {id!r}: model picker {w.name!r} declares {what}; "

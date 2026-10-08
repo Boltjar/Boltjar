@@ -1,1 +1,1 @@
-"""Built-in node packs. The core pack ships here; third-party packs go in packs/."""
+"""Built-in nodes. The core nodes ship here; custom nodes go in custom_nodes/."""

@@ -789,7 +789,7 @@ def _unlisted_availability(provider: str, view: View) -> tuple[bool, str | None]
     if endpoint is not None:
         return (True, None) if endpoint.ready() else (
             False, f"secret {endpoint.key_secret} is not defined: add it in Settings, Secrets")
-    return True, None  # a provider nothing here knows (a pack's own) is assumed usable
+    return True, None  # a provider nothing here knows (a custom node's own) is assumed usable
 
 
 @dataclass
@@ -914,8 +914,8 @@ _FAMILY_WORDS = {
 
 
 def _family_words(kind: str) -> tuple[str, str]:
-    """("an LLM", "LLMs") for "llm"; a family nothing here names (a pack's own)
-    reads "a <kind> model" with the article its first letter takes."""
+    """("an LLM", "LLMs") for "llm"; a family nothing here names (a custom
+    node's own) reads "a <kind> model" with the article its first letter takes."""
     if kind in _FAMILY_WORDS:
         return _FAMILY_WORDS[kind]
     article = "an" if kind[:1].lower() in "aeiou" else "a"

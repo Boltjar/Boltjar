@@ -240,7 +240,7 @@ def test_the_headless_runner_creates_the_chat_example_table(store, monkeypatch, 
     chat = pathlib.Path(__file__).resolve().parent.parent / "examples" / "chat.json"
     key = next(n["config"]["db_key"] for n in json.loads(chat.read_text(encoding="utf-8"))["nodes"]
                if n["type"] == "core.store.database")
-    monkeypatch.setattr(headless.packs, "load_all", lambda: None)  # the core is already loaded
+    monkeypatch.setattr(headless.custom_nodes, "load_all", lambda: None)  # the core is already loaded
     monkeypatch.setattr(headless.secrets, "ensure_loaded", lambda: None)
     monkeypatch.setattr(sys, "argv", ["boltjar", str(chat), "0"])
     headless.main()

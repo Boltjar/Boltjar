@@ -476,7 +476,7 @@ class Runtime:
 
         A socket is never known by its name alone: the editor names the sockets
         it mints (`tool0`, `tool1` for the LLM's `tools`), a hand-written graph
-        may use the base's own name, and a pack may pick any other. So a socket
+        may use the base's own name, and a custom node may pick any other. So a socket
         of `base` is a wired input that NodeSpec.growable_base gives to `base`
         (the one rule validation and firing use), fed by an output whose type
         fits the base's type: an LLM's model-shaped inputs (an image, audio)

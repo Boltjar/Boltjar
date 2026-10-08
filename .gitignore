@@ -13,9 +13,9 @@ MEMORY.md
 # Runtime data (saved graphs, snapshots, stores)
 user/
 
-# Third-party node packs (only the README is tracked)
-packs/*
-!packs/README.md
+# Custom nodes (only the README is tracked)
+custom_nodes/*
+!custom_nodes/README.md
 
 # Python (.python/ is the portable Python the start scripts fetch; .partial while unpacking)
 .python/

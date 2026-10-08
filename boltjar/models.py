@@ -9,8 +9,9 @@ outputs, and knobs to the selected model's manifest, so a vision model grows an
 image input and an audio model grows an audio input, all from one node.
 
 Models are data, not code: drop a new .toml in the models dir and it appears.
-The core pack's manifests load first, then each pack's (packs/<id>/models/),
-then the user's own (user/models/); see boltjar.packs.
+The core nodes' manifests load first, then each custom node's
+(custom_nodes/<id>/models/), then the user's own (user/models/); see
+boltjar.custom_nodes.
 
 The providers themselves say which models exist (boltjar.model_discovery): a
 discovered model without a manifest lands in DISCOVERED with defaults from its
@@ -210,8 +211,8 @@ def _parse(path: pathlib.Path) -> ModelManifest:
 def load_models(directory: pathlib.Path | str, *, replace: bool = True) -> int:
     """Register every *.toml manifest in `directory`. A bad file is skipped, not
     fatal. With replace=False a manifest whose id is already declared is skipped
-    too (a pack cannot redefine a model another source declared); with replace
-    (the core pack, the user's own folder) it takes that id over."""
+    too (a custom node cannot redefine a model another source declared); with
+    replace (the core nodes, the user's own folder) it takes that id over."""
     directory = pathlib.Path(directory)
     if not directory.exists():
         return 0

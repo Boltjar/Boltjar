@@ -71,7 +71,7 @@ from boltjar import linked as _linked
 from boltjar import endpoints as _endpoints
 from boltjar import model_discovery as _discovery
 from boltjar import ollama as _ollama
-from boltjar import packs as _packs
+from boltjar import custom_nodes as _custom_nodes
 from boltjar import replies as _replies
 from boltjar import resume as _resume
 from boltjar import settings as _settings
@@ -79,9 +79,10 @@ from boltjar.console import GraphLines
 import boltjar.secrets as _secrets
 import boltjar.security as _security
 
-# the core pack, every pack under packs/ and the user's model manifests. A broken
-# pack is skipped and reported by /api/packs; it never stops the server.
-_packs.load_all()
+# the core nodes, every custom node under custom_nodes/ and the user's model
+# manifests. A broken custom node is skipped and reported by /api/custom-nodes;
+# it never stops the server.
+_custom_nodes.load_all()
 
 _log = logging.getLogger(__name__)
 
@@ -123,8 +124,8 @@ KV_STORE = KvStore(DATA_DIR / "kv")
 
 # One shared embedded vector store the Vector Store / Vectors nodes resolve
 # handles against. One SQLite file per store key under user/data/vectors/
-# (gitignored), namespaced, brute-force cosine over a numpy matrix (semantic
-# memory pack).
+# (gitignored), namespaced, brute-force cosine over a numpy matrix (the semantic
+# memory nodes).
 VECTOR_STORE = VectorStore(DATA_DIR / "vectors")
 
 # The terminal's view of the live graphs: every Hub broadcast passes through it
@@ -1141,12 +1142,12 @@ async def refresh_models() -> dict:
     return _discovery.payload()
 
 
-@app.get("/api/packs")
-def list_packs() -> dict:
-    """The node packs: {loaded: [{id, name, version, nodes}], failed: [{id,
-    folder, error}]}. The core pack is always first in `loaded`; a pack folder
-    that could not load is in `failed` with the reason."""
-    return _packs.report()
+@app.get("/api/custom-nodes")
+def list_custom_nodes() -> dict:
+    """The custom nodes: {loaded: [{id, name, version, nodes}], failed: [{id,
+    folder, error}]}. The core nodes are always first in `loaded`; a custom node
+    folder that could not load is in `failed` with the reason."""
+    return _custom_nodes.report()
 
 
 def _graph_path(name: str) -> pathlib.Path | None:

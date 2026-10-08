@@ -217,16 +217,16 @@ def test_bye_is_brand_cyan():
 
 def test_pending_spins_only_on_a_terminal_that_can_redraw_and_leaves_nothing():
     quiet, stream = plain_console()
-    with quiet.pending("loading the node packs"):
+    with quiet.pending("loading the nodes"):
         time.sleep(0.2)
     assert stream.getvalue() == ""
 
     stream = FakeStream(tty=True)
     out = Console(stream, Caps(tty=True, vt=True, color="none", unicode=True), width=120)
-    with out.pending("loading the node packs"):
+    with out.pending("loading the nodes"):
         time.sleep(0.35)  # long enough for frames to draw
     text = stream.getvalue()
-    assert "\x1b[?25l" in text and "loading the node packs" in text
+    assert "\x1b[?25l" in text and "loading the nodes" in text
     assert text.endswith("\r\x1b[2K\x1b[?25h")  # the line wiped, the cursor back
 
 
@@ -235,7 +235,7 @@ ROWS = [
     Row("Python", "3.12.9", aside=".venv", gap="  "),
     Row("Editor", "bundle ready"),
     Row("Port", "8770 free"),
-    Row("Packs", "core", aside="(63 nodes)"),
+    Row("Nodes", "core", aside="(63 nodes)"),
 ]
 
 
@@ -266,7 +266,7 @@ def test_a_wide_window_shows_the_flask_beside_the_word_and_the_checklist():
     assert any(word_line.startswith("  " + row + " ") for row in banner_art.FLASK)
     assert any(line.endswith(HEADING) for line in lines)
     assert any(line.endswith("✓ Python     3.12.9  .venv") for line in lines)
-    assert any(line.endswith("✓ Packs      core (63 nodes)") for line in lines)
+    assert any(line.endswith("✓ Nodes      core (63 nodes)") for line in lines)
     # the flask and the word start on the same row, under the blank that opens the banner
     assert lines[1].startswith("  " + banner_art.FLASK[0]) and lines[1].endswith(banner_art.WORD[0].rstrip())
 
@@ -311,8 +311,8 @@ EDITOR_FIX = Row("Editor", "not built", "warn", fixes=(
 
 @pytest.mark.parametrize("width", [40, 43, 44, 60, 80, 89, 90, 91, 120, 200])
 def test_no_banner_line_reaches_the_last_column(width):
-    long = Row("Packs", "core; failed: " + ", ".join(f"pack-{i}" for i in range(12)), "warn",
-               aside="(63 nodes)", fixes=("the reason is in the log line above, and at /api/packs",))
+    long = Row("Nodes", "core; failed: " + ", ".join(f"broken-{i}" for i in range(12)), "warn",
+               aside="(63 nodes)", fixes=("the reason is in the log line above, and at /api/custom-nodes",))
     lines = banner(width, [*ROWS, EDITOR_FIX, long])
     assert max(console.visible_len(line) for line in lines) < width
 
@@ -348,10 +348,10 @@ def test_a_checklist_row_aligns_and_carries_its_fixes():
 
 
 def test_an_aside_that_does_not_fit_takes_its_own_line():
-    rows = [Row("Packs", "core; failed: " + "x" * 40, "warn", aside="(63 nodes)")]
+    rows = [Row("Nodes", "core; failed: " + "x" * 40, "warn", aside="(63 nodes)")]
     # no art: an 80 column checklist, where the detail fits and the aside does not
     assert banner(80, rows, Caps(unicode=False))[-3:] == [
-        f"  ! Packs      core; failed: {'x' * 40}", "               (63 nodes)", ""]
+        f"  ! Nodes      core; failed: {'x' * 40}", "               (63 nodes)", ""]
 
 
 def test_the_flask_steps_aside_before_a_link_beside_it_would_break():

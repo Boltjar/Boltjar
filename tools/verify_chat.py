@@ -4,7 +4,7 @@ import json
 import pathlib
 
 from boltjar import secrets
-from boltjar.packs import load_all
+from boltjar.custom_nodes import load_all
 from boltjar.runtime import Runtime
 
 load_all()

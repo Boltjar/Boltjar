@@ -12,7 +12,7 @@ from local_client import local_client
 
 import boltjar
 import boltjar.server as server
-from boltjar import packs
+from boltjar import custom_nodes
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 client = local_client()
@@ -30,6 +30,6 @@ def test_the_version_route_reports_boltjar_python_and_platform():
 
 def test_every_stated_version_is_the_package_version():
     assert server.app.version == boltjar.__version__
-    assert packs.LOADED["core"].version == boltjar.__version__
+    assert custom_nodes.LOADED["core"].version == boltjar.__version__
     package = json.loads((REPO / "editor" / "package.json").read_text(encoding="utf-8"))
     assert package["version"] == boltjar.__version__

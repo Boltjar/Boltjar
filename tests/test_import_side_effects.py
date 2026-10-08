@@ -1,7 +1,7 @@
 """Importing the node registry has no side effects.
 
 A docs generator (or any offline tool) loads the registry (the SDK, the core
-pack, packs.load_all) to read node definitions. That must not copy the user's
+nodes, custom_nodes.load_all) to read node definitions. That must not copy the user's
 saved secrets into the environment nor reach the network (the Ollama
 availability ping). Secrets load on first use, when the server starts, and
 before a headless tool builds a graph whose nodes read provider keys."""
@@ -33,8 +33,8 @@ def _run_isolated(code: str, *args: str) -> subprocess.CompletedProcess:
 
 
 def test_loading_the_registry_reads_no_secrets_and_opens_no_socket(tmp_path):
-    # packs load from an empty install root: a pack in the real packs/ is third
-    # party code, and what it does at import is not Boltjar's to test.
+    # custom nodes load from an empty install root: one in the real custom_nodes/
+    # is third party code, and what it does at import is not Boltjar's to test.
     result = _run_isolated("""
         import os, socket, sys
 
@@ -51,9 +51,9 @@ def test_loading_the_registry_reads_no_secrets_and_opens_no_socket(tmp_path):
 
         import boltjar.sdk
         import boltjar.nodes.core
-        from boltjar import models, packs, secrets
+        from boltjar import custom_nodes, models, secrets
 
-        packs.load_all(sys.argv[1])
+        custom_nodes.load_all(sys.argv[1])
 
         assert not secrets._loaded, "secrets were read at import"
         assert dict(os.environ) == environ, "the environment changed at import"
@@ -103,7 +103,7 @@ def test_the_server_loads_the_secrets_when_it_starts(unread_secrets):
 def test_the_chat_check_tool_loads_the_saved_secrets_before_it_builds(monkeypatch):
     # tools/verify_chat.py runs examples/chat.json, whose LLM reads its key from
     # os.environ: without the saved keys it quietly takes the missing-key path.
-    import boltjar.packs as packs
+    import boltjar.custom_nodes as custom_nodes
     import boltjar.runtime as runtime
 
     calls: list[str] = []
@@ -124,12 +124,12 @@ def test_the_chat_check_tool_loads_the_saved_secrets_before_it_builds(monkeypatc
         async def stop(self):
             pass
 
-    monkeypatch.setattr(packs, "load_all", lambda: calls.append("packs"))
+    monkeypatch.setattr(custom_nodes, "load_all", lambda: calls.append("custom_nodes"))
     monkeypatch.setattr(secrets, "ensure_loaded", lambda: calls.append("secrets"))
     monkeypatch.setattr(runtime, "Runtime", Runtime)
     monkeypatch.chdir(ROOT)
     runpy.run_path(str(ROOT / "tools" / "verify_chat.py"), run_name="__main__")
-    assert calls == ["packs", "secrets", "build"]
+    assert calls == ["custom_nodes", "secrets", "build"]
 
 
 def test_a_catalog_without_probe_checks_no_provider(monkeypatch):

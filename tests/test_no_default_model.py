@@ -1,9 +1,9 @@
 """A model can cost money, so Boltjar never picks one on anyone's behalf.
 
 A model node starts with no model picked. The LLM with none picked answers with
-the free offline mock; every other model node (TTS, STT, Embed, Rerank, a pack's
-own) with none picked is a validation problem, so its graph stays Off until a
-model is picked. A model somebody picked is saved and loaded exactly as picked.
+the free offline mock; every other model node (TTS, STT, Embed, Rerank, a
+custom node's own) with none picked is a validation problem, so its graph stays
+Off until a model is picked. A model somebody picked is saved and loaded exactly as picked.
 
 Isolation: the `dirs` fixture repoints the server's graph folders at a tmp dir,
 so nothing here touches the project's real user/ or examples/."""
@@ -75,18 +75,18 @@ def test_the_llm_with_no_model_picked_is_no_problem():
     assert _no_model(_graph("core.ai.llm")) == []
 
 
-def test_a_pack_model_node_with_no_model_picked_does_not_turn_on():
-    @node(id="test.voice_pack", name="Acme Voice", kind=Kind.TRANSFORM, category="Test")
+def test_a_custom_model_node_with_no_model_picked_does_not_turn_on():
+    @node(id="test.custom_voice", name="Acme Voice", kind=Kind.TRANSFORM, category="Test")
     class AcmeVoice:  # noqa: F841  (declaring it is the test)
         voice: Widget = model("tts", label="Voice model")
         inputs = [Port("trigger", "event", trigger=True)]
         outputs = [Port("audio", "audio")]
 
     try:
-        assert _no_model(_graph("test.voice_pack")) == [
+        assert _no_model(_graph("test.custom_voice")) == [
             {"node": "m", "kind": "no-model", "message": "pick a voice model for Acme Voice"}]
     finally:
-        NODE_REGISTRY.pop("test.voice_pack", None)
+        NODE_REGISTRY.pop("test.custom_voice", None)
 
 
 def test_power_on_is_refused_while_a_model_is_missing():

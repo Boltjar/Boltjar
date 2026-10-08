@@ -1,5 +1,5 @@
 """
-boltjar.nodes.core.builtin: the core node pack.
+boltjar.nodes.core.builtin: the core nodes.
 
 Lean nodes: content is a node, the engine is lean. Data nodes are `pulled`
 (evaluated on demand; the Template also fires on its trigger); work/actor nodes
@@ -1314,7 +1314,7 @@ class TTS:
         return {"audio": audio, "trigger": True}
 
 
-# ============================================================ semantic memory pack
+# ============================================================ semantic memory nodes
 # Small composable primitives that, wired together, reproduce a hybrid memory
 # (embeddings + vector search + rerank). Facts / FTS / bitemporal / query-expansion
 # are COMPOSITION over the existing core.db + LLM nodes, not new nodes.

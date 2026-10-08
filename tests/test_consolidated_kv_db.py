@@ -56,12 +56,12 @@ def _fire(loop, rt, node_id, port="trigger", payload="go"):
 
 # ----------------------------------------------------------------- type registry
 def test_kv_type_registered():
-    """The `kv` wire type ships with the core pack."""
+    """The `kv` wire type ships with the core nodes."""
     assert "kv" in types.catalog()
 
 
 def test_db_type_registered():
-    """The `db` wire type ships with the core pack."""
+    """The `db` wire type ships with the core nodes."""
     assert "db" in types.catalog()
 
 

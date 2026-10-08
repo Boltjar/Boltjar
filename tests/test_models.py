@@ -43,7 +43,7 @@ CURATED_MODEL_IDS = {
     "elevenlabs/scribe_v2",
     "xai/tts",
     "xai/stt",
-    # Embed / Rerank (semantic memory pack; same picker, filtered by kind)
+    # Embed / Rerank (semantic memory nodes; same picker, filtered by kind)
     "ollama/bge-m3",
     "rerank/bge-v2-m3",
 }

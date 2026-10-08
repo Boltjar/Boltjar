@@ -111,18 +111,18 @@ def test_a_node_without_a_declaration_serves_empty_strings():
         NODE_REGISTRY.pop("test.look.plain", None)
 
 
-def test_a_pack_node_declares_its_look_the_same_way():
-    @node(id="test.look.pack", name="Pack", kind=Kind.TRANSFORM, category="Data",
+def test_a_custom_node_declares_its_look_the_same_way():
+    @node(id="test.look.custom", name="Custom", kind=Kind.TRANSFORM, category="Data",
           icon="globe-outline", subline="fetch · {url|clip:12|or:no url}")
-    class Pack:
+    class Custom:
         url: str = ""
 
     try:
-        d = NODE_REGISTRY["test.look.pack"].definition()
+        d = NODE_REGISTRY["test.look.custom"].definition()
         assert d["icon"] == "globe-outline"
         assert d["subline"] == "fetch · {url|clip:12|or:no url}"
     finally:
-        NODE_REGISTRY.pop("test.look.pack", None)
+        NODE_REGISTRY.pop("test.look.custom", None)
 
 
 NOT_A_PLACEHOLDER = "is not {field} or {field|filter|filter:arg}"
@@ -173,10 +173,10 @@ def test_the_filters_are_the_ones_the_editor_applies():
     assert handled == SUBLINE_FILTERS
 
 
-def test_the_pack_author_docs_say_what_an_empty_subline_shows():
+def test_the_custom_node_author_docs_say_what_an_empty_subline_shows():
     # the editor draws a model node's model and any other node's category
-    # (editor/src/lib/nodeMeta.ts headerSubline); the three places a pack
-    # author reads about `subline` say so
+    # (editor/src/lib/nodeMeta.ts headerSubline); the three places a custom
+    # node author reads about `subline` say so
     repo = pathlib.Path(__file__).resolve().parent.parent
     docs = {
         "CONTRIBUTING.md": (repo / "CONTRIBUTING.md").read_text(encoding="utf-8"),

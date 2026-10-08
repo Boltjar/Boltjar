@@ -420,7 +420,7 @@ def unbroken(text: str) -> str:
 
 
 def _wrap(text: str, width: int) -> list[str]:
-    # a pack id, a flag or a path keeps its hyphens: it breaks only at spaces.
+    # a custom node id, a flag or a path keeps its hyphens: it breaks only at spaces.
     # An unbroken() run moves to the next line whole; one wider than the column
     # breaks at its own spaces after all.
     lines = []

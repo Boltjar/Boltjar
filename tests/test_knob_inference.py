@@ -1,6 +1,6 @@
 """A bare annotated knob (`on: bool = False`) gets the widget its annotation
 names, even in a module with `from __future__ import annotations` (this one),
-where every annotation is a string. The core pack is such a module: before the
+where every annotation is a string. boltjar.nodes.core.builtin is such a module: before the
 hints were resolved, Boolean, Integer, Float and Interval all rendered as text
 boxes, and a Boolean saved as "false" ran as True. Saved strings from those
 graphs are read as the widget's kind, so they keep working. A text wire into
@@ -95,7 +95,7 @@ CORE_WIDGET_KINDS = {
 @pytest.fixture
 def registry():
     """Registers test nodes and removes them again, so the shared registry is
-    left exactly as the core pack made it."""
+    left exactly as the core nodes made it."""
     before = dict(NODE_REGISTRY)
     yield NODE_REGISTRY
     NODE_REGISTRY.clear()
