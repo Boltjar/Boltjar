@@ -23,7 +23,7 @@ async function load(rel) {
   }).outputText;
   return import("data:text/javascript," + encodeURIComponent(js));
 }
-const { modelSwitchConfig, survivesReshape, concreteOutputs } = await load("dynamicPorts.ts");
+const { modelSwitchConfig, survivesReshape, concreteInputs, concreteOutputs, promotedParamType } = await load("dynamicPorts.ts");
 const { typesCompatible } = await load("types.ts");
 const { declaredOption } = await load("knobOptions.ts");
 
@@ -43,7 +43,7 @@ const port = (name, type, extra = {}) => ({
 const modelWidget = (dflt) => ({ name: "model", kind: "model", default: dflt, options: [], label: "Model" });
 const TTS = {
   id: "core.ai.tts", name: "TTS", kind: "transform", pulled: false, category: "AI",
-  version: "0.1.0", summary: "", colors: {}, widgets: [modelWidget("xai/tts")],
+  version: "0.1.0", summary: "", colors: {}, widgets: [modelWidget("")],
   inputs: [port("trigger", "event", { trigger: true }), port("text", "text"),
            port("lang", "lang", { optional: true })],
   outputs: [port("audio", "audio"), port("trigger", "event")],
@@ -146,6 +146,28 @@ check("int option: '44100' -> 44100", declaredOption([24000, 44100], "44100"), 4
 check("string option unchanged", declaredOption(["mp3", "wav"], "wav"), "wav");
 check("{value,label} option -> its value", declaredOption([{ value: "\n", label: "new line" }], "\n"), "\n");
 check("no matching option: the text passes through", declaredOption([1, 2], "3"), "3");
+
+// ---- 6. a model setting converted to an input is a typed port on any model node
+const ins = (def, cfg) => concreteInputs(def, cfg, new Set(), models)
+  .filter((p) => !p.ghost).map((p) => `${p.name}:${p.type}${p.promotedParam ? " (converted)" : ""}`);
+check("TTS on xai/tts: its converted speed is a float input",
+  ins(TTS, { model: "xai/tts", promoted: ["speed"] }), ["trigger:event", "text:text", "lang:lang", "speed:float (converted)"]);
+check("TTS on fish/s2: its converted chunk_length is an int input",
+  ins(TTS, { model: "fish/s2", promoted: ["chunk_length"] }),
+  ["trigger:event", "text:text", "lang:lang", "chunk_length:int (converted)"]);
+check("a setting the picked model lacks mints no port",
+  ins(TTS, { model: "xai/tts", promoted: ["chunk_length"] }), ["trigger:event", "text:text", "lang:lang"]);
+check("a select setting carries text", promotedParamType(TTS, { model: "fish/s2", promoted: ["format"] }, "format", models), "text");
+check("a setting not converted has no port", promotedParamType(TTS, { promoted: [] }, "speed", models), undefined);
+check("no model picked: a converted setting mints no port",
+  ins(TTS, { promoted: ["speed"] }), ["trigger:event", "text:text", "lang:lang"]);
+const ttsSpeed = { model: "xai/tts", promoted: ["speed"] };
+check("xai/tts -> fish/s2: the speed wire is pruned (fish has no speed)",
+  survives(TTS, modelSwitchConfig(TTS, ttsSpeed, "fish/s2", FISH), [...ttsIn, "speed"],
+    { side: "in", handle: "speed", type: "float" }), false);
+check("xai/tts kept: the speed wire survives",
+  survives(TTS, modelSwitchConfig(TTS, ttsSpeed, "xai/tts", XAI_TTS), [...ttsIn, "speed"],
+    { side: "in", handle: "speed", type: "float" }), true);
 
 if (failures) {
   console.error(`\n${failures} check(s) failed`);

@@ -48,6 +48,7 @@ import {
   isGhostHandle,
   llmPromoted,
   modelSwitchConfig,
+  modelWidgetOf,
   namesSocketsAfterSource,
   nextDynamicName,
   nodePromoted,
@@ -128,9 +129,10 @@ export interface GraphStore {
    *  the new model's defaults, drop stale promotions, and prune only the edges
    *  whose port the reshaped node no longer has. */
   setLlmModel: (id: string, modelId: string) => void;
-  /** Promote an LLM param to a typed input port (append to config.promoted). */
+  /** Promote a model setting (an LLM `temperature`, a TTS `speed`) to a typed
+   *  input port on any node with a model picker (append to config.promoted). */
   promoteParam: (id: string, name: string) => void;
-  /** Demote a promoted LLM param back to a widget (remove from config.promoted,
+  /** Demote a promoted model setting back to a knob (remove from config.promoted,
    *  pruning any wire that fed its now-removed input port). */
   unpromoteParam: (id: string, name: string) => void;
   /** Promote any node WIDGET to a typed input port (append to config.promoted). */
@@ -584,7 +586,8 @@ export function useGraph(
 
   const promoteParam = useCallback((id: string, name: string) => {
     const node = nodes.find((n) => n.id === id);
-    if (!node || node.data.typeId !== "core.ai.llm") return;
+    const def = node ? defs.get(node.data.typeId) : undefined;
+    if (!node || !def || !modelWidgetOf(def)) return;
     const current = llmPromoted(node.data.config);
     if (current.includes(name)) return;
     commit();
@@ -596,11 +599,12 @@ export function useGraph(
       ),
     );
     markEdited();
-  }, [nodes, commit, markEdited]);
+  }, [nodes, defs, commit, markEdited]);
 
   const unpromoteParam = useCallback((id: string, name: string) => {
     const node = nodes.find((n) => n.id === id);
-    if (!node || node.data.typeId !== "core.ai.llm") return;
+    const def = node ? defs.get(node.data.typeId) : undefined;
+    if (!node || !def || !modelWidgetOf(def)) return;
     const current = llmPromoted(node.data.config);
     if (!current.includes(name)) return;
     commit();
@@ -614,7 +618,7 @@ export function useGraph(
     // the input port for this param disappears; drop any wire feeding it.
     setEdges((eds) => eds.filter((e) => !(e.target === id && e.targetHandle === name)));
     markEdited();
-  }, [nodes, commit, markEdited]);
+  }, [nodes, defs, commit, markEdited]);
 
   // ── universal knob promotion: the same config.promoted machinery, for ANY node ──
 

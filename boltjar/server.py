@@ -744,11 +744,15 @@ def _input_port_check(spec, config: dict, port: str):
     for p in spec.inputs:
         if p.name == port and not p.growable:
             return True, p.type
-    # a widget promoted to a typed input port (config.promoted names a real widget).
+    # a widget promoted to a typed input port (config.promoted names a real widget),
+    # or a model setting promoted on a node with a model picker (a TTS `speed`).
     if port in (config.get("promoted") or []):
         w = next((w for w in spec.widgets if w.name == port), None)
         if w is not None:
             return True, _widget_port_type(w.kind)
+        param = _model_param(spec, config, port)
+        if param is not None:
+            return True, _param_port_type(param.type)
     if spec.id == "core.data.template":
         # Template's dynamic inputs are its `{tag}` sockets. A wire into a tag the
         # text no longer uses is harmless (its value is simply not substituted),
@@ -768,6 +772,16 @@ def _input_port_check(spec, config: dict, port: str):
     # no dynamic input surface: only declared + promoted ports are real. A dst_port
     # outside them (e.g. a stale wire after a port rename) is flagged.
     return False, None
+
+
+def _model_param(spec, config: dict, name: str):
+    """The setting `name` of the model a node runs (its saved pick; a model is
+    never chosen for the author), or None: no picker, no pick, an unknown model,
+    or a setting that model does not declare. Mirrors
+    dynamicPorts.promotedParamType."""
+    picker = next((w for w in spec.widgets if w.kind == "model"), None)
+    manifest = models.get(str(config.get(picker.name) or "")) if picker else None
+    return next((p for p in manifest.params if p.name == name), None) if manifest else None
 
 
 def _llm_input_port_check(spec, config: dict, port: str):

@@ -6,7 +6,7 @@
 // ============================================================================
 import type { Edge, Node, XYPosition } from "@xyflow/react";
 import type { Graph, GraphEdge, GraphNode, ModelManifest, NodeDef } from "../types/protocol";
-import { DB_ID, KV_ID, LLM_ID, llmInputType, llmOutputType, nodePromoted, widgetPortType } from "./dynamicPorts";
+import { DB_ID, KV_ID, LLM_ID, llmInputType, llmOutputType, nodePromoted, promotedParamType, widgetPortType } from "./dynamicPorts";
 
 /** Data carried on each React Flow node: enough to render the card. */
 export interface WFNodeData {
@@ -75,10 +75,13 @@ export function inputType(
   }
   const exact = def.inputs.find((p) => p.name === handle);
   if (exact) return exact.type;
-  // a promoted widget (universal knob promotion) carries its widget's port type.
+  // a promoted widget (universal knob promotion) carries its widget's port type,
+  // and a promoted model setting (a TTS `speed`) its param's.
   if (config && nodePromoted(config).includes(handle)) {
     const widget = def.widgets.find((w) => w.name === handle);
     if (widget) return widgetPortType(widget.kind);
+    const param = promotedParamType(def, config, handle, models);
+    if (param) return param;
   }
   // a KV / DB tag socket (not a declared port) carries `any` (matches the
   // growable `tag` port; the template substitution coerces to str anyway).

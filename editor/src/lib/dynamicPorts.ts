@@ -148,6 +148,32 @@ export function paramPortType(type: ModelParam["type"]): string {
   }
 }
 
+/** The model a node with a model picker runs: its saved pick, or "" while
+ *  none is picked (a model is never chosen for the author). */
+export function modelIdOf(def: NodeDef, config: Record<string, unknown>): string {
+  const widget = modelWidgetOf(def);
+  if (!widget) return "";
+  const picked = config[widget.name];
+  return typeof picked === "string" ? picked : "";
+}
+
+/**
+ * The port type of a model setting converted to an input, on any node with a
+ * model picker (LLM, TTS, STT, Embed, Rerank, a custom node's own): config.promoted
+ * names it and the picked model declares it. undefined otherwise, so a setting
+ * of a previously picked model mints no phantom port.
+ */
+export function promotedParamType(
+  def: NodeDef,
+  config: Record<string, unknown>,
+  handle: string,
+  models?: ModelLookup,
+): string | undefined {
+  if (!models || !nodePromoted(config).includes(handle)) return undefined;
+  const param = models.get(modelIdOf(def, config))?.params.find((p) => p.name === handle);
+  return param ? paramPortType(param.type) : undefined;
+}
+
 /** Read the picked model id from an LLM node's config (config.model); "" when none is picked. */
 export function llmModelId(config: Record<string, unknown>): string {
   const id = config.model;
@@ -460,7 +486,28 @@ function inputsFor(
   }
 
   appendPromotedWidgets(def, config, out);
+  appendPromotedParams(def, config, out, models);
   return out;
+}
+
+/**
+ * The model settings converted to inputs on a node with a model picker other
+ * than the LLM (whose own ports come from llmInputs): one typed input per name
+ * in `config.promoted` that the picked model declares, like the LLM's.
+ */
+function appendPromotedParams(
+  def: NodeDef,
+  config: Record<string, unknown>,
+  out: ConcretePort[],
+  models?: ModelLookup,
+): void {
+  const present = new Set(out.map((p) => p.name));
+  for (const name of nodePromoted(config)) {
+    const type = promotedParamType(def, config, name, models);
+    if (!type || present.has(name)) continue;
+    out.push({ name, type, trigger: false, optional: true, dynamic: false, promotedParam: true });
+    present.add(name);
+  }
 }
 
 /**

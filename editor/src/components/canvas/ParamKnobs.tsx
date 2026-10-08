@@ -1,5 +1,6 @@
 // ============================================================================
-// ParamKnobs: the LLM node's per-model parameter knobs. These render through the
+// ParamKnobs: a model node's per-model parameter knobs (LLM, TTS, STT, Rerank,
+// any node with a model picker). These render through the
 // single shared Knob component, so a model param looks and behaves exactly like
 // any other node's knob (value + slider for bounded numbers, toggle, dropdown,
 // text; convert-to-input and reset-to-default on the knob's right-click menu).
@@ -10,7 +11,7 @@ import { Knob, type KnobKind } from "./Knob";
 
 interface ParamKnobsProps {
   manifest: ModelManifest;
-  /** the LLM node's config.params (name -> value). */
+  /** the node's config.params (name -> value). */
   params: Record<string, unknown>;
   /** the promoted param names (these render as ports, not knobs, so skipped here). */
   promoted: string[];
