@@ -62,6 +62,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/).
 - One Ctrl+C stops every running graph and closes the editor connections. A graph that does not stop within 5 seconds, or by a second Ctrl+C, is left behind.
 - The terminal follows the live graphs: a line when a graph turns On or Off, is refused by validation, fails to start or hits a node error, plus each value a Log node writes, summarized to one line (a clip or an image as its type, size and length). Other wire values never print there; a known key shows as its `{{secret.NAME}}` token and a control character as its escape.
 - Wires to ports that no longer exist are dropped when a graph loads, with a notice in the console.
+- Any knob can be converted to an input, model settings included: a TTS or Rerank setting becomes a port once its model is picked, typed by the setting. A trigger reads its converted knobs live: Interval before each wait, Schedule and Agenda at each check, Webhook on each call (a wired secret with no value refuses the call with 503).
+- Edits between saves stay in the browser as a draft. When the file was saved elsewhere since, the editor shows the saved file and keeps the draft aside: both copies are named by their node counts, every swap can be swapped back, and Revert to the saved file keeps unsaved changes aside too.
+- When the editor needs a decision it asks with a toast and its buttons; the console line and the command palette keep the same choices.
+- Tidy up lays a graph out in columns by its wires and keeps wires clear of the nodes they pass where it can. A wire going back to the left routes around its own nodes, and parallel back wires take separate lanes.
 - Two example graphs: `chat` and `demo`.
 
 ### Removed
