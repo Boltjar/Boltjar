@@ -66,7 +66,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/).
 - Edits between saves stay in the browser as a draft. When the file was saved elsewhere since, the editor shows the saved file and keeps the draft aside: both copies are named by their node counts, every swap can be swapped back, and Revert to the saved file keeps unsaved changes aside too.
 - When the editor needs a decision it asks with a toast and its buttons; the console line and the command palette keep the same choices.
 - Tidy up lays a graph out in columns by its wires and keeps wires clear of the nodes they pass where it can. A wire going back to the left routes around its own nodes, and parallel back wires take separate lanes.
-- Two example graphs: `chat` and `demo`.
+- Two example graphs: `chat`, and `demo`, which writes release notes for customers from a change list.
 
 ### Removed
 

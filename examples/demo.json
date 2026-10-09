@@ -3,16 +3,16 @@
   "name": "demo",
   "nodes": [
     { "id": "Fire",          "type": "core.trigger.manual", "config": {}, "pos": [0, -24] },
-    { "id": "System prompt", "type": "core.value.text",     "config": { "text": "You are a friendly, concise assistant." }, "pos": [0, 168], "size": [300, 160] },
-    { "id": "User message",  "type": "core.value.text",     "config": { "text": "Hi there, how are you today?" }, "pos": [0, 432], "size": [300, 160] },
-    { "id": "Prompt",        "type": "core.data.template",  "config": { "template": "{system_prompt}\n\nUser: {user_message}" }, "pos": [396, 192], "size": [320, 260] },
+    { "id": "Writer brief",  "type": "core.value.text",     "config": { "text": "You turn developer change lists into release notes for customers: plain words, one line per change, no jargon." }, "pos": [0, 168], "size": [300, 160] },
+    { "id": "Changes",       "type": "core.value.text",     "config": { "text": "fixed login timing out on slow networks; added dark mode; export now includes images" }, "pos": [0, 432], "size": [300, 160] },
+    { "id": "Prompt",        "type": "core.data.template",  "config": { "template": "{writer_brief}\n\nChanges: {changes}" }, "pos": [396, 192], "size": [320, 260] },
     { "id": "LLM",           "type": "core.ai.llm",         "config": {}, "pos": [816, 192] },
-    { "id": "Log",           "type": "core.output.log",     "config": { "label": "assistant" }, "pos": [1212, 192] }
+    { "id": "Log",           "type": "core.output.log",     "config": { "label": "release notes" }, "pos": [1212, 192] }
   ],
   "edges": [
     { "src": "Fire",          "src_port": "trigger",  "dst": "Prompt", "dst_port": "trigger" },
-    { "src": "System prompt", "src_port": "out",      "dst": "Prompt", "dst_port": "system_prompt" },
-    { "src": "User message",  "src_port": "out",      "dst": "Prompt", "dst_port": "user_message" },
+    { "src": "Writer brief",  "src_port": "out",      "dst": "Prompt", "dst_port": "writer_brief" },
+    { "src": "Changes",       "src_port": "out",      "dst": "Prompt", "dst_port": "changes" },
     { "src": "Prompt",        "src_port": "trigger",  "dst": "LLM",    "dst_port": "trigger" },
     { "src": "Prompt",        "src_port": "out",      "dst": "LLM",    "dst_port": "prompt" },
     { "src": "LLM",           "src_port": "response", "dst": "Log",    "dst_port": "in" }

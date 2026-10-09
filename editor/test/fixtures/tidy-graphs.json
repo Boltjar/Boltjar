@@ -658,7 +658,7 @@
     }
    },
    {
-    "id": "System prompt",
+    "id": "Writer brief",
     "x": 0,
     "y": 168,
     "width": 300.0,
@@ -674,7 +674,7 @@
     }
    },
    {
-    "id": "User message",
+    "id": "Changes",
     "x": 0,
     "y": 432,
     "width": 300.0,
@@ -701,11 +701,11 @@
        "x": 0,
        "y": 73.4
       },
-      "system_prompt": {
+      "writer_brief": {
        "x": 0,
        "y": 97.4
       },
-      "user_message": {
+      "changes": {
        "x": 0,
        "y": 121.4
       },
@@ -793,16 +793,16 @@
     "targetHandle": "trigger"
    },
    {
-    "source": "System prompt",
+    "source": "Writer brief",
     "target": "Prompt",
     "sourceHandle": "out",
-    "targetHandle": "system_prompt"
+    "targetHandle": "writer_brief"
    },
    {
-    "source": "User message",
+    "source": "Changes",
     "target": "Prompt",
     "sourceHandle": "out",
-    "targetHandle": "user_message"
+    "targetHandle": "changes"
    },
    {
     "source": "Prompt",

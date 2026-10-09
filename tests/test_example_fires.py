@@ -210,9 +210,11 @@ def test_demo_one_fire_runs_the_llm_once(fires):
     assert len(watch.emits("LLM", "response")) == fires, "one reply per fire"
     lines = watch.log_lines("Log")
     assert len(lines) == fires and len(set(lines)) == 1, "one log line per fire"
-    assert lines[0].startswith("assistant: ") and "Hi there, how are you today?" in lines[0]
+    assert lines[0].startswith("release notes: ") and "fixed login timing out" in lines[0]
     assert watch.emits("Prompt", "out") == [
-        "You are a friendly, concise assistant.\n\nUser: Hi there, how are you today?"] * fires, \
+        "You turn developer change lists into release notes for customers: plain words, "
+        "one line per change, no jargon.\n\nChanges: fixed login timing out on slow networks; "
+        "added dark mode; export now includes images"] * fires, \
         "the LLM reads the prompt the Template assembled, once per fire"
 
 
@@ -235,4 +237,4 @@ def test_demo_with_its_template_bypassed_still_fires_the_llm():
     asyncio.run(drive())
     assert not watch.trouble(), watch.trouble()
     assert watch.fires() == {"LLM": 2, "Log": 2}, "the LLM and the Log, once per fire"
-    assert watch.log_lines("Log") == ["assistant: [mock] "] * 2, "an empty prompt"
+    assert watch.log_lines("Log") == ["release notes: [mock] "] * 2, "an empty prompt"
