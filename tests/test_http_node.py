@@ -156,9 +156,10 @@ def test_headers_and_query_parse_correctly():
     with patch("httpx.AsyncClient", return_value=cm):
         _run(inst.run())
 
-    kw = mock_client.request.call_args[1]
+    args, kw = mock_client.request.call_args
     assert kw["headers"] == {"X-App": "myapp", "Accept": "application/json"}
-    assert kw["params"] == {"page": "1", "size": "20"}
+    assert args[1] == "https://httpbin.org/get?page=1&size=20"
+    assert "params" not in kw  # httpx's params= would replace the URL's own query
 
 
 def test_blank_lines_in_headers_and_query_are_ignored():
@@ -173,9 +174,9 @@ def test_blank_lines_in_headers_and_query_are_ignored():
     with patch("httpx.AsyncClient", return_value=cm):
         _run(inst.run())
 
-    kw = mock_client.request.call_args[1]
+    args, kw = mock_client.request.call_args
     assert kw["headers"] == {"X-Only": "val"}
-    assert kw["params"] == {"key": "v"}
+    assert args[1] == "https://example.com?key=v"
 
 
 def test_header_value_may_contain_colon():
@@ -638,3 +639,65 @@ def test_response_type_binary_without_content_type_uses_default_mime():
         out = _run(inst.run())
 
     assert out["body"].startswith("data:application/octet-stream;base64,")
+
+
+# ---------------------------------------------------------------------------
+# Query: the URL's own query string and the Query knob, through real httpx
+# (MockTransport, no network): the request httpx actually builds is checked.
+# ---------------------------------------------------------------------------
+
+def _mock_httpx():
+    """Patch httpx.AsyncClient so every client the node opens talks to a
+    MockTransport; returns (patcher, seen) where `seen` collects the requests."""
+    import httpx as _httpx
+    real_client = _httpx.AsyncClient
+    seen: list = []
+
+    def handler(request):
+        seen.append(request)
+        return _httpx.Response(200, text="ok", headers={"content-type": "text/plain"})
+
+    def factory(*a, **kw):
+        return real_client(*a, transport=_httpx.MockTransport(handler), **kw)
+
+    return patch("httpx.AsyncClient", side_effect=factory), seen
+
+
+def _sent(cfg: dict, **inputs):
+    patcher, seen = _mock_httpx()
+    with patcher:
+        out = _run(_inst(cfg).run(**inputs))
+    assert out["status"] == 200
+    assert len(seen) == 1
+    return seen[0].url
+
+
+def test_query_written_in_the_url_is_kept():
+    url = _sent({"url": "https://wttr.in/Paris?format=3", "method": "GET", "query": ""})
+    assert str(url) == "https://wttr.in/Paris?format=3"
+
+
+def test_query_knob_pairs_are_added_to_the_url_query():
+    url = _sent({"url": "https://wttr.in/Paris?format=3", "method": "GET",
+                 "query": "lang=fr\nm="})
+    assert url.params.multi_items() == [("format", "3"), ("lang", "fr"), ("m", "")]
+
+
+def test_query_knob_value_wins_over_the_same_key_in_the_url():
+    url = _sent({"url": "https://wttr.in/Paris?format=3&lang=en", "method": "GET",
+                 "query": "format=4"})
+    assert url.params.multi_items() == [("format", "4"), ("lang", "en")]
+
+
+def test_repeated_url_keys_survive_a_query_knob():
+    url = _sent({"url": "https://api.example.com/items?tag=a&tag=b", "method": "GET",
+                 "query": "page=2"})
+    assert url.params.multi_items() == [("tag", "a"), ("tag", "b"), ("page", "2")]
+
+
+def test_tags_in_url_and_query_substitute_and_encode():
+    url = _sent({"url": "https://wttr.in/{city}?format=3", "method": "GET",
+                 "query": "q={term}"}, city="New York", term="fish & chips")
+    assert url.path == "/New York"
+    assert url.raw_path.startswith(b"/New%20York?")
+    assert url.params.multi_items() == [("format", "3"), ("q", "fish & chips")]

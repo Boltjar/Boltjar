@@ -1854,7 +1854,7 @@
   "name": "HTTP Request",
   "kind": "transform",
   "category": "Network",
-  "summary": "Call an external API. Fires on a trigger, fills in {{secret.NAME}} in the URL, headers and body, and puts each {tag} pipe's wired value in its place. The body goes as JSON, a form, multipart or raw text, whichever it looks like.",
+  "summary": "Call an external API. Fires on a trigger, fills in {{secret.NAME}} in the URL, headers and body, and puts each {tag} pipe's wired value in its place. Query pairs are added to the query written in the URL, and a key in both takes the Query value. The body goes as JSON, a form, multipart or raw text, whichever it looks like.",
   "icon": "globe-outline",
   "subline": "",
   "inputs": [

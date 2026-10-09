@@ -2733,8 +2733,9 @@ _RESPONSE_TYPE_DEFAULT_MIME = {
 @node(id="core.net.http", name="HTTP Request", kind=Kind.TRANSFORM, category="Network",
       summary="Call an external API. Fires on a trigger, fills in {{secret.NAME}} in the "
               "URL, headers and body, and puts each {tag} pipe's wired value in its place. "
-              "The body goes as JSON, a form, multipart or raw text, whichever it looks "
-              "like.",
+              "Query pairs are added to the query written in the URL, and a key in both "
+              "takes the Query value. The body goes as JSON, a form, multipart or raw "
+              "text, whichever it looks like.",
       icon="globe-outline")
 class Http:
     method: Widget = select(["GET", "POST", "PUT", "PATCH", "DELETE"], default="GET")
@@ -2810,8 +2811,15 @@ class Http:
                 k, _, v = line.partition("=")
                 params[k.strip()] = v.strip()
 
+        # The Query pairs join the query already written in the URL; a key in
+        # both takes the knob's value. httpx's own `params=` would REPLACE the
+        # URL's query (even an empty dict drops `?format=3`), so the merge happens
+        # on the URL itself, and an empty knob leaves the URL exactly as written.
+        if params:
+            url = str(httpx.URL(url).copy_merge_params(params))
+
         # ---- Auto-detect the request body shape.
-        kwargs: dict = {"headers": headers, "params": params, "timeout": 60.0}
+        kwargs: dict = {"headers": headers, "timeout": 60.0}
         # explicit Content-Type wins: send body raw, no detection.
         explicit_ct = None
         for hk in headers:
