@@ -3385,6 +3385,17 @@ def _think_on(params: dict) -> bool:
     return False
 
 
+def _ollama_think(params: dict) -> bool | None:
+    """The `think` value for an Ollama body: the knob's value, sent both ways,
+    for a model that declares thinking (only those carry a think param, see
+    _model_params); None, so nothing is sent, for a model that cannot think.
+    Leaving `think` out lets Ollama apply the model's own default, and a
+    thinking model like gemma4 then thinks with the knob off."""
+    if _THINK not in params:
+        return None
+    return _think_on(params)
+
+
 def _json_on(params: dict) -> bool:
     return bool(params.get(_JSON))
 
@@ -3460,7 +3471,8 @@ def _image_to_b64(image: str) -> tuple[str, str]:
 
 async def _ollama(model: str, prompt: str, params: dict, media: dict,
                   ctx=None, tools: list | None = None) -> tuple[str, str]:
-    """Ollama. Thinking is top-level `think: bool` and returns the trace in
+    """Ollama. Thinking is top-level `think: bool` (sent true or false for a
+    thinking model, never for one that cannot think) and returns the trace in
     `thinking`; JSON output is top-level `format: "json"`.
 
     Without tools we hit /api/generate (the lean, single-shot path). With wired
@@ -3480,8 +3492,8 @@ async def _ollama(model: str, prompt: str, params: dict, media: dict,
                 "options": _opts(params, ("temperature", "top_p", "top_k", "num_ctx", "seed"))}
         if params.get("keep_alive"):
             body["keep_alive"] = params["keep_alive"]
-        if _think_on(params):
-            body["think"] = True
+        if (think := _ollama_think(params)) is not None:
+            body["think"] = think
         if _json_on(params):
             body["format"] = "json"
         if media.get("image"):
@@ -3515,8 +3527,8 @@ async def _ollama(model: str, prompt: str, params: dict, media: dict,
     }
     if params.get("keep_alive"):
         base_body["keep_alive"] = params["keep_alive"]
-    if _think_on(params):
-        base_body["think"] = True
+    if (think := _ollama_think(params)) is not None:
+        base_body["think"] = think
     if _json_on(params):
         base_body["format"] = "json"
 
