@@ -74,6 +74,9 @@ interface CanvasProps {
   onConnect: (c: Connection) => void;
   onReconnectEdge: (oldEdge: WFEdge, c: Connection) => void;
   isValidConnection: (c: Connection | WFEdge) => boolean;
+  /** the type a wire from (node, output port) carries (a pass-through's real
+   *  source's), so a dragged Router out lights the same targets it may join. */
+  carriedType: (source: string, port: string) => string | undefined;
   onAddNode: (typeId: string, pos: { x: number; y: number }) => void;
   onPaneClick: () => void;
   onMoveEnd: (zoom: number) => void;
@@ -135,6 +138,7 @@ export function Canvas(props: CanvasProps) {
     onConnect,
     onReconnectEdge,
     isValidConnection,
+    carriedType,
     onAddNode,
     onPaneClick,
     onMoveEnd,
@@ -448,7 +452,9 @@ export function Canvas(props: CanvasProps) {
                 ? def?.inputs.find((p) => p.name === params.handleId)?.type ?? "any"
                 : def?.outputs.find((p) => p.name === params.handleId)?.type ?? "any";
             setDragType(t);
-            if (params.handleType === "source") onConnectingChange({ fromType: t, fromId: params.nodeId });
+            if (params.handleType === "source") {
+              onConnectingChange({ fromType: carriedType(params.nodeId, params.handleId) ?? "", fromId: params.nodeId });
+            }
           }
         }}
         onConnectEnd={(event) => {

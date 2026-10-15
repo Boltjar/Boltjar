@@ -63,7 +63,7 @@ from boltjar.sqlite_store import SqliteStore
 from boltjar.file_store import FileStore
 from boltjar.kv_store import KvStore
 from boltjar.vector_store import VectorStore
-from boltjar.graph_format import GraphFormatError, format_of, migrate
+from boltjar.graph_format import GraphFormatError, TriggerWalk, format_of, migrate
 from boltjar import __version__, models
 from boltjar import autostart as _autostart
 from boltjar import dialogs as _dialogs
@@ -768,7 +768,10 @@ def _input_port_check(spec, config: dict, port: str):
         # Build `field`, HTTP/KV/DB `tag`, Wireless In `in`) mints one socket per
         # wire, named after the source or author, not statically enumerable. Any
         # non-declared dst_port belongs to that base; accept as the base's type.
-        return True, grow.type
+        # On a node with several (a Queue's `trigger` and `in`), the base the
+        # socket falls under (NodeSpec.growable_base), the rule the runtime fires by.
+        base = spec.growable_base(port, config.get("promoted") or ())
+        return True, (base or grow).type
     # no dynamic input surface: only declared + promoted ports are real. A dst_port
     # outside them (e.g. a stale wire after a port rename) is flagged.
     return False, None
@@ -810,6 +813,9 @@ def _edge_problems(graph: dict) -> list[dict]:
     governs it), matching the disabled-nodes-never-block-power-on rule."""
     problems: list[dict] = []
     nodes = {n["id"]: n for n in graph.get("nodes", [])}
+    # a pass-through (a Router, a Wireless Out, a bypassed node) carries its real
+    # source's type, so a routed trigger is an event and routed data is not
+    walk = TriggerWalk(graph, NODE_REGISTRY.get)
     for e in graph.get("edges", []):
         src, sp = e.get("src"), e.get("src_port")
         dst, dp = e.get("dst"), e.get("dst_port")
@@ -838,6 +844,12 @@ def _edge_problems(graph: dict) -> list[dict]:
         s_cfg = node_config(s_spec, s_node.get("config"))
         d_cfg = node_config(d_spec, d_node.get("config"))
         out_ok, out_type = _output_port_check(s_spec, s_cfg, sp)
+        if walk.upstream(src, sp) is not False:
+            real = walk.source(src, sp)
+            r_node = nodes.get(real[0]) if real else None
+            r_spec = NODE_REGISTRY.get(r_node["type"]) if r_node else None
+            out_type = (_output_port_check(r_spec, node_config(r_spec, r_node.get("config")), real[1])[1]
+                        if r_spec else None)  # nothing upstream: no type to judge yet
         in_ok, in_type = _input_port_check(d_spec, d_cfg, dp)
         if not out_ok:
             problems.append({"node": src, "kind": "bad-source-port",
@@ -850,7 +862,12 @@ def _edge_problems(graph: dict) -> list[dict]:
         # type-check only when BOTH ends resolved to a concrete (non-permissive)
         # type; `any` on either side is the universal wildcard, as in the editor.
         if out_ok and in_ok and out_type and in_type:
-            if not types.compatible(out_type, in_type):
+            if in_type == "event" and out_type != "event":
+                problems.append({"node": dst, "kind": "type-mismatch",
+                                 "message": f"edge {wire}: {out_type} output cannot fire "
+                                            f"'{dp}': a data wire never fires a node, wire "
+                                            f"the source's trigger instead"})
+            elif not types.compatible(out_type, in_type):
                 problems.append({"node": dst, "kind": "type-mismatch",
                                  "message": f"edge {wire}: {out_type} output cannot "
                                             f"feed {in_type} input"})

@@ -1,0 +1,582 @@
+{
+ "about": "Format 3 graphs with data wired into a trigger, and the wires each carries once migrated to format 4 (a trigger takes only an event). Read by tests/test_graph_format.py and editor/test/graph-format.test.mjs, so the server and the editor heal alike.",
+ "cases": [
+  {
+   "name": "a Preview's value into a trigger moves onto the Preview's trigger",
+   "graph": {
+    "format": 3,
+    "nodes": [
+     {
+      "id": "chat",
+      "type": "core.trigger.chat",
+      "config": {}
+     },
+     {
+      "id": "llm",
+      "type": "core.ai.llm",
+      "config": {}
+     },
+     {
+      "id": "pv",
+      "type": "core.output.preview",
+      "config": {}
+     },
+     {
+      "id": "next",
+      "type": "core.ai.llm",
+      "config": {}
+     }
+    ],
+    "edges": [
+     {
+      "src": "chat",
+      "src_port": "trigger",
+      "dst": "llm",
+      "dst_port": "trigger"
+     },
+     {
+      "src": "llm",
+      "src_port": "trigger",
+      "dst": "pv",
+      "dst_port": "trigger"
+     },
+     {
+      "src": "llm",
+      "src_port": "response",
+      "dst": "pv",
+      "dst_port": "in"
+     },
+     {
+      "src": "pv",
+      "src_port": "out",
+      "dst": "next",
+      "dst_port": "trigger"
+     },
+     {
+      "src": "pv",
+      "src_port": "out",
+      "dst": "next",
+      "dst_port": "prompt"
+     }
+    ]
+   },
+   "edges": [
+    {
+     "src": "chat",
+     "src_port": "trigger",
+     "dst": "llm",
+     "dst_port": "trigger"
+    },
+    {
+     "src": "llm",
+     "src_port": "trigger",
+     "dst": "pv",
+     "dst_port": "trigger"
+    },
+    {
+     "src": "llm",
+     "src_port": "response",
+     "dst": "pv",
+     "dst_port": "in"
+    },
+    {
+     "src": "pv",
+     "src_port": "trigger",
+     "dst": "next",
+     "dst_port": "trigger"
+    },
+    {
+     "src": "pv",
+     "src_port": "out",
+     "dst": "next",
+     "dst_port": "prompt"
+    }
+   ]
+  },
+  {
+   "name": "a Template's text into a trigger moves onto the Template's trigger",
+   "graph": {
+    "format": 3,
+    "nodes": [
+     {
+      "id": "chat",
+      "type": "core.trigger.chat",
+      "config": {}
+     },
+     {
+      "id": "llm",
+      "type": "core.ai.llm",
+      "config": {}
+     },
+     {
+      "id": "tpl",
+      "type": "core.data.template",
+      "config": {
+       "template": "{chat}"
+      }
+     }
+    ],
+    "edges": [
+     {
+      "src": "chat",
+      "src_port": "trigger",
+      "dst": "tpl",
+      "dst_port": "trigger"
+     },
+     {
+      "src": "chat",
+      "src_port": "text",
+      "dst": "tpl",
+      "dst_port": "chat"
+     },
+     {
+      "src": "tpl",
+      "src_port": "out",
+      "dst": "llm",
+      "dst_port": "trigger"
+     },
+     {
+      "src": "tpl",
+      "src_port": "out",
+      "dst": "llm",
+      "dst_port": "prompt"
+     }
+    ]
+   },
+   "edges": [
+    {
+     "src": "chat",
+     "src_port": "trigger",
+     "dst": "tpl",
+     "dst_port": "trigger"
+    },
+    {
+     "src": "chat",
+     "src_port": "text",
+     "dst": "tpl",
+     "dst_port": "chat"
+    },
+    {
+     "src": "tpl",
+     "src_port": "trigger",
+     "dst": "llm",
+     "dst_port": "trigger"
+    },
+    {
+     "src": "tpl",
+     "src_port": "out",
+     "dst": "llm",
+     "dst_port": "prompt"
+    }
+   ]
+  },
+  {
+   "name": "a chat's text into a trigger moves onto the chat's trigger",
+   "graph": {
+    "format": 3,
+    "nodes": [
+     {
+      "id": "chat",
+      "type": "core.trigger.chat",
+      "config": {}
+     },
+     {
+      "id": "llm",
+      "type": "core.ai.llm",
+      "config": {}
+     }
+    ],
+    "edges": [
+     {
+      "src": "chat",
+      "src_port": "text",
+      "dst": "llm",
+      "dst_port": "trigger"
+     },
+     {
+      "src": "chat",
+      "src_port": "text",
+      "dst": "llm",
+      "dst_port": "prompt"
+     }
+    ]
+   },
+   "edges": [
+    {
+     "src": "chat",
+     "src_port": "trigger",
+     "dst": "llm",
+     "dst_port": "trigger"
+    },
+    {
+     "src": "chat",
+     "src_port": "text",
+     "dst": "llm",
+     "dst_port": "prompt"
+    }
+   ]
+  },
+  {
+   "name": "data routed into a trigger moves onto the trigger behind the Router",
+   "graph": {
+    "format": 3,
+    "nodes": [
+     {
+      "id": "chat",
+      "type": "core.trigger.chat",
+      "config": {}
+     },
+     {
+      "id": "llm",
+      "type": "core.ai.llm",
+      "config": {}
+     },
+     {
+      "id": "r",
+      "type": "core.flow.router",
+      "config": {}
+     },
+     {
+      "id": "log",
+      "type": "core.output.log",
+      "config": {}
+     }
+    ],
+    "edges": [
+     {
+      "src": "chat",
+      "src_port": "trigger",
+      "dst": "llm",
+      "dst_port": "trigger"
+     },
+     {
+      "src": "llm",
+      "src_port": "response",
+      "dst": "r",
+      "dst_port": "in"
+     },
+     {
+      "src": "r",
+      "src_port": "out",
+      "dst": "log",
+      "dst_port": "trigger"
+     },
+     {
+      "src": "llm",
+      "src_port": "response",
+      "dst": "log",
+      "dst_port": "in"
+     }
+    ]
+   },
+   "edges": [
+    {
+     "src": "chat",
+     "src_port": "trigger",
+     "dst": "llm",
+     "dst_port": "trigger"
+    },
+    {
+     "src": "llm",
+     "src_port": "response",
+     "dst": "r",
+     "dst_port": "in"
+    },
+    {
+     "src": "llm",
+     "src_port": "trigger",
+     "dst": "log",
+     "dst_port": "trigger"
+    },
+    {
+     "src": "llm",
+     "src_port": "response",
+     "dst": "log",
+     "dst_port": "in"
+    }
+   ]
+  },
+  {
+   "name": "a trigger routed into a trigger stays",
+   "graph": {
+    "format": 3,
+    "nodes": [
+     {
+      "id": "chat",
+      "type": "core.trigger.chat",
+      "config": {}
+     },
+     {
+      "id": "llm",
+      "type": "core.ai.llm",
+      "config": {}
+     },
+     {
+      "id": "r",
+      "type": "core.flow.router",
+      "config": {}
+     }
+    ],
+    "edges": [
+     {
+      "src": "chat",
+      "src_port": "trigger",
+      "dst": "r",
+      "dst_port": "in"
+     },
+     {
+      "src": "r",
+      "src_port": "out",
+      "dst": "llm",
+      "dst_port": "trigger"
+     }
+    ]
+   },
+   "edges": [
+    {
+     "src": "chat",
+     "src_port": "trigger",
+     "dst": "r",
+     "dst_port": "in"
+    },
+    {
+     "src": "r",
+     "src_port": "out",
+     "dst": "llm",
+     "dst_port": "trigger"
+    }
+   ]
+  },
+  {
+   "name": "data through a Wireless pair moves onto the trigger the same pair carries",
+   "graph": {
+    "format": 3,
+    "nodes": [
+     {
+      "id": "chat",
+      "type": "core.trigger.chat",
+      "config": {}
+     },
+     {
+      "id": "llm",
+      "type": "core.ai.llm",
+      "config": {}
+     },
+     {
+      "id": "tpl",
+      "type": "core.data.template",
+      "config": {
+       "template": "{chat}"
+      }
+     },
+     {
+      "id": "win",
+      "type": "core.flow.wireless_in",
+      "config": {
+       "channel": "4"
+      }
+     },
+     {
+      "id": "wout",
+      "type": "core.flow.wireless_out",
+      "config": {
+       "channel": "4"
+      }
+     }
+    ],
+    "edges": [
+     {
+      "src": "chat",
+      "src_port": "trigger",
+      "dst": "tpl",
+      "dst_port": "trigger"
+     },
+     {
+      "src": "chat",
+      "src_port": "text",
+      "dst": "tpl",
+      "dst_port": "chat"
+     },
+     {
+      "src": "tpl",
+      "src_port": "trigger",
+      "dst": "win",
+      "dst_port": "tpl.trigger"
+     },
+     {
+      "src": "tpl",
+      "src_port": "out",
+      "dst": "win",
+      "dst_port": "tpl.out"
+     },
+     {
+      "src": "wout",
+      "src_port": "tpl.out",
+      "dst": "llm",
+      "dst_port": "trigger"
+     },
+     {
+      "src": "wout",
+      "src_port": "tpl.out",
+      "dst": "llm",
+      "dst_port": "prompt"
+     }
+    ]
+   },
+   "edges": [
+    {
+     "src": "chat",
+     "src_port": "trigger",
+     "dst": "tpl",
+     "dst_port": "trigger"
+    },
+    {
+     "src": "chat",
+     "src_port": "text",
+     "dst": "tpl",
+     "dst_port": "chat"
+    },
+    {
+     "src": "tpl",
+     "src_port": "trigger",
+     "dst": "win",
+     "dst_port": "tpl.trigger"
+    },
+    {
+     "src": "tpl",
+     "src_port": "out",
+     "dst": "win",
+     "dst_port": "tpl.out"
+    },
+    {
+     "src": "wout",
+     "src_port": "tpl.trigger",
+     "dst": "llm",
+     "dst_port": "trigger"
+    },
+    {
+     "src": "wout",
+     "src_port": "tpl.out",
+     "dst": "llm",
+     "dst_port": "prompt"
+    }
+   ]
+  },
+  {
+   "name": "a constant into a trigger has no trigger to take and stays for validation to name",
+   "graph": {
+    "format": 3,
+    "nodes": [
+     {
+      "id": "go",
+      "type": "core.trigger.manual",
+      "config": {}
+     },
+     {
+      "id": "text",
+      "type": "core.value.text",
+      "config": {
+       "text": "hi"
+      }
+     },
+     {
+      "id": "log",
+      "type": "core.output.log",
+      "config": {}
+     }
+    ],
+    "edges": [
+     {
+      "src": "text",
+      "src_port": "out",
+      "dst": "log",
+      "dst_port": "trigger"
+     },
+     {
+      "src": "go",
+      "src_port": "trigger",
+      "dst": "log",
+      "dst_port": "in"
+     }
+    ]
+   },
+   "edges": [
+    {
+     "src": "text",
+     "src_port": "out",
+     "dst": "log",
+     "dst_port": "trigger"
+    },
+    {
+     "src": "go",
+     "src_port": "trigger",
+     "dst": "log",
+     "dst_port": "in"
+    }
+   ]
+  },
+  {
+   "name": "a producer's data on a Queue trigger socket moves onto its trigger",
+   "graph": {
+    "format": 3,
+    "nodes": [
+     {
+      "id": "chat",
+      "type": "core.trigger.chat",
+      "config": {}
+     },
+     {
+      "id": "llm",
+      "type": "core.ai.llm",
+      "config": {}
+     },
+     {
+      "id": "q",
+      "type": "core.flow.queue",
+      "config": {}
+     }
+    ],
+    "edges": [
+     {
+      "src": "chat",
+      "src_port": "text",
+      "dst": "q",
+      "dst_port": "trigger0"
+     },
+     {
+      "src": "q",
+      "src_port": "trigger",
+      "dst": "llm",
+      "dst_port": "trigger"
+     },
+     {
+      "src": "llm",
+      "src_port": "trigger",
+      "dst": "q",
+      "dst_port": "ack"
+     }
+    ]
+   },
+   "edges": [
+    {
+     "src": "chat",
+     "src_port": "trigger",
+     "dst": "q",
+     "dst_port": "trigger0"
+    },
+    {
+     "src": "q",
+     "src_port": "trigger",
+     "dst": "llm",
+     "dst_port": "trigger"
+    },
+    {
+     "src": "llm",
+     "src_port": "trigger",
+     "dst": "q",
+     "dst_port": "ack"
+    }
+   ]
+  }
+ ]
+}

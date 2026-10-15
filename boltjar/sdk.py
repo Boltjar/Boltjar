@@ -285,6 +285,12 @@ class _Types:
         return self.meta.get(name, {}).get("color", "#5a6b7c")
 
     def compatible(self, out_type: str, in_type: str) -> bool:
+        """Whether an output of `out_type` may feed an input of `in_type`. An
+        `event` input (a trigger) takes only an `event` output: a data wire
+        never fires a node, `any` included. Otherwise `any` fits everything and
+        a subtype fits its parent."""
+        if in_type == "event":
+            return out_type == "event"
         if in_type == "any" or out_type == "any" or out_type == in_type:
             return True
         node = self.meta.get(out_type)

@@ -273,6 +273,7 @@ export default function App() {
     onConnect,
     reconnectEdge,
     isValidConnection,
+    carriedType,
     addNodeOfType,
     scaffoldsFor,
     scaffoldFromPort,
@@ -1758,6 +1759,7 @@ export default function App() {
                 onConnect={onConnect}
                 onReconnectEdge={reconnectEdge}
                 isValidConnection={isValidConnection}
+                carriedType={carriedType}
                 onAddNode={addNodeOfType}
                 onPaneClick={() => {
                   select(null);

@@ -97,6 +97,17 @@ for (const c of cases) {
   check(`format 3, the input is not mutated: ${c.name}`, JSON.stringify(c.graph), saved);
 }
 
+// ---- format 4: a trigger takes only an event. Shared with the server too.
+const four = JSON.parse(readFileSync(resolve(here, "fixtures/migrate-format-4.json"), "utf8")).cases;
+for (const c of four) {
+  const saved = JSON.stringify(c.graph);
+  const out = migrateGraph(c.graph, defs);
+  check(`format 4: ${c.name}`, out.graph.edges, c.edges);
+  check(`format 4, changed says so: ${c.name}`, out.changed,
+    JSON.stringify(c.edges) !== JSON.stringify(c.graph.edges));
+  check(`format 4, the input is not mutated: ${c.name}`, JSON.stringify(c.graph), saved);
+}
+
 // ---- the walk visits each wire once: a long chain, many readers, a cycle
 function chain(length, cyclic = false) {
   const nodes = [{ id: "go", type: "core.trigger.manual", config: {}, pos: [0, 0] },

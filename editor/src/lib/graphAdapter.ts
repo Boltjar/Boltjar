@@ -87,8 +87,11 @@ export function inputType(
   // a KV / DB tag socket (not a declared port) carries `any` (matches the
   // growable `tag` port; the template substitution coerces to str anyway).
   if (def.id === KV_ID || def.id === DB_ID) return "any";
-  const growable = def.inputs.find((p) => p.growable);
-  return growable?.type ?? "any";
+  // a socket of a growable input: on a node with several (a Queue's `trigger0`
+  // and `in0`), the one its name starts with, as the server reads it.
+  const bases = def.inputs.filter((p) => p.growable);
+  const base = bases.length > 1 ? bases.find((p) => handle.startsWith(p.name)) : bases[0];
+  return (base ?? bases[0])?.type ?? "any";
 }
 
 /** Node types whose body is a text block and so can be resized (width + height).
@@ -166,7 +169,7 @@ export function projectGraph(
 /** The graph format this editor writes: the shape serializeGraph produces. It
  *  equals the server's CURRENT_FORMAT (boltjar/graph_format.py, which a test
  *  checks), and the server migrates every graph it serves to that format. */
-export const GRAPH_FORMAT = 3;
+export const GRAPH_FORMAT = 4;
 
 /** The model value format 1 had for "run whatever model can run now". It is
  *  gone: a model can cost money, so only a person picks one. */
@@ -177,7 +180,8 @@ const FORMAT_1_AUTO = "auto";
  * opened file never passes through the server) in the current format, the way
  * the server's migrate (boltjar/graph_format.py) turns it: format 2 drops the
  * "auto" model, so a model picker that held it holds none; format 3 wires the
- * trigger each node that used to fire on data now fires on (migrateTriggers).
+ * trigger each node that used to fire on data now fires on (migrateTriggers);
+ * format 4 moves a data wire off a trigger input (healDataTriggers).
  * `defs` are the node definitions the format 3 step reads. `changed` says
  * whether anything changed. A current graph comes back as is; the input is
  * never mutated.
@@ -200,11 +204,37 @@ export function migrateGraph(
       return { ...n, config };
     });
   }
-  if (format < 3) {
-    edges = migrateTriggers(nodes, edges, defs);
-    changed = changed || JSON.stringify(edges) !== JSON.stringify(graph.edges);
-  }
+  if (format < 3) edges = migrateTriggers(nodes, edges, defs);
+  if (format < 4) edges = healDataTriggers(nodes, edges, defs);
+  changed = changed || JSON.stringify(edges) !== JSON.stringify(graph.edges);
   return { graph: { ...graph, format: GRAPH_FORMAT, nodes, edges }, changed };
+}
+
+/**
+ * The format 3 -> 4 step: a trigger input takes only an event output, so a wire
+ * whose real source (through any Router, Wireless pair or bypassed node) is
+ * data, `any` included, is moved onto the trigger that came with that data
+ * (TriggerWalk.triggerFor: a Preview's `out` onto its `trigger`). One whose
+ * trigger cannot be told is left for validation to name. Mirrors
+ * heal_data_triggers in boltjar/graph_format.py; the shared cases in
+ * editor/test/fixtures/migrate-format-4.json keep the two in step.
+ */
+export function healDataTriggers(
+  nodes: readonly GraphNode[],
+  edges: readonly GraphEdge[],
+  defs: ReadonlyMap<string, NodeDef>,
+): GraphEdge[] {
+  const walk = new TriggerWalk(nodes, edges, defs);
+  return edges.map((e) => {
+    const dst = walk.byId.get(e.dst);
+    if (!dst || !firesOn(walk.def(e.dst), dst.config, e.dst_port)) return e;
+    const real = walk.source(e.src, e.src_port);
+    const realDef = real ? walk.def(real[0]) : undefined;
+    // nothing behind it (validation names that), or a real trigger
+    if (!real || !realDef || realDef.outputs.find((p) => p.name === real[1])?.type === "event") return e;
+    const trigger = walk.triggerFor(e.src, e.src_port);
+    return trigger ? { ...e, src: trigger[0], src_port: trigger[1] } : e;
+  });
 }
 
 /** Format 3: a data wire never fires a node. These nodes used to fire on a data

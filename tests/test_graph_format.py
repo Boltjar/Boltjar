@@ -35,6 +35,9 @@ GRAPH = {
 # format 2 -> 3 cases shared with the editor's migrateGraph (graph-format.test.mjs)
 MIGRATE_3 = json.loads((REPO / "editor" / "test" / "fixtures" / "migrate-format-3.json")
                        .read_text(encoding="utf-8"))["cases"]
+# format 3 -> 4 cases, shared the same way
+MIGRATE_4 = json.loads((REPO / "editor" / "test" / "fixtures" / "migrate-format-4.json")
+                       .read_text(encoding="utf-8"))["cases"]
 
 
 @pytest.fixture
@@ -234,9 +237,30 @@ def test_a_graph_whose_shape_cannot_be_read_is_refused_not_crashed(graph):
     assert [p["kind"] for p in problems] == ["format"]
 
 
-def test_every_shipped_example_is_already_in_the_format_3_shape():
+@pytest.mark.parametrize("case", MIGRATE_4, ids=[c["name"] for c in MIGRATE_4])
+def test_format_4_moves_data_off_a_trigger_onto_the_trigger_behind_it(case):
+    before = copy.deepcopy(case["graph"])
+    out = migrate(case["graph"])
+    assert out["format"] == CURRENT_FORMAT
+    assert out["edges"] == case["edges"]
+    assert case["graph"] == before, "the input is never modified"
+
+
+def test_format_4_graphs_validate_but_a_trigger_with_nothing_to_take_is_named():
+    for case in MIGRATE_4:
+        problems = [p for p in server.validate_graph(migrate(case["graph"]))
+                    if p["kind"] == "type-mismatch"]
+        if case["name"].startswith("a constant into a trigger"):
+            assert [p["message"] for p in problems] == [
+                "edge text.out -> log.trigger: text output cannot fire 'trigger': a data "
+                "wire never fires a node, wire the source's trigger instead"]
+        else:
+            assert problems == [], case["name"]
+
+
+def test_every_shipped_example_is_already_in_the_current_shape():
     # a shipped example is saved in the current format, so its load never
-    # migrates: running the format 3 step over it again changes nothing.
+    # migrates: running the steps since format 2 over it again changes nothing.
     for path in sorted((REPO / "examples").glob("*.json")):
         graph = json.loads(path.read_text(encoding="utf-8"))
         assert migrate({**graph, "format": 2})["edges"] == graph["edges"], path.name

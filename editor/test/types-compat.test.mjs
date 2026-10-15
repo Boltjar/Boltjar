@@ -41,6 +41,11 @@ check("Tool.call (tool-call) -> LLM.tools (tool)", typesCompatible("tool-call", 
 check("tool -> tool-call is directional (rejected)", typesCompatible("tool", "tool-call"), false);
 // A non-tool output must still be rejected by the tools port.
 check("event -> tool rejected", typesCompatible("event", "tool"), false);
+// a data wire never fires a node: a trigger (event input) takes only an event
+check("event -> event accepted", typesCompatible("event", "event"), true);
+check("any -> event rejected", typesCompatible("any", "event"), false);
+check("text -> event rejected", typesCompatible("text", "event"), false);
+check("event -> any still accepted (a payload read as data)", typesCompatible("event", "any"), true);
 // Other declared backend subtypes the editor now mirrors.
 check("lang -> text", typesCompatible("lang", "text"), true);
 check("vectors -> db", typesCompatible("vectors", "db"), true);

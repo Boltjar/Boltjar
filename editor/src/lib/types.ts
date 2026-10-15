@@ -74,7 +74,9 @@ const SUBTYPE_OF: Record<string, string> = {
  * Whether an output of `outType` may connect to an input of `inType`.
  *
  * Mirrors boltjar.sdk._Types.compatible:
- *   - `any` on either side is compatible with everything,
+ *   - an `event` input (a trigger) takes only an `event` output: a data wire
+ *     never fires a node, `any` included,
+ *   - otherwise `any` on either side is compatible with everything,
  *   - identical types are compatible,
  *   - int/float/number interchange (the numeric family),
  *   - a subtype output satisfies its supertype input (SUBTYPE_OF).
@@ -84,6 +86,7 @@ export function typesCompatible(
   inType: string | undefined,
 ): boolean {
   if (!outType || !inType) return true;
+  if (inType === "event") return outType === "event";
   if (outType === "any" || inType === "any") return true;
   if (outType === inType) return true;
   if (NUMERIC.has(outType) && NUMERIC.has(inType)) return true;

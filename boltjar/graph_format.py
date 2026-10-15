@@ -17,7 +17,7 @@ from __future__ import annotations
 import copy
 from typing import Callable
 
-CURRENT_FORMAT = 3
+CURRENT_FORMAT = 4
 
 
 class GraphFormatError(ValueError):
@@ -305,11 +305,44 @@ def migrate_triggers(graph: dict, spec_of: Callable) -> dict:
     return graph
 
 
+def _from_3(graph: dict) -> dict:
+    """Format 4: a trigger input takes only an event (see heal_data_triggers)."""
+    import boltjar.nodes.core  # noqa: F401  the walk reads the core node specs
+    from boltjar.sdk import NODE_REGISTRY
+    return heal_data_triggers(graph, NODE_REGISTRY.get)
+
+
+def heal_data_triggers(graph: dict, spec_of: Callable) -> dict:
+    """The format 3 -> 4 step: a trigger input takes only an event output, so a
+    wire whose real source (through any Router, Wireless pair or bypassed node)
+    is data, `any` included, is moved onto the trigger that came with that data
+    (TriggerWalk.trigger_for: a Preview's `out` onto its `trigger`). One whose
+    trigger cannot be told is left for validation to name. Mirrors
+    healDataTriggers in editor/src/lib/graphAdapter.ts; the shared cases in
+    editor/test/fixtures/migrate-format-4.json keep the two in step."""
+    walk = TriggerWalk(graph, spec_of)
+    edges = list(graph.get("edges") or [])
+    for i, e in walk.wires:
+        dst = walk.nodes.get(e["dst"])
+        if dst is None or not _fires(walk.spec(e["dst"]), dst, e["dst_port"]):
+            continue
+        real = walk.source(e["src"], e["src_port"])
+        real_spec = walk.spec(real[0]) if real else None
+        if real_spec is None or _out_type(real_spec, real[1]) == "event":
+            continue  # nothing behind it (validation names that), or a real trigger
+        trigger = walk.trigger_for(e["src"], e["src_port"])
+        if trigger is not None:
+            edges[i] = {**e, "src": trigger[0], "src_port": trigger[1]}
+    graph["edges"] = edges
+    return graph
+
+
 # the step that turns a graph of format N (the key) into format N + 1.
 _STEPS: dict[int, Callable[[dict], dict]] = {
     0: _from_0,
     1: _from_1,
     2: _from_2,
+    3: _from_3,
 }
 
 

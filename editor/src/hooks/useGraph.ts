@@ -41,6 +41,7 @@ import {
   type WFNode,
 } from "../lib/graphAdapter";
 import { typesCompatible } from "../lib/types";
+import { TriggerWalk, type PortRef } from "../lib/triggerWalk";
 import { renameGraph } from "../lib/renameGraph";
 import {
   ghostBase,
@@ -53,9 +54,11 @@ import {
   nextDynamicName,
   nodePromoted,
   parseTemplateTags,
+  ROUTER_ID,
   sourceSocketSlug,
   survivesReshape,
   TEMPLATE_ID,
+  WIRELESS_OUT_ID,
 } from "../lib/dynamicPorts";
 
 export interface ConnectionRejection {
@@ -116,6 +119,9 @@ export interface GraphStore {
   reconnectEdge: (oldEdge: WFEdge, conn: Connection) => void;
 
   isValidConnection: (conn: Connection | WFEdge) => boolean;
+  /** The type a wire from (node, output port) carries, a pass-through's real
+   *  source's; undefined while nothing reaches a pass-through. */
+  carriedType: (source: string, port: string) => string | undefined;
   addNodeOfType: (typeId: string, pos: { x: number; y: number }) => string | null;
   /** The scaffold gestures available on a node: for each output port that
    *  DECLARES a scaffold and has no body of that type yet, a {port,label} the
@@ -313,6 +319,31 @@ export function useGraph(
     setEdges((eds) => applyEdgeChanges(changes, eds));
   }, [commit, markEdited]);
 
+  // the type a wire from (source, port) carries. A pass-through (a Router, a
+  // Wireless Out, a bypassed node) carries its real source's type, so a routed
+  // trigger stays an event and routed data never fires a trigger; undefined
+  // when nothing reaches it yet (judged once something does). The walk is built
+  // only for a pass-through source, which is rare.
+  const carriedType = useCallback((source: string, port: string): string | undefined => {
+    let at: PortRef = [source, port];
+    const srcTypeId = typeById.get(source);
+    if (srcTypeId === ROUTER_ID || srcTypeId === WIRELESS_OUT_ID || disabledIds.has(source)) {
+      const walk = new TriggerWalk(
+        nodes.map((n) => ({ id: n.id, type: n.data.typeId, config: n.data.config, pos: [0, 0] as [number, number],
+          ...(disabledIds.has(n.id) ? { disabled: true } : {}) })),
+        edges.map((e) => ({ src: e.source, src_port: e.sourceHandle ?? "", dst: e.target, dst_port: e.targetHandle ?? "" })),
+        defs,
+      );
+      if (walk.upstream(source, port) !== false) {
+        const real = walk.source(source, port);
+        if (!real) return undefined;
+        at = real;
+      }
+    }
+    const typeId = typeById.get(at[0]);
+    return typeId ? outputType(defs, typeId, at[1], models, configById.get(at[0])) : "any";
+  }, [nodes, edges, disabledIds, defs, models, typeById, configById]);
+
   // -- type-checked connection validation (used both as a guard and a gate) --
   const validate = useCallback(
     (conn: Connection | WFEdge): { ok: boolean; reason?: string } => {
@@ -327,7 +358,7 @@ export function useGraph(
 
       const srcTypeId = typeById.get(source);
       const dstTypeId = typeById.get(target);
-      const outType = srcTypeId ? outputType(defs, srcTypeId, sourceHandle, models, configById.get(source)) : "any";
+      const outType = srcTypeId ? carriedType(source, sourceHandle) : "any";
       // a ghost handle resolves to its growable base's type.
       const dstHandle = isGhostHandle(targetHandle) ? ghostBase(targetHandle) : targetHandle;
       const inType = dstTypeId ? inputType(defs, dstTypeId, dstHandle, models, configById.get(target)) : "any";
@@ -336,7 +367,7 @@ export function useGraph(
       }
       return { ok: true };
     },
-    [defs, typeById, configById, models],
+    [defs, typeById, configById, models, carriedType],
   );
 
   const isValidConnection = useCallback(
@@ -581,15 +612,14 @@ export function useGraph(
         }
         if (e.target !== id) return true;
         const srcTypeId = typeById.get(e.source);
-        const carried = srcTypeId
-          ? outputType(defs, srcTypeId, e.sourceHandle ?? "", models, configById.get(e.source))
-          : "any";
+        // "" is no type yet (a Router with nothing upstream): the wire stays
+        const carried = srcTypeId ? carriedType(e.source, e.sourceHandle ?? "") ?? "" : "any";
         return survivesReshape(def, nextConfig, connected,
           { side: "in", handle: e.targetHandle ?? "", type: carried }, models, typesCompatible);
       }),
     );
     markEdited();
-  }, [nodes, defs, models, connectedInputs, typeById, configById, commit, markEdited]);
+  }, [nodes, defs, models, connectedInputs, typeById, configById, commit, markEdited, carriedType]);
 
   const promoteParam = useCallback((id: string, name: string) => {
     const node = nodes.find((n) => n.id === id);
@@ -1091,6 +1121,7 @@ export function useGraph(
     onConnect,
     reconnectEdge,
     isValidConnection,
+    carriedType,
     addNodeOfType,
     scaffoldsFor,
     scaffoldFromPort,

@@ -190,3 +190,66 @@ def test_a_trigger_wired_from_a_wireless_out_needs_a_wireless_in_on_its_channel(
     graph["nodes"].append({"id": "wi", "type": "core.flow.wireless_in", "config": {"channel": "7"}})
     graph["edges"].append({"src": "go", "src_port": "trigger", "dst": "wi", "dst_port": "go.trigger"})
     assert _trigger_problems(graph) == []
+
+
+# ---------------------------------------------------------------- a trigger takes only an event
+
+def _mismatches(graph: dict) -> list[str]:
+    return [p["message"] for p in validate_graph(graph) if p["kind"] == "type-mismatch"]
+
+
+def test_the_type_check_lets_only_an_event_into_an_event():
+    from boltjar.sdk import types
+    assert types.compatible("event", "event")
+    assert not types.compatible("any", "event"), "a data wire never fires a node, `any` included"
+    assert not types.compatible("text", "event")
+    assert types.compatible("event", "any"), "an event's payload may still be read as data"
+
+
+def test_a_data_output_into_a_trigger_is_named():
+    graph = {"nodes": [{"id": "go", "type": "core.trigger.manual"},
+                       {"id": "pv", "type": "core.output.preview"},
+                       {"id": "llm", "type": "core.ai.llm"}],
+             "edges": [{"src": "go", "src_port": "trigger", "dst": "pv", "dst_port": "trigger"},
+                       {"src": "go", "src_port": "trigger", "dst": "pv", "dst_port": "in"},
+                       {"src": "pv", "src_port": "out", "dst": "llm", "dst_port": "trigger"}]}
+    assert _mismatches(graph) == [
+        "edge pv.out -> llm.trigger: any output cannot fire 'trigger': a data wire never "
+        "fires a node, wire the source's trigger instead"]
+    graph["edges"][-1]["src_port"] = "trigger"
+    assert _mismatches(graph) == []
+
+
+def test_a_pass_through_is_judged_by_the_real_source_it_carries():
+    # a Router and a Wireless pair carry their source's type: a routed trigger
+    # fires, routed data does not
+    def routed(port: str) -> dict:
+        return {"nodes": [{"id": "go", "type": "core.trigger.manual"},
+                          {"id": "txt", "type": "core.value.text", "config": {"text": "x"}},
+                          {"id": "r", "type": "core.flow.router"},
+                          {"id": "win", "type": "core.flow.wireless_in", "config": {"channel": "5"}},
+                          {"id": "wout", "type": "core.flow.wireless_out", "config": {"channel": "5"}},
+                          {"id": "a", "type": "core.ai.llm"}, {"id": "b", "type": "core.ai.llm"}],
+                "edges": [{"src": "go" if port == "trigger" else "txt", "src_port": port,
+                           "dst": "r", "dst_port": "in"},
+                          {"src": "r", "src_port": "out", "dst": "a", "dst_port": "trigger"},
+                          {"src": "go" if port == "trigger" else "txt", "src_port": port,
+                           "dst": "win", "dst_port": "src"},
+                          {"src": "wout", "src_port": "src", "dst": "b", "dst_port": "trigger"}]}
+    assert _mismatches(routed("trigger")) == []
+    assert len(_mismatches(routed("out"))) == 2
+    # a Router with nothing upstream has no type to judge yet
+    lone = routed("trigger")
+    lone["edges"] = lone["edges"][1:2]
+    assert _mismatches(lone) == []
+
+
+def test_a_queue_takes_data_on_in_and_only_triggers_on_its_trigger_sockets():
+    graph = {"nodes": [{"id": "chat", "type": "core.trigger.chat"},
+                       {"id": "q", "type": "core.flow.queue"}],
+             "edges": [{"src": "chat", "src_port": "trigger", "dst": "q", "dst_port": "trigger0"},
+                       {"src": "chat", "src_port": "text", "dst": "q", "dst_port": "in0"},
+                       {"src": "chat", "src_port": "trigger", "dst": "q", "dst_port": "ack"}]}
+    assert _mismatches(graph) == []
+    graph["edges"][0]["src_port"] = "text"
+    assert len(_mismatches(graph)) == 1
