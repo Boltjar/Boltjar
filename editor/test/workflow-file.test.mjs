@@ -51,7 +51,7 @@ const edited = [
 ];
 const wires = [{ id: "w", source: "prompt", sourceHandle: "out", target: "llm", targetHandle: "prompt" }];
 // what the canvas state would be if these references resolved: never in a graph
-const SECRET_VALUES = { OPENAI_KEY: "sk-live-0123456789", SERVICE_TOKEN: "tok-9876543210" };
+const SECRET_VALUES = { OPENAI_KEY: "sk-live-0123456789", SERVICE_TOKEN: "tok-9876543210" };  // gitleaks:allow (made-up values)
 
 const text = exportText(serializeGraph("chat", edited, wires), "chat");
 const file = JSON.parse(text);

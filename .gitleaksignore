@@ -1,13 +1,16 @@
 # Findings the secret scan skips, one fingerprint per line
-# (commit:file:rule-id:line, as gitleaks prints it). Only made-up test values.
+# (commit:file:rule-id:line, as gitleaks prints it). Only made-up test values;
+# the lines that still exist carry gitleaks:allow, these entries cover the
+# commits that added them.
 
-# tests/test_redaction.py KEY, a made-up key shaped like a real one; the line now
-# carries gitleaks:allow, this entry covers the commit that added it.
-3ab2a942e17c834cd1aaa0cfc2b12b0ff007d541:tests/test_redaction.py:generic-api-key:14
+# tests/test_redaction.py KEY, a made-up key shaped like a real one
+4bfb4c38387a2bd65d47f909f2ee071386407164:tests/test_redaction.py:generic-api-key:14
 
-# Terminal redaction tests: made-up keys and a made-up token, flagged in the
-# commits that added them; the lines now carry gitleaks:allow.
-6aefd61c894560b75d04ae72b470f43053dc7101:tests/test_console.py:generic-api-key:474
-5afb53a9f5e115b01136cb2311c9f9cbc9189463:tests/test_console.py:generic-api-key:475
-6aefd61c894560b75d04ae72b470f43053dc7101:tests/test_shutdown.py:generic-api-key:105
-6adcd638362909587820476bdda800b702a7f5c0:tests/test_terminal_tap.py:generic-api-key:32
+# terminal redaction tests: made-up keys and a made-up token
+dc274f4fa0c3024c803b6572fb0ed644cb865177:tests/test_console.py:generic-api-key:474
+bc503a9af6ca1a2c31da1dae0c3d7ff97996840b:tests/test_console.py:generic-api-key:475
+dc274f4fa0c3024c803b6572fb0ed644cb865177:tests/test_shutdown.py:generic-api-key:105
+f7fde3803e05ddc4dcd60ce8979913c213052dec:tests/test_terminal_tap.py:generic-api-key:32
+
+# editor/test/workflow-file.test.mjs: made-up secret values an export must leave out
+929b670165d531c7c1854f39d1e219e89b6a61e7:editor/test/workflow-file.test.mjs:generic-api-key:54
