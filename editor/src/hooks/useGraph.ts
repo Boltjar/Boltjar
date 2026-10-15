@@ -518,20 +518,27 @@ export function useGraph(
     const sz = DEFAULT_SIZE[scaffoldType];
     if (sz) { nn.width = sz[0]; nn.height = sz[1]; }
     setNodes((nds) => [...nds.map((n) => ({ ...n, selected: false })), nn]);
+    // the spawned node fires on its trigger, never on the data wire above: each
+    // of its trigger inputs is wired from the source's event output of the same
+    // name, else from its only event output (Tool.trigger -> Tool Args.trigger).
+    const events = def.outputs.filter((p) => p.type === "event");
+    const fires = scaffoldDef.inputs
+      .filter((p) => p.trigger && !p.growable && p.name !== target.name)
+      .map((p) => [p.name, (events.find((o) => o.name === p.name) ?? (events.length === 1 ? events[0] : undefined))?.name] as const)
+      .filter((pair): pair is readonly [string, string] => !!pair[1]);
+    const wire = (srcPort: string, dstPort: string, type: string): WFEdge => ({
+      source: nodeId,
+      target: newId,
+      sourceHandle: srcPort,
+      targetHandle: dstPort,
+      id: edgeId({ src: nodeId, src_port: srcPort, dst: newId, dst_port: dstPort }),
+      type: "typed",
+      reconnectable: "target",
+      data: { type },
+    });
     setEdges((eds) =>
-      addEdge(
-        {
-          source: nodeId,
-          target: newId,
-          sourceHandle: portName,
-          targetHandle: target.name,
-          id: edgeId({ src: nodeId, src_port: portName, dst: newId, dst_port: target.name }),
-          type: "typed",
-          reconnectable: "target",
-          data: { type: srcType },
-        },
-        eds,
-      ),
+      [...fires.map(([dst, src]) => wire(src, dst, "event")), wire(portName, target.name, srcType)]
+        .reduce((acc, e) => addEdge(e, acc), eds),
     );
     setSelectedIds([newId]);
     markEdited();

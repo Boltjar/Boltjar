@@ -3,7 +3,7 @@
 //
 // A node id is referenced by its own wires (source / target), by the dynamic
 // sockets a ghost drop named after it (a Template, HTTP, KV or DB tag, a Build
-// field, a Queue or Wireless In socket) with the `{tag}` tokens that read them,
+// field, a Wireless In socket) with the `{tag}` tokens that read them,
 // and by the group that boxes it. A rename re-points exactly those. Nothing that
 // merely shares the old name moves: a declared port such as TTS `text`, a
 // promoted knob's port, an author-named tag or an auto-numbered socket keeps its

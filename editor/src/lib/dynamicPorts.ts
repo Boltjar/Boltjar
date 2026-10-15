@@ -310,7 +310,7 @@ export function ghostSocketName(
 
 /** Whether a growable base names each socket it mints after the WIRED SOURCE
  *  (the Template's tags, and any port declaring `ghost_base`: an HTTP/KV/DB tag,
- *  a Build field, a Queue or Wireless In socket) rather than auto-numbering it
+ *  a Build field, a Wireless In socket) rather than auto-numbering it
  *  (Compute value0, LLM tool0). The Template is the one source-named base that
  *  does not declare it. Shared by the ghost drop and the node rename. */
 export function namesSocketsAfterSource(def: NodeDef | undefined, base: string): boolean {
@@ -456,10 +456,10 @@ function inputsFor(
         ghost: true,
       });
     } else {
-      // generic growable (Compute value, Sync / Queue in, …): one socket per
-      // existing wire on this base, in a stable order, then a ghost "add" socket.
-      // A wired knob promoted to an input is not one of them: it is drawn as
-      // that knob's port below (appendPromotedWidgets).
+      // generic growable (Compute value, Sync in, Queue trigger / in, …): one
+      // socket per existing wire on this base, in a stable order, then a ghost
+      // "add" socket. A wired knob promoted to an input is not one of them: it
+      // is drawn as that knob's port below (appendPromotedWidgets).
       const mine = [...connectedPortNames]
         .filter((n) => belongsToBase(n, p.name, def, declared, promoted))
         .sort(compareDynamicNames);
@@ -945,8 +945,9 @@ export function ghostBase(handle: string): string {
  * decided the way the server fires and validates it (NodeSpec.growable_base).
  * Never a declared port (it is drawn as itself) nor a knob promoted to an input
  * (it is drawn as that knob's port). On a node with one growable input, every
- * other socket, whatever it is named: Compute names them `value0`, a Queue
- * after its source. On a node with several, the base its name starts with.
+ * other socket, whatever it is named: Compute names them `value0`, Sync `in0`.
+ * On a node with several (a Queue's `trigger0` and `in0`), the base its name
+ * starts with.
  */
 function belongsToBase(
   name: string,

@@ -499,7 +499,7 @@ function WorkflowNodeImpl({ id, data, selected }: NodeProps) {
           fill={fill}
         >
           {isTool && (
-            <ToolHints callWired={outSet.has("call")} resultWired={inSet.has("result")} />
+            <ToolHints callWired={outSet.has("call")} resultWired={inSet.has("result") && inSet.has("result_trigger")} />
           )}
         </InlineKnobs>
       )}
