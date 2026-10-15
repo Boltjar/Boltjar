@@ -218,13 +218,26 @@ def test_vectors_delete_and_clear_run_without_an_embedding(operation, monkeypatc
     monkeypatch.setattr(builtin, "_vector_store", lambda: vs)
     vs.index("vs", "facts", [1.0, 0.0], "east", "a", {})  # the store the Vector Store node names
     events: list[dict] = []
-    runtime = Runtime(observer=events.append)
+    done = asyncio.Event()
+
+    def observe(event: dict) -> None:
+        events.append(event)
+        # the op settles (ok or error) once its write has committed
+        if event.get("node") == "op" and event["kind"] in ("node_error", "node_status")                 and event.get("status") != "running":
+            done.set()
+
+    runtime = Runtime(observer=observe)
     runtime.build(_vectors_graph(operation, embedding=False))
 
     async def drive() -> None:
+        # wait for the op itself, never a fixed time: a SQLite commit on a busy
+        # Windows runner can take longer than any guess, and stopping first
+        # cancels the write before it reports (CI saw [] for `affected`).
         await runtime.run()
-        await asyncio.sleep(0.3)
-        await runtime.stop()
+        try:
+            await asyncio.wait_for(done.wait(), timeout=30)
+        finally:
+            await runtime.stop()
 
     asyncio.run(drive())
     assert not [e for e in events if e["kind"] == "node_error"], events
