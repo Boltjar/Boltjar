@@ -65,7 +65,8 @@ _EDGES = [
 def test_trigger_fire_emits_out_then_trigger() -> None:
     graph = {
         "nodes": _NODES + [{"id": "done", "type": "core.output.log", "config": {"label": "done"}}],
-        "edges": _EDGES + [{"src": "tpl", "src_port": "trigger", "dst": "done", "dst_port": "in"}],
+        "edges": _EDGES + [{"src": "tpl", "src_port": "trigger", "dst": "done", "dst_port": "trigger"},
+                           {"src": "tpl", "src_port": "trigger", "dst": "done", "dst_port": "in"}],
     }
     events = _run(graph, "hi")
     emitted = [(e["port"], e["value"]) for e in events if e["kind"] == "value" and e["node"] == "tpl"]
@@ -83,6 +84,7 @@ def test_llm_fired_by_the_template_reads_the_assembled_prompt_once_per_turn() ->
             {"src": "tpl", "src_port": "out", "dst": "llm", "dst_port": "prompt"},
             {"src": "tpl", "src_port": "trigger", "dst": "llm", "dst_port": "trigger"},
             {"src": "llm", "src_port": "response", "dst": "said", "dst_port": "in"},
+            {"src": "llm", "src_port": "trigger", "dst": "said", "dst_port": "trigger"},
         ],
     }
     events = _run(graph, "hi", "again")
@@ -150,6 +152,7 @@ def _fan_out(llm_first: bool) -> dict:
             {"src": "chat", "src_port": "text", "dst": "tpl", "dst_port": "msg"},
             {"src": "tpl", "src_port": "out", "dst": "llm", "dst_port": "prompt"},
             {"src": "llm", "src_port": "response", "dst": "said", "dst_port": "in"},
+            {"src": "llm", "src_port": "trigger", "dst": "said", "dst_port": "trigger"},
         ],
     }
 
@@ -184,6 +187,7 @@ def test_a_template_read_by_a_template_fired_alongside_it_is_current() -> None:
             {"src": "outer", "src_port": "trigger", "dst": "llm", "dst_port": "trigger"},
             {"src": "outer", "src_port": "out", "dst": "llm", "dst_port": "prompt"},
             {"src": "llm", "src_port": "response", "dst": "said", "dst_port": "in"},
+            {"src": "llm", "src_port": "trigger", "dst": "said", "dst_port": "trigger"},
         ],
     }
     assert validate_graph(graph) == []
@@ -213,6 +217,7 @@ def test_a_for_each_body_fanned_out_to_template_and_llm_answers_every_item() -> 
             {"src": "tpl", "src_port": "out", "dst": "llm", "dst_port": "prompt"},
             {"src": "llm", "src_port": "trigger", "dst": "fe", "dst_port": "loop"},
             {"src": "llm", "src_port": "response", "dst": "said", "dst_port": "in"},
+            {"src": "llm", "src_port": "trigger", "dst": "said", "dst_port": "trigger"},
         ],
     }
     assert validate_graph(graph) == []

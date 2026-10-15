@@ -44,6 +44,7 @@ def test_llm_pulls_assembled_prompt() -> None:
             {"src": "fire", "src_port": "trigger", "dst": "tpl", "dst_port": "trigger"},
             {"src": "tpl", "src_port": "trigger", "dst": "llm", "dst_port": "trigger"},
             {"src": "llm", "src_port": "response", "dst": "out", "dst_port": "in"},
+            {"src": "llm", "src_port": "trigger", "dst": "out", "dst_port": "trigger"},
         ],
     }
     out = logs(run_graph(graph))
@@ -86,6 +87,7 @@ def test_compute_is_pulled() -> None:
             {"src": "c", "src_port": "out", "dst": "llm", "dst_port": "prompt"},
             {"src": "fire", "src_port": "trigger", "dst": "llm", "dst_port": "trigger"},
             {"src": "llm", "src_port": "response", "dst": "out", "dst_port": "in"},
+            {"src": "llm", "src_port": "trigger", "dst": "out", "dst_port": "trigger"},
         ],
     }
     assert any("40" in e["message"] for e in logs(run_graph(graph)))
@@ -105,12 +107,13 @@ def test_compute_sandbox_blocks_escape() -> None:
             {"src": "c", "src_port": "out", "dst": "llm", "dst_port": "prompt"},
             {"src": "fire", "src_port": "trigger", "dst": "llm", "dst_port": "trigger"},
             {"src": "llm", "src_port": "response", "dst": "out", "dst_port": "in"},
+            {"src": "llm", "src_port": "trigger", "dst": "out", "dst_port": "trigger"},
         ],
     }
     assert any("error" in e["message"] for e in logs(run_graph(graph)))
 
 
-def test_logic_routes_on_a_pushed_value() -> None:
+def test_logic_reads_its_value_when_its_trigger_fires_and_fires_one_route() -> None:
     graph = {
         "nodes": [
             {"id": "fire", "type": "core.trigger.manual"},
@@ -119,14 +122,30 @@ def test_logic_routes_on_a_pushed_value() -> None:
             {"id": "no", "type": "core.output.log", "config": {"label": "no"}},
         ],
         "edges": [
+            {"src": "fire", "src_port": "trigger", "dst": "g", "dst_port": "trigger"},
             {"src": "fire", "src_port": "trigger", "dst": "g", "dst_port": "value"},
-            {"src": "g", "src_port": "true", "dst": "yes", "dst_port": "in"},
-            {"src": "g", "src_port": "false", "dst": "no", "dst_port": "in"},
+            {"src": "g", "src_port": "true", "dst": "yes", "dst_port": "trigger"},
+            {"src": "g", "src_port": "value", "dst": "yes", "dst_port": "in"},
+            {"src": "g", "src_port": "false", "dst": "no", "dst_port": "trigger"},
+            {"src": "g", "src_port": "value", "dst": "no", "dst_port": "in"},
         ],
     }
     out = logs(run_graph(graph))
-    assert any(e["node"] == "yes" for e in out)
+    assert [e["message"] for e in out if e["node"] == "yes"] == ["yes: 1"]
     assert not any(e["node"] == "no" for e in out)
+
+
+def test_logic_value_arriving_never_fires_it() -> None:
+    # a data wire never fires a node: with only `value` fed, nothing routes.
+    graph = {
+        "nodes": [
+            {"id": "fire", "type": "core.trigger.manual"},
+            {"id": "g", "type": "core.logic.condition", "config": {"expression": "value > 0"}},
+        ],
+        "edges": [{"src": "fire", "src_port": "trigger", "dst": "g", "dst_port": "value"}],
+    }
+    events = run_graph(graph)
+    assert not [e for e in events if e.get("node") == "g" and e["kind"] == "node_status"]
 
 
 def test_fired_nodes_emit_done() -> None:
@@ -143,6 +162,7 @@ def test_fired_nodes_emit_done() -> None:
             {"src": "fire", "src_port": "trigger", "dst": "a", "dst_port": "trigger"},
             {"src": "a", "src_port": "trigger", "dst": "b", "dst_port": "trigger"},
             {"src": "b", "src_port": "response", "dst": "out", "dst_port": "in"},
+            {"src": "b", "src_port": "trigger", "dst": "out", "dst_port": "trigger"},
         ],
     }
     events = run_graph(graph)
@@ -163,7 +183,9 @@ def test_output_sink_emits_done() -> None:
         ],
         "edges": [
             {"src": "fire", "src_port": "trigger", "dst": "log", "dst_port": "in"},
+            {"src": "fire", "src_port": "trigger", "dst": "log", "dst_port": "trigger"},
             {"src": "log", "src_port": "trigger", "dst": "after", "dst_port": "in"},
+            {"src": "log", "src_port": "trigger", "dst": "after", "dst_port": "trigger"},
         ],
     }
     out = logs(run_graph(graph))
@@ -212,6 +234,7 @@ def test_disabled_passthrough_bypass_rewires() -> None:
         "edges": [
             {"src": "iv", "src_port": "trigger", "dst": "pv", "dst_port": "in"},
             {"src": "pv", "src_port": "out", "dst": "log", "dst_port": "in"},
+            {"src": "pv", "src_port": "trigger", "dst": "log", "dst_port": "trigger"},
         ],
     })
     assert "pv" not in rt.nodes, "disabled node is not instantiated"
@@ -241,7 +264,8 @@ def test_manual_fire_pushes_another_event() -> None:
             {"id": "m", "type": "core.trigger.manual", "config": {}},
             {"id": "log", "type": "core.output.log", "config": {}},
         ],
-        "edges": [{"src": "m", "src_port": "trigger", "dst": "log", "dst_port": "in"}],
+        "edges": [{"src": "m", "src_port": "trigger", "dst": "log", "dst_port": "trigger"},
+                  {"src": "m", "src_port": "trigger", "dst": "log", "dst_port": "in"}],
     })
 
     async def drive() -> None:

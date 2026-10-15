@@ -81,12 +81,13 @@ def test_a_push_carries_only_along_the_wires_it_fires() -> None:
             {"src": "txt", "src_port": "out", "dst": "tpl", "dst_port": "x"},
             {"src": "txt", "src_port": "out", "dst": "other", "dst_port": "x"},
             {"src": "tpl", "src_port": "out", "dst": "log", "dst_port": "in"},
+            {"src": "tpl", "src_port": "trigger", "dst": "log", "dst_port": "trigger"},
         ],
     }
     carried = _carried(_fire_and_collect(graph, "go"))
     assert ["go", "trigger", "tpl", "trigger"] in carried
     assert ["txt", "out", "tpl", "x"] in carried, "the fired Template read its tag"
-    assert ["tpl", "out", "log", "in"] in carried, "the Template's result fires the Log"
+    assert ["tpl", "out", "log", "in"] in carried, "the Log fired by the Template read its result"
     assert ["txt", "out", "other", "x"] not in carried, "a Template nobody fired read nothing"
 
 
@@ -99,12 +100,12 @@ def test_a_carry_through_a_router_names_every_drawn_wire() -> None:
         ],
         "edges": [
             {"src": "go", "src_port": "trigger", "dst": "r", "dst_port": "in"},
-            {"src": "r", "src_port": "out", "dst": "log", "dst_port": "in"},
+            {"src": "r", "src_port": "out", "dst": "log", "dst_port": "trigger"},
         ],
     }
     events = _fire_and_collect(graph, "go")
     carry = [e["wires"] for e in events if e["kind"] == "carry"]
-    assert carry == [[["go", "trigger", "r", "in"], ["r", "out", "log", "in"]]], \
+    assert carry == [[["go", "trigger", "r", "in"], ["r", "out", "log", "trigger"]]], \
         "one carry, the source's wire into the Router first"
 
 

@@ -1,14 +1,13 @@
 """Preview is a transparent tap: one upstream turn relays as ONE downstream fire.
 
-A common chat graph wires one source into BOTH Preview inputs (`llm.response ->
-preview.in`, `llm.trigger -> preview.trigger`) and drives the next node from the
-Preview (`preview.trigger -> tts.trigger`, `preview.out -> tts.text`). The
-Preview used to emit its `trigger` on EVERY fire, the value landing on `in` as
-well as the done event on `trigger`, so the TTS spoke (and billed) every reply
-twice. Both inputs are triggers and both must be wired. The contract: a fire on
-`in` shows the value and emits nothing; a fire on `trigger` re-emits the latest
-`in` (latched or pulled) on `out` and forwards exactly one `trigger`. So `out`
-and `trigger` each leave once per turn, whatever is wired to them.
+A common chat graph wires one source into the Preview (`llm.trigger ->
+preview.trigger`, `llm.response -> preview.in`) and drives the next node from
+it (`preview.trigger -> tts.trigger`, `preview.out -> tts.text`). The Preview
+once fired on its value as well as on its trigger and relayed both, so the TTS
+spoke (and billed) every reply twice. A data wire never fires a node: only
+`trigger` fires the Preview, which reads `in` then (pushed or pulled), shows it
+once, re-emits it on `out` and forwards exactly one `trigger`. So `out` and
+`trigger` each leave once per turn, whatever is wired to them.
 
 Real Runtime graphs; an LLM with no model runs the offline mock (no network).
 """
@@ -50,7 +49,7 @@ def _log(node_id: str, label: str) -> dict:
     return {"id": node_id, "type": "core.output.log", "config": {"label": label}}
 
 
-# the common shape: one LLM feeds BOTH Preview inputs (value, then its done event).
+# the common shape: one LLM feeds the Preview its value and its done event.
 _CHAT_LLM = [
     {"id": "chat", "type": "core.trigger.chat"},
     {"id": "llm", "type": "core.ai.llm", "config": {}},
@@ -76,6 +75,7 @@ def test_value_then_done_source_relays_one_downstream_fire_per_turn() -> None:
             {"src": "llm", "src_port": "trigger", "dst": "pv", "dst_port": "trigger"},
             {"src": "pv", "src_port": "trigger", "dst": "next", "dst_port": "trigger"},
             {"src": "pv", "src_port": "out", "dst": "next", "dst_port": "prompt"},
+            {"src": "next", "src_port": "trigger", "dst": "said", "dst_port": "trigger"},
             {"src": "next", "src_port": "response", "dst": "said", "dst_port": "in"},
         ],
     }
@@ -86,26 +86,25 @@ def test_value_then_done_source_relays_one_downstream_fire_per_turn() -> None:
         "the consumer fires once per turn and reads that turn's reply"
 
 
-def test_out_wired_into_a_trigger_fires_it_once_per_turn() -> None:
-    # `out` feeding a trigger input (a Log's `in`) fires that node once per turn,
-    # not once for the value and again for the done event.
+def test_the_trigger_fires_what_follows_once_per_turn_with_that_turns_value() -> None:
+    # the Preview's trigger fires a Log once per turn, and the Log reads the
+    # value the Preview passed on at `out` in that same turn.
     graph = {
-        "nodes": _CHAT_LLM + [_log("shown", "shown"), _log("fired", "fired")],
+        "nodes": _CHAT_LLM + [_log("shown", "shown")],
         "edges": _CHAT_LLM_EDGES + [
             {"src": "llm", "src_port": "response", "dst": "pv", "dst_port": "in"},
             {"src": "llm", "src_port": "trigger", "dst": "pv", "dst_port": "trigger"},
+            {"src": "pv", "src_port": "trigger", "dst": "shown", "dst_port": "trigger"},
             {"src": "pv", "src_port": "out", "dst": "shown", "dst_port": "in"},
-            {"src": "pv", "src_port": "trigger", "dst": "fired", "dst_port": "in"},
         ],
     }
     events = _run(graph, "hello", "again")
     assert _logs(events, "shown") == ["shown: [mock] hello", "shown: [mock] again"]
-    assert _logs(events, "fired") == ["fired: True", "fired: True"]
 
 
 def test_pulled_source_arrives_by_pull_when_the_trigger_fires() -> None:
-    # a pulled source (Text) never fires `in`; its value only arrives by pull
-    # when `trigger` fires, so that fire must put it on `out` and fire once.
+    # a pulled source (Text) never fires; its value arrives by pull when
+    # `trigger` fires, so that fire puts it on `out` and fires once.
     graph = {
         "nodes": [
             {"id": "txt", "type": "core.value.text", "config": {"text": "from a text node"}},
@@ -117,7 +116,9 @@ def test_pulled_source_arrives_by_pull_when_the_trigger_fires() -> None:
         "edges": [
             {"src": "txt", "src_port": "out", "dst": "pv", "dst_port": "in"},
             {"src": "m", "src_port": "trigger", "dst": "pv", "dst_port": "trigger"},
+            {"src": "pv", "src_port": "trigger", "dst": "shown", "dst_port": "trigger"},
             {"src": "pv", "src_port": "out", "dst": "shown", "dst_port": "in"},
+            {"src": "pv", "src_port": "trigger", "dst": "fired", "dst_port": "trigger"},
             {"src": "pv", "src_port": "trigger", "dst": "fired", "dst_port": "in"},
         ],
     }
@@ -126,13 +127,11 @@ def test_pulled_source_arrives_by_pull_when_the_trigger_fires() -> None:
     assert _logs(events, "shown") == ["shown: from a text node"]
     assert len(_values(events, "pv", "trigger")) == 1
     assert _logs(events, "fired") == ["fired: True"]
-    # the console shows the pulled value once (no `in` fire logged it first).
     assert _logs(events, "pv") == ["preview: from a text node"]
 
 
-def test_console_logs_each_value_once_when_both_inputs_are_wired() -> None:
-    # the value's own fire logs it; the done event that follows re-emits it but
-    # must not log it a second time.
+def test_console_logs_each_value_once() -> None:
+    # the value arriving never fires the Preview; its trigger fire logs it once.
     graph = {
         "nodes": list(_CHAT_LLM),
         "edges": _CHAT_LLM_EDGES + [
@@ -144,12 +143,11 @@ def test_console_logs_each_value_once_when_both_inputs_are_wired() -> None:
     assert _logs(events, "pv") == ["preview: [mock] hello"]
 
 
-def test_in_fire_emits_nothing() -> None:
-    # the node-level contract, through the runtime's own invoke (which tells the
-    # node which port fired): a value on `in` is shown, and `out` waits for the
-    # trigger.
+def test_a_value_on_in_never_fires_the_preview() -> None:
+    # `in` is data: a value landing there is latched, and only `trigger` fires.
     rt = Runtime()
     rt.build({"nodes": [{"id": "pv", "type": "core.output.preview", "config": {}}], "edges": []})
     inst = rt.nodes["pv"]
-    out = asyncio.run(rt._invoke(inst, "in", "hello", {"in": "hello", "trigger": None}))
-    assert out == {}
+    assert not inst.is_trigger("in") and inst.is_trigger("trigger")
+    out = asyncio.run(rt._invoke(inst, "trigger", True, {"in": "hello", "trigger": True}))
+    assert out == {"out": "hello", "trigger": True}

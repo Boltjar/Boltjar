@@ -124,6 +124,7 @@ def test_llm_uses_the_declared_model() -> None:
             {"src": "fire", "src_port": "trigger", "dst": "tpl", "dst_port": "trigger"},
             {"src": "tpl", "src_port": "trigger", "dst": "llm", "dst_port": "trigger"},
             {"src": "llm", "src_port": "response", "dst": "out", "dst_port": "in"},
+            {"src": "llm", "src_port": "trigger", "dst": "out", "dst_port": "trigger"},
         ],
     }
     events: list[dict] = []

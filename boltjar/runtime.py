@@ -4,8 +4,9 @@ boltjar.runtime: push events, pull data.
 Two flows:
 
   - **control (push):** a Trigger fires an `event` (with an optional payload) to
-    the nodes it drives. A *fired* node runs when an event/value lands on one of
-    its trigger inputs.
+    the nodes it drives. A *fired* node runs when an event lands on one of its
+    trigger inputs. A trigger input is always an event: a data wire never fires
+    a node (boltjar.sdk refuses a trigger of any other type).
   - **data (pull):** when a node fires it PULLS its data inputs, evaluating the
     upstream pure-data subgraph on demand (memoized per turn; `volatile` sensors
     re-read every pull). Pure data nodes (Text, Compute, Format List, ...) are
@@ -163,6 +164,13 @@ class Ctx:
         trigger starts. An unwired converted knob keeps its own value."""
         self._rt.pull_knobs(self.node_id)
 
+    def source_of(self, port: str) -> Optional[str]:
+        """The node whose wire feeds this node's input `port` (the real source,
+        through any Router or Wireless pair), or None when it is unwired. The
+        Queue pairs a producer's trigger with that producer's data this way."""
+        src = self._rt.edges_into.get((self.node_id, port))
+        return src[0] if src is not None else None
+
     def wired_input_ports(self) -> set[str]:
         """The set of input port names that actually have a wire into this node,
         read from the live edge set. Sync uses this to count its wired `in_*`
@@ -172,12 +180,13 @@ class Ctx:
     async def call_tool(self, tool_node_id: str, args: dict, timeout: float = 120.0) -> str:
         """Invoke a Tool node and await its `result`.
 
-        Emits the tool's `call` event with `args` (opening a new turn so any
-        downstream pulls are fresh), registers a Future keyed by the Tool node
-        id, and waits for a value to land on the tool's `result` trigger port.
-        The runtime's `_consume` loop intercepts the `result` value, sets this
-        future's result, and skips the Tool node's own fire, so the Tool node
-        never tries to "run" by itself; its lifecycle is driven by this primitive.
+        Emits the tool's `call` data with `args`, then its `trigger`, on one new
+        turn (so the body's pulls are fresh and its Tool Args reads this call),
+        registers a Future keyed by the Tool node id, and waits for the tool's
+        `result_trigger` to fire. The runtime's `_consume` loop intercepts that
+        fire, reads `result` on its turn, sets this future's result, and skips
+        the Tool node's own fire, so the Tool node never tries to "run" by
+        itself; its lifecycle is driven by this primitive.
         One in-flight call per tool at a time is fine for v1; a second call while
         the first is pending raises so the caller sees the contention immediately.
         """
@@ -192,7 +201,9 @@ class Ctx:
         # with what args, and the result) on the Tool node. Truncated via _preview.
         self._rt._notify({"kind": "tool_call", "node": tool_node_id, "args": _preview(args)})
         try:
-            self._rt.emit(tool_node_id, "call", args, self._rt.new_turn())
+            turn = self._rt.new_turn()
+            self._rt.emit(tool_node_id, "call", args, turn)
+            self._rt.emit(tool_node_id, "trigger", True, turn)
             result = await asyncio.wait_for(fut, timeout=timeout)
         finally:
             self._rt._tool_waiters.pop(tool_node_id, None)
@@ -356,14 +367,21 @@ class Runtime:
             inst.latch[port] = value
             if not inst.is_trigger(port):
                 continue
-            # Tool request/response bridge: if a Tool node receives its `result`
-            # while an LLM is awaiting a call_tool() future, hand the value to
-            # the waiter and SKIP the Tool's own fire (it has no work to do; its
-            # whole purpose is to be the routing point between LLM and graph).
-            if port == "result" and inst.id in self._tool_waiters:
+            # Tool request/response bridge: if a Tool node's `result_trigger` fires
+            # while an LLM is awaiting a call_tool() future, read `result` on that
+            # turn, hand it to the waiter and SKIP the Tool's own fire (it has no
+            # work to do; its whole purpose is to be the routing point between
+            # LLM and graph).
+            if port == "result_trigger" and inst.id in self._tool_waiters:
                 fut = self._tool_waiters.get(inst.id)
                 if fut is not None and not fut.done():
-                    fut.set_result(value)
+                    token = _FIRING.set((self, turn))
+                    try:
+                        fut.set_result(self._pull_input(inst.id, "result", turn))
+                    except Exception as exc:  # a failing body source fails the call
+                        fut.set_exception(exc)
+                    finally:
+                        _FIRING.reset(token)
                 continue
             try:
                 await self._fire(inst, port, value, turn)
@@ -395,7 +413,7 @@ class Runtime:
                 inputs[name] = payload
             else:
                 # every non-firing input (data OR a trigger port that didn't fire,
-                # e.g. Preview.in while `trigger` fired) is pulled: _pull_input
+                # e.g. a Queue's `ack` while a producer fired) is pulled: _pull_input
                 # evaluates a pulled source or reads a pushed source's last value,
                 # so a mid-flow node sees its upstream's current value, not a stale
                 # latch. Unwired inputs fall back to the latch inside _pull_input.
@@ -455,12 +473,19 @@ class Runtime:
             setattr(obj, "_tool_node_ids", tool_ids)
         if kind == Kind.OUTPUT:
             # deliver the value on the actual triggering port. `inputs` carries every
-            # input (the firing payload + the latched/pulled others), so a sink like
-            # Preview can re-emit its `in` even when fired by a separate `trigger`.
+            # input (the firing payload + the pulled others), so a sink like Preview
+            # or Log reads its `in` when its `trigger` fires.
             return await _aw(obj.deliver(payload, inst.ctx, inputs)) or {}
         if kind == Kind.LOGIC:
+            # the route port is an event, fired with the trigger's payload. An
+            # output that shares its name with an input (the Logic's `value`)
+            # passes that input on, emitted first so the branch it fires reads it.
             port = await _aw(obj.route(**inputs))
-            return {port: payload} if port else {}
+            out = {p.name: inputs.get(p.name) for p in inst.spec.outputs
+                   if p.type != "event" and p.name in inputs}
+            if port:
+                out[port] = payload
+            return out
         if kind == Kind.STORE and hasattr(obj, "handle"):
             return await _aw(obj.handle(trig_port, payload, inst.ctx)) or {}
         if kind == Kind.SERVICE and hasattr(obj, "call"):

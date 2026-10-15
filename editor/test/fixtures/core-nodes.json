@@ -8,6 +8,14 @@
   "icon": "text-outline",
   "subline": "text · {text|clip:16|or:empty}",
   "inputs": [],
+  "outputs": [
+   {
+    "name": "out",
+    "type": "text",
+    "optional": false
+   }
+  ],
+  "bypass": {},
   "widgets": [
    {
     "name": "text",
@@ -31,6 +39,14 @@
   "icon": "keypad-outline",
   "subline": "int · {number}",
   "inputs": [],
+  "outputs": [
+   {
+    "name": "out",
+    "type": "int",
+    "optional": false
+   }
+  ],
+  "bypass": {},
   "widgets": [
    {
     "name": "number",
@@ -54,6 +70,14 @@
   "icon": "options-outline",
   "subline": "float · {number}",
   "inputs": [],
+  "outputs": [
+   {
+    "name": "out",
+    "type": "float",
+    "optional": false
+   }
+  ],
+  "bypass": {},
   "widgets": [
    {
     "name": "number",
@@ -77,6 +101,14 @@
   "icon": "toggle-outline",
   "subline": "bool · {on|bool}",
   "inputs": [],
+  "outputs": [
+   {
+    "name": "out",
+    "type": "bool",
+    "optional": false
+   }
+  ],
+  "bypass": {},
   "widgets": [
    {
     "name": "on",
@@ -100,6 +132,14 @@
   "icon": "image-outline",
   "subline": "",
   "inputs": [],
+  "outputs": [
+   {
+    "name": "out",
+    "type": "image",
+    "optional": false
+   }
+  ],
+  "bypass": {},
   "widgets": [
    {
     "name": "src",
@@ -123,6 +163,14 @@
   "icon": "musical-notes-outline",
   "subline": "",
   "inputs": [],
+  "outputs": [
+   {
+    "name": "out",
+    "type": "audio",
+    "optional": false
+   }
+  ],
+  "bypass": {},
   "widgets": [
    {
     "name": "src",
@@ -148,9 +196,30 @@
   "inputs": [
    {
     "name": "text",
-    "growable": false
+    "type": "text",
+    "growable": false,
+    "trigger": false,
+    "optional": false
    }
   ],
+  "outputs": [
+   {
+    "name": "mood",
+    "type": "mood",
+    "optional": false
+   },
+   {
+    "name": "clean",
+    "type": "text",
+    "optional": false
+   },
+   {
+    "name": "action",
+    "type": "action",
+    "optional": true
+   }
+  ],
+  "bypass": {},
   "widgets": [
    {
     "name": "moods",
@@ -231,9 +300,20 @@
   "inputs": [
    {
     "name": "in",
-    "growable": false
+    "type": "text",
+    "growable": false,
+    "trigger": false,
+    "optional": false
    }
   ],
+  "outputs": [
+   {
+    "name": "out",
+    "type": "text",
+    "optional": false
+   }
+  ],
+  "bypass": {},
   "widgets": [
    {
     "name": "emoji",
@@ -301,6 +381,14 @@
   "icon": "desktop-outline",
   "subline": "",
   "inputs": [],
+  "outputs": [
+   {
+    "name": "out",
+    "type": "image",
+    "optional": false
+   }
+  ],
+  "bypass": {},
   "widgets": [
    {
     "name": "monitor",
@@ -359,9 +447,25 @@
   "inputs": [
    {
     "name": "title",
-    "growable": false
+    "type": "text",
+    "growable": false,
+    "trigger": false,
+    "optional": true
    }
   ],
+  "outputs": [
+   {
+    "name": "out",
+    "type": "image",
+    "optional": false
+   },
+   {
+    "name": "matched",
+    "type": "text",
+    "optional": true
+   }
+  ],
+  "bypass": {},
   "widgets": [
    {
     "name": "title",
@@ -418,6 +522,19 @@
   "icon": "layers-outline",
   "subline": "",
   "inputs": [],
+  "outputs": [
+   {
+    "name": "title",
+    "type": "text",
+    "optional": false
+   },
+   {
+    "name": "windows",
+    "type": "json",
+    "optional": true
+   }
+  ],
+  "bypass": {},
   "widgets": [
    {
     "name": "list_all",
@@ -441,6 +558,14 @@
   "icon": "time-outline",
   "subline": "clock · volatile",
   "inputs": [],
+  "outputs": [
+   {
+    "name": "out",
+    "type": "text",
+    "optional": false
+   }
+  ],
+  "bypass": {},
   "widgets": [
    {
     "name": "format",
@@ -475,6 +600,14 @@
   "icon": "timer-outline",
   "subline": "every · {seconds}s",
   "inputs": [],
+  "outputs": [
+   {
+    "name": "trigger",
+    "type": "event",
+    "optional": false
+   }
+  ],
+  "bypass": {},
   "widgets": [
    {
     "name": "seconds",
@@ -498,6 +631,19 @@
   "icon": "alarm-outline",
   "subline": "",
   "inputs": [],
+  "outputs": [
+   {
+    "name": "trigger",
+    "type": "event",
+    "optional": false
+   },
+   {
+    "name": "time",
+    "type": "text",
+    "optional": false
+   }
+  ],
+  "bypass": {},
   "widgets": [
    {
     "name": "cron",
@@ -532,6 +678,14 @@
   "icon": "play-circle-outline",
   "subline": "manual · once",
   "inputs": [],
+  "outputs": [
+   {
+    "name": "trigger",
+    "type": "event",
+    "optional": false
+   }
+  ],
+  "bypass": {},
   "widgets": []
  },
  {
@@ -543,6 +697,19 @@
   "icon": "chatbubble-ellipses-outline",
   "subline": "chat · on send",
   "inputs": [],
+  "outputs": [
+   {
+    "name": "trigger",
+    "type": "event",
+    "optional": false
+   },
+   {
+    "name": "text",
+    "type": "text",
+    "optional": false
+   }
+  ],
+  "bypass": {},
   "widgets": []
  },
  {
@@ -554,6 +721,24 @@
   "icon": "recording-outline",
   "subline": "",
   "inputs": [],
+  "outputs": [
+   {
+    "name": "trigger",
+    "type": "event",
+    "optional": false
+   },
+   {
+    "name": "audio",
+    "type": "audio",
+    "optional": false
+   },
+   {
+    "name": "lang",
+    "type": "lang",
+    "optional": true
+   }
+  ],
+  "bypass": {},
   "widgets": []
  },
  {
@@ -565,6 +750,34 @@
   "icon": "link-outline",
   "subline": "",
   "inputs": [],
+  "outputs": [
+   {
+    "name": "trigger",
+    "type": "event",
+    "optional": false
+   },
+   {
+    "name": "body",
+    "type": "text",
+    "optional": false
+   },
+   {
+    "name": "json",
+    "type": "any",
+    "optional": false
+   },
+   {
+    "name": "headers",
+    "type": "json",
+    "optional": false
+   },
+   {
+    "name": "query",
+    "type": "json",
+    "optional": false
+   }
+  ],
+  "bypass": {},
   "widgets": [
    {
     "name": "path",
@@ -636,13 +849,34 @@
   "inputs": [
    {
     "name": "trigger",
-    "growable": false
+    "type": "event",
+    "growable": false,
+    "trigger": true,
+    "optional": false
    },
    {
     "name": "tag",
-    "growable": true
+    "type": "any",
+    "growable": true,
+    "trigger": false,
+    "optional": false
    }
   ],
+  "outputs": [
+   {
+    "name": "out",
+    "type": "text",
+    "optional": false
+   },
+   {
+    "name": "trigger",
+    "type": "event",
+    "optional": false
+   }
+  ],
+  "bypass": {
+   "trigger": "trigger"
+  },
   "widgets": [
    {
     "name": "template",
@@ -668,9 +902,20 @@
   "inputs": [
    {
     "name": "list",
-    "growable": false
+    "type": "json",
+    "growable": false,
+    "trigger": false,
+    "optional": false
    }
   ],
+  "outputs": [
+   {
+    "name": "out",
+    "type": "text",
+    "optional": false
+   }
+  ],
+  "bypass": {},
   "widgets": [
    {
     "name": "item",
@@ -707,9 +952,20 @@
   "inputs": [
    {
     "name": "item",
-    "growable": true
+    "type": "any",
+    "growable": true,
+    "trigger": false,
+    "optional": false
    }
   ],
+  "outputs": [
+   {
+    "name": "out",
+    "type": "list",
+    "optional": false
+   }
+  ],
+  "bypass": {},
   "widgets": []
  },
  {
@@ -723,9 +979,20 @@
   "inputs": [
    {
     "name": "value",
-    "growable": true
+    "type": "any",
+    "growable": true,
+    "trigger": false,
+    "optional": false
    }
   ],
+  "outputs": [
+   {
+    "name": "out",
+    "type": "any",
+    "optional": false
+   }
+  ],
+  "bypass": {},
   "widgets": [
    {
     "name": "expression",
@@ -745,19 +1012,50 @@
   "name": "Logic",
   "kind": "logic",
   "category": "Logic",
-  "summary": "Route a value true/false on an expression. Routes, never computes.",
+  "summary": "Route a turn true or false on an expression. When `trigger` fires it reads `value` (and `condition`), passes `value` on at `value`, then fires `true` or `false`. Routes, never computes.",
   "icon": "git-branch-outline",
   "subline": "route · {expression|clip:14}",
   "inputs": [
    {
+    "name": "trigger",
+    "type": "event",
+    "growable": false,
+    "trigger": true,
+    "optional": false
+   },
+   {
     "name": "value",
-    "growable": false
+    "type": "any",
+    "growable": false,
+    "trigger": false,
+    "optional": false
    },
    {
     "name": "condition",
-    "growable": false
+    "type": "any",
+    "growable": false,
+    "trigger": false,
+    "optional": true
    }
   ],
+  "outputs": [
+   {
+    "name": "true",
+    "type": "event",
+    "optional": false
+   },
+   {
+    "name": "false",
+    "type": "event",
+    "optional": false
+   },
+   {
+    "name": "value",
+    "type": "any",
+    "optional": false
+   }
+  ],
+  "bypass": {},
   "widgets": [
    {
     "name": "expression",
@@ -783,17 +1081,49 @@
   "inputs": [
    {
     "name": "trigger",
-    "growable": false
+    "type": "event",
+    "growable": false,
+    "trigger": true,
+    "optional": false
    },
    {
     "name": "prompt",
-    "growable": false
+    "type": "text",
+    "growable": false,
+    "trigger": false,
+    "optional": false
    },
    {
     "name": "tools",
-    "growable": true
+    "type": "tool",
+    "growable": true,
+    "trigger": false,
+    "optional": true
    }
   ],
+  "outputs": [
+   {
+    "name": "response",
+    "type": "text",
+    "optional": false
+   },
+   {
+    "name": "reasoning",
+    "type": "text",
+    "optional": true
+   },
+   {
+    "name": "trigger",
+    "type": "event",
+    "optional": false
+   },
+   {
+    "name": "error",
+    "type": "event",
+    "optional": true
+   }
+  ],
+  "bypass": {},
   "widgets": [
    {
     "name": "model",
@@ -813,15 +1143,38 @@
   "name": "Tool",
   "kind": "transform",
   "category": "AI",
-  "summary": "A tool the LLM can call. It declares a name, a description and its parameters. When the model calls it, `call` carries the arguments into the body you wired, and the answer that comes back on `result` goes back to the model.",
+  "summary": "A tool the LLM can call. It declares a name, a description and its parameters. When the model calls it, `call` carries the arguments and `trigger` fires the body you wired; when the body fires `result_trigger`, the Tool reads `result` and hands it back to the model.",
   "icon": "construct-outline",
   "subline": "",
   "inputs": [
    {
+    "name": "result_trigger",
+    "type": "event",
+    "growable": false,
+    "trigger": true,
+    "optional": false
+   },
+   {
     "name": "result",
-    "growable": false
+    "type": "text",
+    "growable": false,
+    "trigger": false,
+    "optional": false
    }
   ],
+  "outputs": [
+   {
+    "name": "call",
+    "type": "tool-call",
+    "optional": false
+   },
+   {
+    "name": "trigger",
+    "type": "event",
+    "optional": false
+   }
+  ],
+  "bypass": {},
   "widgets": [
    {
     "name": "name",
@@ -876,15 +1229,33 @@
   "name": "Tool Args",
   "kind": "transform",
   "category": "AI",
-  "summary": "Where a tool's body starts. It runs when the model calls the tool: it splits `call` into one typed output per argument and fires `trigger` to run the rest of the body. Its field names are also the tool's parameters (in auto mode the Tool builds its schema from them). Wire the body's answer back into the Tool's `result`.",
+  "summary": "Where a tool's body starts. It runs when the Tool's `trigger` fires (the model called the tool): it reads `call`, splits it into one output per argument and fires `trigger` to run the rest of the body. Its field names are also the tool's parameters (in auto mode the Tool builds its schema from them). Wire the body's answer back into the Tool's `result` and its trigger into `result_trigger`.",
   "icon": "log-in-outline",
   "subline": "",
   "inputs": [
    {
+    "name": "trigger",
+    "type": "event",
+    "growable": false,
+    "trigger": true,
+    "optional": false
+   },
+   {
     "name": "call",
-    "growable": false
+    "type": "tool-call",
+    "growable": false,
+    "trigger": false,
+    "optional": false
    }
   ],
+  "outputs": [
+   {
+    "name": "trigger",
+    "type": "event",
+    "optional": false
+   }
+  ],
+  "bypass": {},
   "widgets": [
    {
     "name": "fields",
@@ -910,13 +1281,37 @@
   "inputs": [
    {
     "name": "trigger",
-    "growable": false
+    "type": "event",
+    "growable": false,
+    "trigger": true,
+    "optional": false
    },
    {
     "name": "audio",
-    "growable": false
+    "type": "audio",
+    "growable": false,
+    "trigger": false,
+    "optional": false
    }
   ],
+  "outputs": [
+   {
+    "name": "text",
+    "type": "text",
+    "optional": false
+   },
+   {
+    "name": "lang",
+    "type": "lang",
+    "optional": true
+   },
+   {
+    "name": "trigger",
+    "type": "event",
+    "optional": false
+   }
+  ],
+  "bypass": {},
   "widgets": [
    {
     "name": "model",
@@ -942,17 +1337,39 @@
   "inputs": [
    {
     "name": "trigger",
-    "growable": false
+    "type": "event",
+    "growable": false,
+    "trigger": true,
+    "optional": false
    },
    {
     "name": "text",
-    "growable": false
+    "type": "text",
+    "growable": false,
+    "trigger": false,
+    "optional": false
    },
    {
     "name": "lang",
-    "growable": false
+    "type": "lang",
+    "growable": false,
+    "trigger": false,
+    "optional": true
    }
   ],
+  "outputs": [
+   {
+    "name": "audio",
+    "type": "audio",
+    "optional": false
+   },
+   {
+    "name": "trigger",
+    "type": "event",
+    "optional": false
+   }
+  ],
+  "bypass": {},
   "widgets": [
    {
     "name": "model",
@@ -978,13 +1395,32 @@
   "inputs": [
    {
     "name": "trigger",
-    "growable": false
+    "type": "event",
+    "growable": false,
+    "trigger": true,
+    "optional": false
    },
    {
     "name": "text",
-    "growable": false
+    "type": "text",
+    "growable": false,
+    "trigger": false,
+    "optional": false
    }
   ],
+  "outputs": [
+   {
+    "name": "embedding",
+    "type": "embedding",
+    "optional": false
+   },
+   {
+    "name": "trigger",
+    "type": "event",
+    "optional": false
+   }
+  ],
+  "bypass": {},
   "widgets": [
    {
     "name": "model",
@@ -1010,17 +1446,39 @@
   "inputs": [
    {
     "name": "trigger",
-    "growable": false
+    "type": "event",
+    "growable": false,
+    "trigger": true,
+    "optional": false
    },
    {
     "name": "query",
-    "growable": false
+    "type": "text",
+    "growable": false,
+    "trigger": false,
+    "optional": false
    },
    {
     "name": "candidates",
-    "growable": false
+    "type": "memory-set",
+    "growable": false,
+    "trigger": false,
+    "optional": false
    }
   ],
+  "outputs": [
+   {
+    "name": "results",
+    "type": "memory-set",
+    "optional": false
+   },
+   {
+    "name": "trigger",
+    "type": "event",
+    "optional": false
+   }
+  ],
+  "bypass": {},
   "widgets": [
    {
     "name": "model",
@@ -1046,9 +1504,20 @@
   "inputs": [
    {
     "name": "text",
-    "growable": false
+    "type": "text",
+    "growable": false,
+    "trigger": false,
+    "optional": false
    }
   ],
+  "outputs": [
+   {
+    "name": "out",
+    "type": "list",
+    "optional": false
+   }
+  ],
+  "bypass": {},
   "widgets": [
    {
     "name": "size",
@@ -1096,9 +1565,20 @@
   "inputs": [
    {
     "name": "text",
-    "growable": false
+    "type": "text",
+    "growable": false,
+    "trigger": false,
+    "optional": false
    }
   ],
+  "outputs": [
+   {
+    "name": "out",
+    "type": "list",
+    "optional": false
+   }
+  ],
+  "bypass": {},
   "widgets": []
  },
  {
@@ -1110,6 +1590,14 @@
   "icon": "planet-outline",
   "subline": "",
   "inputs": [],
+  "outputs": [
+   {
+    "name": "vectors",
+    "type": "vectors",
+    "optional": false
+   }
+  ],
+  "bypass": {},
   "widgets": []
  },
  {
@@ -1123,25 +1611,68 @@
   "inputs": [
    {
     "name": "trigger",
-    "growable": false
+    "type": "event",
+    "growable": false,
+    "trigger": true,
+    "optional": false
    },
    {
     "name": "vectors",
-    "growable": false
+    "type": "vectors",
+    "growable": false,
+    "trigger": false,
+    "optional": false
    },
    {
     "name": "embedding",
-    "growable": false
+    "type": "embedding",
+    "growable": false,
+    "trigger": false,
+    "optional": false
    },
    {
     "name": "text",
-    "growable": false
+    "type": "text",
+    "growable": false,
+    "trigger": false,
+    "optional": true
    },
    {
     "name": "tag",
-    "growable": true
+    "type": "any",
+    "growable": true,
+    "trigger": false,
+    "optional": true
    }
   ],
+  "outputs": [
+   {
+    "name": "results",
+    "type": "memory-set",
+    "optional": false
+   },
+   {
+    "name": "ids",
+    "type": "json",
+    "optional": false
+   },
+   {
+    "name": "ref_id",
+    "type": "int",
+    "optional": false
+   },
+   {
+    "name": "affected",
+    "type": "int",
+    "optional": false
+   },
+   {
+    "name": "trigger",
+    "type": "event",
+    "optional": false
+   }
+  ],
+  "bypass": {},
   "widgets": [
    {
     "name": "operation",
@@ -1228,6 +1759,14 @@
   "icon": "server-outline",
   "subline": "",
   "inputs": [],
+  "outputs": [
+   {
+    "name": "db",
+    "type": "db",
+    "optional": false
+   }
+  ],
+  "bypass": {},
   "widgets": [
    {
     "name": "schema",
@@ -1253,17 +1792,49 @@
   "inputs": [
    {
     "name": "trigger",
-    "growable": false
+    "type": "event",
+    "growable": false,
+    "trigger": true,
+    "optional": false
    },
    {
     "name": "db",
-    "growable": false
+    "type": "db",
+    "growable": false,
+    "trigger": false,
+    "optional": false
    },
    {
     "name": "tag",
-    "growable": true
+    "type": "any",
+    "growable": true,
+    "trigger": false,
+    "optional": true
    }
   ],
+  "outputs": [
+   {
+    "name": "rows",
+    "type": "json",
+    "optional": false
+   },
+   {
+    "name": "affected",
+    "type": "int",
+    "optional": false
+   },
+   {
+    "name": "row_id",
+    "type": "int",
+    "optional": false
+   },
+   {
+    "name": "trigger",
+    "type": "event",
+    "optional": false
+   }
+  ],
+  "bypass": {},
   "widgets": [
    {
     "name": "operation",
@@ -1348,9 +1919,20 @@
   "inputs": [
    {
     "name": "text",
-    "growable": false
+    "type": "text",
+    "growable": false,
+    "trigger": false,
+    "optional": false
    }
   ],
+  "outputs": [
+   {
+    "name": "json",
+    "type": "json",
+    "optional": false
+   }
+  ],
+  "bypass": {},
   "widgets": []
  },
  {
@@ -1364,9 +1946,20 @@
   "inputs": [
    {
     "name": "json",
-    "growable": false
+    "type": "json",
+    "growable": false,
+    "trigger": false,
+    "optional": false
    }
   ],
+  "outputs": [
+   {
+    "name": "text",
+    "type": "text",
+    "optional": false
+   }
+  ],
+  "bypass": {},
   "widgets": []
  },
  {
@@ -1380,9 +1973,20 @@
   "inputs": [
    {
     "name": "field",
-    "growable": true
+    "type": "any",
+    "growable": true,
+    "trigger": false,
+    "optional": true
    }
   ],
+  "outputs": [
+   {
+    "name": "json",
+    "type": "json",
+    "optional": false
+   }
+  ],
+  "bypass": {},
   "widgets": []
  },
  {
@@ -1396,9 +2000,20 @@
   "inputs": [
    {
     "name": "json",
-    "growable": false
+    "type": "json",
+    "growable": false,
+    "trigger": false,
+    "optional": false
    }
   ],
+  "outputs": [
+   {
+    "name": "value",
+    "type": "any",
+    "optional": false
+   }
+  ],
+  "bypass": {},
   "widgets": [
    {
     "name": "path",
@@ -1424,9 +2039,14 @@
   "inputs": [
    {
     "name": "json",
-    "growable": false
+    "type": "json",
+    "growable": false,
+    "trigger": false,
+    "optional": false
    }
   ],
+  "outputs": [],
+  "bypass": {},
   "widgets": [
    {
     "name": "keys",
@@ -1452,9 +2072,20 @@
   "inputs": [
    {
     "name": "path",
-    "growable": false
+    "type": "text",
+    "growable": false,
+    "trigger": false,
+    "optional": true
    }
   ],
+  "outputs": [
+   {
+    "name": "text",
+    "type": "text",
+    "optional": false
+   }
+  ],
+  "bypass": {},
   "widgets": [
    {
     "name": "path",
@@ -1480,17 +2111,39 @@
   "inputs": [
    {
     "name": "trigger",
-    "growable": false
+    "type": "event",
+    "growable": false,
+    "trigger": true,
+    "optional": false
    },
    {
     "name": "path",
-    "growable": false
+    "type": "text",
+    "growable": false,
+    "trigger": false,
+    "optional": true
    },
    {
     "name": "content",
-    "growable": false
+    "type": "text",
+    "growable": false,
+    "trigger": false,
+    "optional": true
    }
   ],
+  "outputs": [
+   {
+    "name": "trigger",
+    "type": "event",
+    "optional": false
+   },
+   {
+    "name": "path",
+    "type": "text",
+    "optional": false
+   }
+  ],
+  "bypass": {},
   "widgets": [
    {
     "name": "path",
@@ -1516,17 +2169,39 @@
   "inputs": [
    {
     "name": "trigger",
-    "growable": false
+    "type": "event",
+    "growable": false,
+    "trigger": true,
+    "optional": false
    },
    {
     "name": "path",
-    "growable": false
+    "type": "text",
+    "growable": false,
+    "trigger": false,
+    "optional": true
    },
    {
     "name": "content",
-    "growable": false
+    "type": "text",
+    "growable": false,
+    "trigger": false,
+    "optional": true
    }
   ],
+  "outputs": [
+   {
+    "name": "trigger",
+    "type": "event",
+    "optional": false
+   },
+   {
+    "name": "path",
+    "type": "text",
+    "optional": false
+   }
+  ],
+  "bypass": {},
   "widgets": [
    {
     "name": "path",
@@ -1552,13 +2227,32 @@
   "inputs": [
    {
     "name": "trigger",
-    "growable": false
+    "type": "event",
+    "growable": false,
+    "trigger": true,
+    "optional": false
    },
    {
     "name": "path",
-    "growable": false
+    "type": "text",
+    "growable": false,
+    "trigger": false,
+    "optional": true
    }
   ],
+  "outputs": [
+   {
+    "name": "trigger",
+    "type": "event",
+    "optional": false
+   },
+   {
+    "name": "path",
+    "type": "text",
+    "optional": false
+   }
+  ],
+  "bypass": {},
   "widgets": [
    {
     "name": "path",
@@ -1584,9 +2278,20 @@
   "inputs": [
    {
     "name": "path",
-    "growable": false
+    "type": "text",
+    "growable": false,
+    "trigger": false,
+    "optional": true
    }
   ],
+  "outputs": [
+   {
+    "name": "json",
+    "type": "json",
+    "optional": false
+   }
+  ],
+  "bypass": {},
   "widgets": [
    {
     "name": "path",
@@ -1610,6 +2315,14 @@
   "icon": "archive-outline",
   "subline": "",
   "inputs": [],
+  "outputs": [
+   {
+    "name": "kv",
+    "type": "kv",
+    "optional": false
+   }
+  ],
+  "bypass": {},
   "widgets": []
  },
  {
@@ -1623,17 +2336,49 @@
   "inputs": [
    {
     "name": "trigger",
-    "growable": false
+    "type": "event",
+    "growable": false,
+    "trigger": true,
+    "optional": false
    },
    {
     "name": "kv",
-    "growable": false
+    "type": "kv",
+    "growable": false,
+    "trigger": false,
+    "optional": false
    },
    {
     "name": "tag",
-    "growable": true
+    "type": "any",
+    "growable": true,
+    "trigger": false,
+    "optional": true
    }
   ],
+  "outputs": [
+   {
+    "name": "value",
+    "type": "any",
+    "optional": false
+   },
+   {
+    "name": "ok",
+    "type": "bool",
+    "optional": false
+   },
+   {
+    "name": "keys",
+    "type": "json",
+    "optional": false
+   },
+   {
+    "name": "trigger",
+    "type": "event",
+    "optional": false
+   }
+  ],
+  "bypass": {},
   "widgets": [
    {
     "name": "operation",
@@ -1701,13 +2446,32 @@
   "inputs": [
    {
     "name": "nudge",
-    "growable": false
+    "type": "event",
+    "growable": false,
+    "trigger": true,
+    "optional": false
    },
    {
     "name": "set",
-    "growable": false
+    "type": "event",
+    "growable": false,
+    "trigger": true,
+    "optional": false
    }
   ],
+  "outputs": [
+   {
+    "name": "value",
+    "type": "number",
+    "optional": false
+   },
+   {
+    "name": "crossed",
+    "type": "event",
+    "optional": false
+   }
+  ],
+  "bypass": {},
   "widgets": [
    {
     "name": "amount",
@@ -1821,9 +2585,25 @@
   "inputs": [
    {
     "name": "db",
-    "growable": false
+    "type": "db",
+    "growable": false,
+    "trigger": false,
+    "optional": false
    }
   ],
+  "outputs": [
+   {
+    "name": "due",
+    "type": "event",
+    "optional": false
+   },
+   {
+    "name": "payload",
+    "type": "json",
+    "optional": false
+   }
+  ],
+  "bypass": {},
   "widgets": [
    {
     "name": "poll",
@@ -1860,13 +2640,42 @@
   "inputs": [
    {
     "name": "trigger",
-    "growable": false
+    "type": "event",
+    "growable": false,
+    "trigger": true,
+    "optional": false
    },
    {
     "name": "tag",
-    "growable": true
+    "type": "any",
+    "growable": true,
+    "trigger": false,
+    "optional": true
    }
   ],
+  "outputs": [
+   {
+    "name": "status",
+    "type": "int",
+    "optional": false
+   },
+   {
+    "name": "body",
+    "type": "text",
+    "optional": false
+   },
+   {
+    "name": "json",
+    "type": "any",
+    "optional": false
+   },
+   {
+    "name": "trigger",
+    "type": "event",
+    "optional": false
+   }
+  ],
+  "bypass": {},
   "widgets": [
    {
     "name": "method",
@@ -1941,15 +2750,33 @@
   "name": "Log",
   "kind": "output",
   "category": "Inspect",
-  "summary": "Write the incoming value to the editor console and the server terminal.",
+  "summary": "Write a value to the editor console and the server terminal. When `trigger` fires it reads `in`, writes it, then passes the trigger on.",
   "icon": "terminal-outline",
   "subline": "log · {label|clip:14}",
   "inputs": [
    {
+    "name": "trigger",
+    "type": "event",
+    "growable": false,
+    "trigger": true,
+    "optional": false
+   },
+   {
     "name": "in",
-    "growable": false
+    "type": "any",
+    "growable": false,
+    "trigger": false,
+    "optional": false
    }
   ],
+  "outputs": [
+   {
+    "name": "trigger",
+    "type": "event",
+    "optional": false
+   }
+  ],
+  "bypass": {},
   "widgets": [
    {
     "name": "label",
@@ -1969,19 +2796,41 @@
   "name": "Preview",
   "kind": "output",
   "category": "Inspect",
-  "summary": "Tap a wire and show its value live, drawn to suit its type. It sits mid-flow: when `trigger` fires it passes `in` on at `out`, then passes the trigger on.",
+  "summary": "Tap a wire and show its value live, drawn to suit its type. It sits mid-flow: when `trigger` fires it reads `in`, shows it, passes it on at `out`, then passes the trigger on.",
   "icon": "eye-outline",
   "subline": "preview · live tap",
   "inputs": [
    {
+    "name": "trigger",
+    "type": "event",
+    "growable": false,
+    "trigger": true,
+    "optional": false
+   },
+   {
     "name": "in",
-    "growable": false
+    "type": "any",
+    "growable": false,
+    "trigger": false,
+    "optional": false
+   }
+  ],
+  "outputs": [
+   {
+    "name": "out",
+    "type": "any",
+    "optional": false
    },
    {
     "name": "trigger",
-    "growable": false
+    "type": "event",
+    "optional": false
    }
   ],
+  "bypass": {
+   "in": "out",
+   "trigger": "trigger"
+  },
   "widgets": []
  },
  {
@@ -1995,9 +2844,14 @@
   "inputs": [
    {
     "name": "in",
-    "growable": true
+    "type": "any",
+    "growable": true,
+    "trigger": false,
+    "optional": true
    }
   ],
+  "outputs": [],
+  "bypass": {},
   "widgets": [
    {
     "name": "channel",
@@ -2021,6 +2875,8 @@
   "icon": "wifi-outline",
   "subline": "",
   "inputs": [],
+  "outputs": [],
+  "bypass": {},
   "widgets": [
    {
     "name": "channel",
@@ -2046,9 +2902,22 @@
   "inputs": [
    {
     "name": "in",
-    "growable": false
+    "type": "any",
+    "growable": false,
+    "trigger": false,
+    "optional": false
    }
   ],
+  "outputs": [
+   {
+    "name": "out",
+    "type": "any",
+    "optional": false
+   }
+  ],
+  "bypass": {
+   "in": "out"
+  },
   "widgets": [
    {
     "name": "label",
@@ -2074,17 +2943,44 @@
   "inputs": [
    {
     "name": "trigger",
-    "growable": false
+    "type": "event",
+    "growable": false,
+    "trigger": true,
+    "optional": false
    },
    {
     "name": "loop",
-    "growable": false
+    "type": "event",
+    "growable": false,
+    "trigger": true,
+    "optional": false
    },
    {
     "name": "list",
-    "growable": false
+    "type": "any",
+    "growable": false,
+    "trigger": false,
+    "optional": false
    }
   ],
+  "outputs": [
+   {
+    "name": "each",
+    "type": "event",
+    "optional": false
+   },
+   {
+    "name": "item",
+    "type": "any",
+    "optional": false
+   },
+   {
+    "name": "after_last",
+    "type": "event",
+    "optional": false
+   }
+  ],
+  "bypass": {},
   "widgets": []
  },
  {
@@ -2098,13 +2994,37 @@
   "inputs": [
    {
     "name": "trigger",
-    "growable": false
+    "type": "event",
+    "growable": false,
+    "trigger": true,
+    "optional": false
    },
    {
     "name": "value",
-    "growable": false
+    "type": "any",
+    "growable": false,
+    "trigger": false,
+    "optional": false
    }
   ],
+  "outputs": [
+   {
+    "name": "changed",
+    "type": "event",
+    "optional": false
+   },
+   {
+    "name": "value",
+    "type": "any",
+    "optional": false
+   },
+   {
+    "name": "same",
+    "type": "event",
+    "optional": true
+   }
+  ],
+  "bypass": {},
   "widgets": []
  },
  {
@@ -2118,9 +3038,20 @@
   "inputs": [
    {
     "name": "in",
-    "growable": true
+    "type": "event",
+    "growable": true,
+    "trigger": true,
+    "optional": false
    }
   ],
+  "outputs": [
+   {
+    "name": "out",
+    "type": "event",
+    "optional": false
+   }
+  ],
+  "bypass": {},
   "widgets": []
  },
  {
@@ -2134,9 +3065,22 @@
   "inputs": [
    {
     "name": "trigger",
-    "growable": false
+    "type": "event",
+    "growable": false,
+    "trigger": true,
+    "optional": false
    }
   ],
+  "outputs": [
+   {
+    "name": "trigger",
+    "type": "event",
+    "optional": false
+   }
+  ],
+  "bypass": {
+   "trigger": "trigger"
+  },
   "widgets": [
    {
     "name": "amount",
@@ -2167,19 +3111,50 @@
   "name": "Queue",
   "kind": "transform",
   "category": "Flow",
-  "summary": "Run many producers through one lane. Each arrival on `in` waits in a buffer, `out` releases one item, and the next goes only when `ack` fires, so two turns reach a shared LLM one after the other. Both triggers must be wired: the producers into `in`, and the node that ends the turn into `ack`.",
+  "summary": "Run many producers through one lane. Each fire on a `trigger` socket queues an item: the `in` socket wired from the same producer, else that trigger's own payload. One item is released at a time (`out`, then `trigger`), and the next goes only when `ack` fires, so two turns reach a shared LLM one after the other. The producers' triggers and the node that ends the turn (into `ack`) must be wired.",
   "icon": "file-tray-stacked-outline",
   "subline": "",
   "inputs": [
    {
+    "name": "trigger",
+    "type": "event",
+    "growable": true,
+    "trigger": true,
+    "optional": false
+   },
+   {
     "name": "in",
-    "growable": true
+    "type": "any",
+    "growable": true,
+    "trigger": false,
+    "optional": true
    },
    {
     "name": "ack",
-    "growable": false
+    "type": "event",
+    "growable": false,
+    "trigger": true,
+    "optional": false
    }
   ],
+  "outputs": [
+   {
+    "name": "out",
+    "type": "any",
+    "optional": false
+   },
+   {
+    "name": "count",
+    "type": "int",
+    "optional": false
+   },
+   {
+    "name": "trigger",
+    "type": "event",
+    "optional": false
+   }
+  ],
+  "bypass": {},
   "widgets": [
    {
     "name": "timeout",
@@ -2205,21 +3180,35 @@
   "inputs": [
    {
     "name": "user_trigger",
-    "growable": false
+    "type": "event",
+    "growable": false,
+    "trigger": true,
+    "optional": false
    },
    {
     "name": "user",
-    "growable": false
+    "type": "text",
+    "growable": false,
+    "trigger": false,
+    "optional": true
    },
    {
     "name": "reply_trigger",
-    "growable": false
+    "type": "event",
+    "growable": false,
+    "trigger": true,
+    "optional": false
    },
    {
     "name": "reply",
-    "growable": false
+    "type": "text",
+    "growable": false,
+    "trigger": false,
+    "optional": true
    }
   ],
+  "outputs": [],
+  "bypass": {},
   "widgets": []
  },
  {
@@ -2233,13 +3222,27 @@
   "inputs": [
    {
     "name": "trigger",
-    "growable": false
+    "type": "event",
+    "growable": false,
+    "trigger": true,
+    "optional": false
    },
    {
     "name": "body",
-    "growable": false
+    "type": "any",
+    "growable": false,
+    "trigger": false,
+    "optional": true
    }
   ],
+  "outputs": [
+   {
+    "name": "trigger",
+    "type": "event",
+    "optional": false
+   }
+  ],
+  "bypass": {},
   "widgets": [
    {
     "name": "status",

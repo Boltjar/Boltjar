@@ -59,7 +59,7 @@ def _delayed(seconds: float, timeout: float = 30, then_log: bool = False) -> dic
              _edge("hook", "json", "respond", "body")]
     if then_log:
         nodes.append({"id": "log", "type": "core.output.log", "config": {"label": "after"}})
-        edges.append(_edge("respond", "trigger", "log", "in"))
+        edges += [_edge("respond", "trigger", "log", "trigger"), _edge("respond", "trigger", "log", "in")]
     return {"nodes": nodes, "edges": edges}
 
 
@@ -147,7 +147,7 @@ def test_right_away_is_unchanged():
     async def scenario():
         graph = {"nodes": [_hook(reply=RIGHT_AWAY),
                            {"id": "log", "type": "core.output.log", "config": {}}],
-                 "edges": [_edge("hook", "trigger", "log", "in")]}
+                 "edges": [_edge("hook", "trigger", "log", "trigger"), _edge("hook", "trigger", "log", "in")]}
         async with _live("rw-right-away", graph) as (hub, client, _events):
             resp = await client.post("/hook/rw-right-away/ask", json={"a": 1})
             assert (resp.status_code, resp.json()) == (200, {"ok": True})
@@ -158,7 +158,7 @@ def test_right_away_is_unchanged():
 def test_a_webhook_saved_without_the_knob_replies_right_away():
     graph = {"nodes": [{"id": "hook", "type": "core.trigger.webhook", "config": {"path": "ask"}},
                        {"id": "log", "type": "core.output.log", "config": {}}],
-             "edges": [_edge("hook", "trigger", "log", "in")]}
+             "edges": [_edge("hook", "trigger", "log", "trigger"), _edge("hook", "trigger", "log", "in")]}
     assert validate_graph(graph) == []
 
     async def scenario():
@@ -477,6 +477,7 @@ def test_a_respond_with_no_waiting_call_logs_one_line_and_does_nothing():
                        _respond(),
                        {"id": "log", "type": "core.output.log", "config": {}}],
              "edges": [_edge("go", "trigger", "respond", "trigger"),
+                       _edge("respond", "trigger", "log", "trigger"),
                        _edge("respond", "trigger", "log", "in")]}
 
     async def drive():
@@ -500,7 +501,7 @@ def _kinds(problems: list[dict]) -> list[tuple]:
 
 def test_a_waiting_webhook_needs_a_respond_downstream():
     graph = {"nodes": [_hook(), {"id": "log", "type": "core.output.log", "config": {}}],
-             "edges": [_edge("hook", "trigger", "log", "in")]}
+             "edges": [_edge("hook", "trigger", "log", "trigger"), _edge("hook", "trigger", "log", "in")]}
     assert _kinds(validate_graph(graph)) == [
         ("hook", "respond-missing", "Webhook waits for a Respond to Webhook that is not in the graph")]
 

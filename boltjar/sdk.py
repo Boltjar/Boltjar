@@ -12,7 +12,7 @@ editor renders as inspector widgets. Its execution surface is chosen by its
                     def on_input(self, port, v, ctx)   # or input-driven
     Kind.SENSOR     def read(self, ctx) -> dict
     Kind.TRANSFORM  def run(self, **inputs) -> dict     # sync or async
-    Kind.LOGIC      def route(self, **inputs) -> str    # returns an output port
+    Kind.LOGIC      def route(self, **inputs) -> str    # returns an output port (an event)
     Kind.SERVICE    async def open(self, ctx); call(...); async def close(self)
     Kind.STORE      async def open(self, ctx); read/write; async def close(self)
     Kind.OUTPUT     def deliver(self, value, ctx, inputs=None)
@@ -20,7 +20,9 @@ editor renders as inspector widgets. Its execution surface is chosen by its
 A node that does work declares an input with ``trigger=True``: an event landing
 there fires it, and it pulls its other inputs at that moment. A trigger fires
 its node, so every trigger input must be wired (a graph with an unwired one does
-not turn On) and can never be ``optional``.
+not turn On) and can never be ``optional``. A trigger input is always of type
+``event``: a data wire never fires a node, it is read when the node's trigger
+fires (``@node`` refuses a trigger of any other type, naming the node).
 
 A ``pulled=True`` node is data: it runs whenever a fired node reads it, so it
 keeps no side effects. One that also declares a trigger (the Template) runs on
@@ -71,7 +73,7 @@ class Port:
 
     A trigger input (`trigger=True`) fires the node, so it must be wired: a
     graph with an unwired trigger does not turn On, and ``@node`` refuses one
-    declared `optional`, naming the node. A growable trigger needs a wire on at
+    declared `optional` or of any type but `event`, naming the node. A growable trigger needs a wire on at
     least one of its sockets. Every other input latches data and is pulled when
     the node fires; `optional` lets one of those stay unwired."""
     name: str
@@ -551,6 +553,14 @@ def node(*, id: str, name: str, kind: Kind, category: str,
                 seen.add(attr)
 
         for p in inputs:
+            if p.trigger and p.type != "event":
+                # a data wire never fires a node: the node fires on an event and
+                # pulls its data then. Checked here so the custom node loader's
+                # error names the node.
+                raise ValueError(f"node {id!r}: trigger input {p.name!r} is of type "
+                                 f"{p.type!r}; a trigger is an event (a data wire never "
+                                 f"fires a node), so declare Port({p.name!r}, \"event\", "
+                                 f"trigger=True) and read the data on its own input")
             if p.trigger and p.optional:
                 # checked here, not on the Port, so the error a custom node
                 # author reads (the custom node loader lists it) names the node

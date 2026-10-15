@@ -41,8 +41,11 @@ def _graph(llm_config: dict) -> dict:
             {"src": "chat", "src_port": "trigger", "dst": "llm", "dst_port": "trigger"},
             {"src": "chat", "src_port": "text", "dst": "llm", "dst_port": "prompt"},
             {"src": "llm", "src_port": "response", "dst": "said", "dst_port": "in"},
+            {"src": "llm", "src_port": "trigger", "dst": "said", "dst_port": "trigger"},
             {"src": "llm", "src_port": "trigger", "dst": "done", "dst_port": "in"},
+            {"src": "llm", "src_port": "trigger", "dst": "done", "dst_port": "trigger"},
             {"src": "llm", "src_port": "error", "dst": "oops", "dst_port": "in"},
+            {"src": "llm", "src_port": "error", "dst": "oops", "dst_port": "trigger"},
         ],
     }
 

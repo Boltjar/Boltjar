@@ -77,7 +77,8 @@ def test_send_audio_fires_audio_input():
             {"id": "ain", "type": "core.trigger.audio_in"},
             {"id": "log", "type": "core.output.log", "config": {}},
         ],
-        "edges": [{"src": "ain", "src_port": "trigger", "dst": "log", "dst_port": "in"}],
+        "edges": [{"src": "ain", "src_port": "trigger", "dst": "log", "dst_port": "trigger"},
+                  {"src": "ain", "src_port": "trigger", "dst": "log", "dst_port": "in"}],
     }
 
     async def run():

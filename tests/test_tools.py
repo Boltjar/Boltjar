@@ -34,10 +34,11 @@ def _async_client_mock(post_impl):
 def test_tool_node_is_registered_with_the_right_ports():
     assert "core.ai.tool" in NODE_REGISTRY
     spec = NODE_REGISTRY["core.ai.tool"]
-    # one trigger input (result), two outputs (call as tool-call, done as event).
+    # the answer comes back as data (result) read when its event (result_trigger)
+    # fires; two outputs (call as tool-call, trigger as event).
     in_names = [(p.name, p.type, p.trigger) for p in spec.inputs]
     out_names = [(p.name, p.type) for p in spec.outputs]
-    assert in_names == [("result", "text", True)]
+    assert in_names == [("result_trigger", "event", True), ("result", "text", False)]
     assert out_names == [("call", "tool-call"), ("trigger", "event")]
     # the editor knobs: name / description / schema_mode (auto|manual) / schema.
     # In auto mode the schema is generated from a wired Tool Args node; the raw
@@ -123,7 +124,8 @@ def test_xai_tool_loop_dispatches_through_runtime():
         rt.build(graph)
         await rt.run()
         # the tool node has no real downstream; we play that role by watching
-        # for the call event landing on the tool, then emitting `result` back.
+        # for the call landing on the tool, then sending `result` back and firing
+        # `result_trigger`.
         tool_inst = rt.nodes["tool"]
         called_args = {}
 
@@ -133,10 +135,12 @@ def test_xai_tool_loop_dispatches_through_runtime():
                 payload = tool_inst.out_latch.get("call")
                 if payload is not None:
                     called_args["args"] = payload
-                    # An upstream "downstream-of-call" node would normally emit
-                    # to the tool's `result` input port; the runtime would then
-                    # enqueue on the tool's mailbox. Simulate that delivery.
-                    tool_inst.mailbox.put_nowait(("result", "sunny, 22C", rt.new_turn()))
+                    # The body's last node would normally emit its answer into
+                    # the tool's `result` and fire `result_trigger`; the runtime
+                    # would enqueue both on the tool's mailbox. Simulate that.
+                    turn = rt.new_turn()
+                    tool_inst.mailbox.put_nowait(("result", "sunny, 22C", turn))
+                    tool_inst.mailbox.put_nowait(("result_trigger", True, turn))
                     return
             raise AssertionError("tool 'call' event never fired")
 
@@ -234,7 +238,9 @@ async def _drive_tool_loop(graph, fake_post, env):
             payload = tool_inst.out_latch.get("call")
             if payload is not None:
                 called_args["args"] = payload
-                tool_inst.mailbox.put_nowait(("result", "sunny, 22C", rt.new_turn()))
+                turn = rt.new_turn()
+                tool_inst.mailbox.put_nowait(("result", "sunny, 22C", turn))
+                tool_inst.mailbox.put_nowait(("result_trigger", True, turn))
                 return
         raise AssertionError("tool 'call' event never fired")
 
@@ -377,8 +383,10 @@ def test_ollama_tool_loop_dispatches_through_runtime():
 def test_tool_args_splits_a_call_into_per_field_outputs():
     assert "core.ai.tool_args" in NODE_REGISTRY
     spec = NODE_REGISTRY["core.ai.tool_args"]
-    # `call` is a TRIGGER (fires the body); `trigger` output drives the rest.
-    assert [(p.name, p.type, p.trigger) for p in spec.inputs] == [("call", "tool-call", True)]
+    # the Tool's `trigger` fires it and `call` is data read then; its `trigger`
+    # output drives the rest of the body.
+    assert [(p.name, p.type, p.trigger) for p in spec.inputs] == [
+        ("trigger", "event", True), ("call", "tool-call", False)]
     assert [(p.name, p.type) for p in spec.outputs] == [("trigger", "event")]
     obj = spec.cls()
     obj._node_cfg = {"fields": "location, unit"}
@@ -421,9 +429,10 @@ def test_llm_derives_tool_schema_from_wired_tool_args():
 
 
 def test_tool_body_fires_through_tool_args_end_to_end():
-    """The Tool Args node IS the tool body's entry: wired Tool.call -> ToolArgs ->
-    result, it FIRES on a real call (no manual result emit) and the answer flows
-    back to the model. Also proves the schema was generated from its fields."""
+    """The Tool Args node IS the tool body's entry: wired Tool.trigger + call ->
+    ToolArgs -> result + result_trigger, it FIRES on a real call (no manual
+    result emit) and the answer flows back to the model. Also proves the schema
+    was generated from its fields."""
     graph = {
         "nodes": [
             {"id": "trig", "type": "core.trigger.manual"},
@@ -434,9 +443,12 @@ def test_tool_body_fires_through_tool_args_end_to_end():
         "edges": [
             {"src": "trig", "src_port": "trigger", "dst": "llm", "dst_port": "trigger"},
             {"src": "tool", "src_port": "call", "dst": "llm", "dst_port": "tools"},
-            # the tool body: call fires Tool Args, which feeds the arg straight back
-            # as the result (a degenerate body that proves the firing + round-trip).
+            # the tool body: the Tool's trigger fires Tool Args, which reads the
+            # call and feeds the arg straight back as the result (a degenerate body
+            # that proves the firing + round-trip).
+            {"src": "tool", "src_port": "trigger", "dst": "args", "dst_port": "trigger"},
             {"src": "tool", "src_port": "call", "dst": "args", "dst_port": "call"},
+            {"src": "args", "src_port": "trigger", "dst": "tool", "dst_port": "result_trigger"},
             {"src": "args", "src_port": "city", "dst": "tool", "dst_port": "result"},
         ],
     }

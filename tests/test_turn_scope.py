@@ -79,8 +79,8 @@ def test_a_queue_releases_each_item_in_the_scope_it_arrived_in():
                        {"id": "queue", "type": "core.flow.queue", "config": {}},
                        {"id": "wait", "type": "core.flow.wait", "config": {"amount": 0.02}},
                        {"id": "probe", "type": "test.scope.probe", "config": {}}],
-             "edges": [_edge("chat", "trigger", "queue", "chat"),
-                       _edge("queue", "out", "wait", "trigger"),
+             "edges": [_edge("chat", "trigger", "queue", "trigger0"),
+                       _edge("queue", "trigger", "wait", "trigger"),
                        _edge("wait", "trigger", "probe", "trigger"),
                        _edge("chat", "text", "probe", "v"),
                        _edge("probe", "trigger", "queue", "ack")]}

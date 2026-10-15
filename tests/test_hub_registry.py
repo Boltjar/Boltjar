@@ -47,7 +47,8 @@ def test_two_slugs_do_not_cross_streams() -> None:
             {"id": "m", "type": "core.trigger.manual"},
             {"id": "log", "type": "core.output.log", "config": {"label": "t"}},
         ],
-        "edges": [{"src": "m", "src_port": "trigger", "dst": "log", "dst_port": "in"}],
+        "edges": [{"src": "m", "src_port": "trigger", "dst": "log", "dst_port": "trigger"},
+                  {"src": "m", "src_port": "trigger", "dst": "log", "dst_port": "in"}],
     }
 
     with client.websocket_connect("/ws?slug=graph-a") as ws_a, \

@@ -11,20 +11,20 @@ from boltjar.sdk import NODE_REGISTRY
 def test_queue_serializes_with_ack_backpressure():
     q = NODE_REGISTRY["core.flow.queue"].cls()
     # first arrival while idle -> releases immediately, lane goes busy.
-    q._fired_port = "in_0"
-    assert q.run(in_0="A") == {"out": "A", "count": 0}
+    q._fired_port = "trigger0"
+    assert q.run(trigger0="A") == {"out": "A", "count": 0, "trigger": True}
     # second arrival while busy -> buffered, nothing released.
-    q._fired_port = "in_1"
-    assert q.run(in_1="B") == {"count": 1}
+    q._fired_port = "trigger1"
+    assert q.run(trigger1="B") == {"count": 1}
     # a third while still busy -> buffered behind B.
-    q._fired_port = "in_2"
-    assert q.run(in_2="C") == {"count": 2}
+    q._fired_port = "trigger2"
+    assert q.run(trigger2="C") == {"count": 2}
     # ack frees the lane -> release the FIFO head (B).
     q._fired_port = "ack"
-    assert q.run() == {"out": "B", "count": 1}
+    assert q.run() == {"out": "B", "count": 1, "trigger": True}
     # ack again -> release C.
     q._fired_port = "ack"
-    assert q.run() == {"out": "C", "count": 0}
+    assert q.run() == {"out": "C", "count": 0, "trigger": True}
     # ack with an empty buffer -> nothing to release.
     q._fired_port = "ack"
     assert q.run() == {"count": 0}
@@ -36,29 +36,30 @@ def test_queue_watchdog_frees_a_stuck_lane():
     import time
     q = NODE_REGISTRY["core.flow.queue"].cls()
     q._node_cfg = {"timeout": 0.01}  # 10ms watchdog
-    q._fired_port = "in_0"
-    assert q.run(in_0="A") == {"out": "A", "count": 0}   # A released, lane busy
-    q._fired_port = "in_1"
-    assert q.run(in_1="B") == {"count": 1}               # B buffered (no ack)
+    q._fired_port = "trigger0"
+    assert q.run(trigger0="A") == {"out": "A", "count": 0, "trigger": True}   # A released, lane busy
+    q._fired_port = "trigger1"
+    assert q.run(trigger1="B") == {"count": 1}               # B buffered (no ack)
     time.sleep(0.02)                                      # let the watchdog elapse
-    q._fired_port = "in_2"
-    out = q.run(in_2="C")
+    q._fired_port = "trigger2"
+    out = q.run(trigger2="C")
     assert out.get("out") == "B"                         # stuck lane self-healed, head released
 
 
 def test_queue_unknown_fired_port_is_a_noop():
     q = NODE_REGISTRY["core.flow.queue"].cls()
-    q._fired_port = "in_0"
-    q.run(in_0="A")                                       # busy with A
-    q._fired_port = "in_1"
-    q.run(in_1="B")                                       # buffer B
+    q._fired_port = "trigger0"
+    q.run(trigger0="A")                                       # busy with A
+    q._fired_port = "trigger1"
+    q.run(trigger1="B")                                       # buffer B
     q._fired_port = ""                                    # no socket matched
     assert q.run() == {"count": 1}                        # nothing buffered, nothing released
 
 
 def test_queue_growable_trigger_fires_through_runtime():
     """Two producers wired into one lane: only one releases until `ack` frees it.
-    (Producers feed q.in_0 / q.in_1 via real edges, so the growable sockets exist.)"""
+    (Producers fire q.trigger0 / q.trigger1 via real edges, so the growable
+    sockets exist; with no `in` wired, an item is the trigger's own payload.)"""
     rt = Runtime()
     released: list = []
     rt._observer = lambda e: (
@@ -73,17 +74,17 @@ def test_queue_growable_trigger_fires_through_runtime():
             {"id": "q", "type": "core.flow.queue"},
         ],
         "edges": [
-            {"src": "c0", "src_port": "trigger", "dst": "q", "dst_port": "in_0"},
-            {"src": "c1", "src_port": "trigger", "dst": "q", "dst_port": "in_1"},
+            {"src": "c0", "src_port": "trigger", "dst": "q", "dst_port": "trigger0"},
+            {"src": "c1", "src_port": "trigger", "dst": "q", "dst_port": "trigger1"},
         ],
     }
 
     async def run():
         rt.build(graph)
         await rt.run()
-        rt.send_chat("c0", "A")           # fires q.in_0 with payload "A" -> released
+        rt.send_chat("c0", "A")           # fires q.trigger0 with payload "A" -> released
         await asyncio.sleep(0.05)
-        rt.send_chat("c1", "B")           # fires q.in_1 with "B" -> buffered (busy)
+        rt.send_chat("c1", "B")           # fires q.trigger1 with "B" -> buffered (busy)
         await asyncio.sleep(0.1)
         first = list(released)
         rt.nodes["q"].mailbox.put_nowait(("ack", 1, rt.new_turn()))  # free the lane
@@ -96,10 +97,11 @@ def test_queue_growable_trigger_fires_through_runtime():
     assert after_ack == ["A", "B"]        # ack released the next
 
 
-def test_queue_sockets_named_after_their_sources_fire_it():
-    """The editor names each Queue socket after the node wired into it (`ask`,
-    `nudge`), not in0: each still fires the Queue, and a promoted knob wired
-    beside them (`timeout`) only sets the knob."""
+def test_queue_reads_each_producers_own_data_when_its_trigger_fires():
+    """A data wire never fires the Queue: each producer fires a `trigger` socket
+    and its item is the `in` socket wired from that same producer, read then.
+    A socket of any name belongs to the base it starts with, and a promoted knob
+    wired beside them (`timeout`) only sets the knob."""
     events: list[dict] = []
     rt = Runtime(observer=events.append)
     rt.build({
@@ -110,14 +112,17 @@ def test_queue_sockets_named_after_their_sources_fire_it():
             {"id": "q", "type": "core.flow.queue", "config": {"promoted": ["timeout"]}},
         ],
         "edges": [
-            {"src": "ask", "src_port": "text", "dst": "q", "dst_port": "ask"},
-            {"src": "nudge", "src_port": "text", "dst": "q", "dst_port": "nudge"},
+            {"src": "ask", "src_port": "trigger", "dst": "q", "dst_port": "trigger_ask"},
+            {"src": "nudge", "src_port": "trigger", "dst": "q", "dst_port": "trigger_nudge"},
+            # wired in the other order, so the pairing is by producer, not position
+            {"src": "nudge", "src_port": "text", "dst": "q", "dst_port": "in0"},
+            {"src": "ask", "src_port": "text", "dst": "q", "dst_port": "in1"},
             {"src": "secs", "src_port": "out", "dst": "q", "dst_port": "timeout"},
         ],
     })
     q = rt.nodes["q"]
-    assert q.is_trigger("ask") and q.is_trigger("nudge") and q.is_trigger("ack")
-    assert not q.is_trigger("timeout")
+    assert q.is_trigger("trigger_ask") and q.is_trigger("trigger_nudge") and q.is_trigger("ack")
+    assert not q.is_trigger("in0") and not q.is_trigger("in1") and not q.is_trigger("timeout")
 
     async def run():
         await rt.run()
@@ -135,3 +140,5 @@ def test_queue_sockets_named_after_their_sources_fire_it():
     assert len(fires) == 3, "two arrivals and one ack, each fires the Queue once"
     assert [e["value"] for e in events if e["kind"] == "value" and e["node"] == "q"
             and e["port"] == "out"] == ["A", "B"]
+    assert len([e for e in events if e["kind"] == "value" and e["node"] == "q"
+                and e["port"] == "trigger"]) == 2, "each release fires the Queue's trigger once"

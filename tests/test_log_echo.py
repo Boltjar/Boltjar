@@ -36,7 +36,8 @@ def _chat_into_log(label: str) -> dict:
     return {
         "nodes": [{"id": "c", "type": "core.trigger.chat", "config": {}},
                   {"id": "lg", "type": "core.output.log", "config": {"label": label}}],
-        "edges": [{"src": "c", "src_port": "text", "dst": "lg", "dst_port": "in"}],
+        "edges": [{"src": "c", "src_port": "trigger", "dst": "lg", "dst_port": "trigger"},
+                  {"src": "c", "src_port": "text", "dst": "lg", "dst_port": "in"}],
     }
 
 
@@ -88,7 +89,8 @@ def test_other_log_lines_stay_in_the_editor():
     graph = {
         "nodes": [{"id": "m", "type": "core.trigger.manual", "config": {}},
                   {"id": "p", "type": "core.output.preview", "config": {}}],
-        "edges": [{"src": "m", "src_port": "trigger", "dst": "p", "dst_port": "in"}],
+        "edges": [{"src": "m", "src_port": "trigger", "dst": "p", "dst_port": "trigger"},
+                  {"src": "m", "src_port": "trigger", "dst": "p", "dst_port": "in"}],
     }
     logs = [e for e in _run(graph) if e["kind"] == "log"]
     assert logs and all("echo" not in e for e in logs)

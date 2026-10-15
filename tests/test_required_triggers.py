@@ -2,10 +2,11 @@
 
 Validation names each unwired trigger ("required trigger 'x' is not connected",
 the missing-input kind every unwired required input has), so the graph cannot
-turn On. A growable trigger (Sync's `in`, a Queue's `in`) needs a wire on at
-least one of its sockets. A bypassed node is skipped, and a graph with no
-trigger node is still refused. The SDK refuses a trigger declared optional, so
-no node can offer one."""
+turn On. A growable trigger (Sync's `in`, a Queue's `trigger`) needs a wire on
+at least one of its sockets. A bypassed node is skipped, and a graph with no
+trigger node is still refused. The SDK refuses a trigger declared optional, or
+of any type but `event` (a data wire never fires a node), so no node can offer
+one."""
 import pytest
 
 import boltjar.nodes.core  # noqa: F401  (registers the core nodes)
@@ -17,7 +18,7 @@ ONCE_OPTIONAL = {
     ("core.data.template", "trigger"), ("core.output.preview", "trigger"),
     ("core.state.meter", "nudge"), ("core.state.meter", "set"),
     ("core.flow.for_each", "loop"), ("core.flow.sync", "in"),
-    ("core.flow.queue", "in"), ("core.flow.queue", "ack"),
+    ("core.flow.queue", "trigger"), ("core.flow.queue", "ack"),
     ("core.output.chat", "user_trigger"), ("core.output.chat", "reply_trigger"),
 }
 
@@ -61,6 +62,26 @@ def test_the_sdk_refuses_an_optional_trigger_naming_the_node():
     assert Port("name", "text", optional=True).optional, "a data input may be optional"
 
 
+def test_the_sdk_refuses_a_trigger_that_is_not_an_event_naming_the_node():
+    for node_id, port in (("test.data_fires", Port("in", "any", trigger=True)),
+                          ("test.text_fires", Port("result", "text", trigger=True)),
+                          ("test.grow_fires", Port("in", "any", growable=True, trigger=True))):
+        with pytest.raises(ValueError) as err:
+            node(id=node_id, name="Probe", kind=Kind.OUTPUT, category="Test")(
+                type("Probe", (), {"inputs": [port]}))
+        assert str(err.value) == (
+            f"node {node_id!r}: trigger input {port.name!r} is of type {port.type!r}; a trigger "
+            f"is an event (a data wire never fires a node), so declare "
+            f"Port({port.name!r}, \"event\", trigger=True) and read the data on its own input")
+        assert node_id not in NODE_REGISTRY
+
+
+def test_every_registered_trigger_is_an_event():
+    served = [(spec.id, p.name, p.type) for spec in NODE_REGISTRY.values()
+              for p in spec.inputs if p.trigger and p.type != "event"]
+    assert served == []
+
+
 def test_no_registered_node_serves_an_optional_trigger():
     served = [(spec.id, p.name) for spec in NODE_REGISTRY.values()
               for p in spec.inputs if p.trigger and p.optional]
@@ -82,11 +103,11 @@ def test_a_node_with_two_unwired_triggers_names_both():
         "required trigger 'nudge' is not connected", "required trigger 'set' is not connected"]
 
 
-def test_a_queue_socket_named_after_its_source_wires_in_but_a_promoted_knob_does_not():
-    graph = _graph("core.flow.queue", ["ack", "timeout"], config={"promoted": ["timeout"]})
+def test_a_queue_trigger_socket_of_any_name_wires_in_but_data_and_a_promoted_knob_do_not():
+    graph = _graph("core.flow.queue", ["ack", "timeout", "in0"], config={"promoted": ["timeout"]})
     assert [p["message"] for p in _trigger_problems(graph)] == [
-        "required trigger 'in' is not connected"]
-    graph["edges"].append({"src": "go", "src_port": "trigger", "dst": "n", "dst_port": "go"})
+        "required trigger 'trigger' is not connected"]
+    graph["edges"].append({"src": "go", "src_port": "trigger", "dst": "n", "dst_port": "trigger_go"})
     assert _trigger_problems(graph) == []
 
 
@@ -105,16 +126,19 @@ def test_a_bypassed_node_needs_no_trigger_wire():
 def test_a_graph_with_no_trigger_node_is_still_refused():
     graph = {"nodes": [{"id": "log", "type": "core.output.log", "config": {}}], "edges": []}
     assert validate_graph(graph) == [
-        {"node": "log", "kind": "missing-input", "message": "required trigger 'in' is not connected"},
+        {"node": "log", "kind": "missing-input", "message": "required trigger 'trigger' is not connected"},
+        {"node": "log", "kind": "missing-input", "message": "required input 'in' is not connected"},
         {"node": None, "kind": "no-trigger", "message": "no trigger node: nothing can fire"}]
 
 
 def _manual_to_log_through(mid: dict, into: str, out: str, **wire) -> dict:
-    """Manual -> `mid`.`into`, `mid`.`out` -> Log.in (the Log's only trigger)."""
+    """Manual -> `mid`.`into`, `mid`.`out` -> Log.trigger (its data comes
+    straight from the Manual)."""
     return {"nodes": [{"id": "go", "type": "core.trigger.manual"}, mid,
                       {"id": "lg", "type": "core.output.log", "config": {}}],
             "edges": [{"src": "go", "src_port": "trigger", "dst": mid["id"], "dst_port": into},
-                      {"src": mid["id"], "src_port": out, "dst": "lg", "dst_port": "in"}]}
+                      {"src": mid["id"], "src_port": out, "dst": "lg", "dst_port": "trigger"},
+                      {"src": "go", "src_port": "trigger", "dst": "lg", "dst_port": "in"}]}
 
 
 def test_a_trigger_wired_through_a_bypassed_node_that_passes_nothing_is_not_connected():
@@ -124,11 +148,11 @@ def test_a_trigger_wired_through_a_bypassed_node_that_passes_nothing_is_not_conn
     graph = _manual_to_log_through(pv, "in", "trigger")
     assert validate_graph(graph) == [
         {"node": "lg", "kind": "missing-input",
-         "message": "required trigger 'in' is wired through bypassed 'pv', which passes nothing on"}]
+         "message": "required trigger 'trigger' is wired through bypassed 'pv', which passes nothing on"}]
     # a bypassed node with no passthrough at all (an LLM) reaches nothing either.
     llm = {"id": "llm", "type": "core.ai.llm", "config": {}, "disabled": True}
     assert [p["message"] for p in _trigger_problems(_manual_to_log_through(llm, "trigger", "trigger"))] == [
-        "required trigger 'in' is wired through bypassed 'llm', which passes nothing on"]
+        "required trigger 'trigger' is wired through bypassed 'llm', which passes nothing on"]
 
 
 def test_a_dead_end_names_the_node_the_wire_stops_at_however_far_up():
@@ -139,9 +163,9 @@ def test_a_dead_end_names_the_node_the_wire_stops_at_however_far_up():
                        {"id": "lg", "type": "core.output.log", "config": {}}],
              "edges": [{"src": "go", "src_port": "trigger", "dst": "tpl", "dst_port": "trigger"},
                        {"src": "tpl", "src_port": "out", "dst": "r", "dst_port": "in"},
-                       {"src": "r", "src_port": "out", "dst": "lg", "dst_port": "in"}]}
+                       {"src": "r", "src_port": "out", "dst": "lg", "dst_port": "trigger"}]}
     assert [p["message"] for p in _trigger_problems(graph)] == [
-        "required trigger 'in' is wired through bypassed 'tpl', which passes nothing on"]
+        "required trigger 'trigger' is wired through bypassed 'tpl', which passes nothing on"]
     # its `trigger` passes on, so the same Router carries that one to the Log.
     graph["edges"][1]["src_port"] = "trigger"
     assert _trigger_problems(graph) == []
@@ -159,10 +183,10 @@ def test_a_trigger_wired_from_a_wireless_out_needs_a_wireless_in_on_its_channel(
     graph = {"nodes": [{"id": "go", "type": "core.trigger.manual"},
                        {"id": "wo", "type": "core.flow.wireless_out", "config": {"channel": "7"}},
                        {"id": "lg", "type": "core.output.log", "config": {}}],
-             "edges": [{"src": "wo", "src_port": "go.trigger", "dst": "lg", "dst_port": "in"}]}
+             "edges": [{"src": "wo", "src_port": "go.trigger", "dst": "lg", "dst_port": "trigger"}]}
     assert _trigger_problems(graph) == [
         {"node": "lg", "kind": "missing-input",
-         "message": "required trigger 'in' is wired through 'wo', which passes nothing on"}]
+         "message": "required trigger 'trigger' is wired through 'wo', which passes nothing on"}]
     graph["nodes"].append({"id": "wi", "type": "core.flow.wireless_in", "config": {"channel": "7"}})
     graph["edges"].append({"src": "go", "src_port": "trigger", "dst": "wi", "dst_port": "go.trigger"})
     assert _trigger_problems(graph) == []

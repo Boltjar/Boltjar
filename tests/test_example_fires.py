@@ -3,10 +3,10 @@
 Each example is turned On the way the editor does it (a Hub validates the
 graph, then runs it), driven by its trigger, and every live event is counted.
 One chat send means one LLM run, one reply and one row per side of the chat
-history; one Manual fire means one LLM run and one log line. A Preview is fired
-by its value and by its trigger, so it runs twice a turn and still passes on
-exactly one value and one trigger: the chat example once spoke every reply
-twice because a Preview relayed both.
+history; one Manual fire means one LLM run and one log line. A Preview fires on
+its trigger only (a data wire never fires a node), so it runs once a turn and
+passes on exactly one value and one trigger: the chat example once spoke every
+reply twice because a Preview relayed both.
 
 The chat example picks no model (a model can cost money): its LLM runs the
 offline mock and its TTS and Audio Preview ship bypassed, so it runs as shipped,
@@ -27,17 +27,17 @@ from boltjar.sqlite_store import SqliteStore
 
 SHIPPED = pathlib.Path(__file__).resolve().parent.parent / "examples"
 
-# what one chat send runs in examples/chat.json as shipped: node -> fires. A
-# Preview fires on its value and on its trigger, every other node once. The
-# bypassed TTS and Audio Preview never run.
+# what one chat send runs in examples/chat.json as shipped: node -> fires. Every
+# node runs once, a Preview on its trigger. The bypassed TTS and Audio Preview
+# never run.
 CHAT_FIRES = {
-    "Chat History": 1, "Chat Append (User)": 1, "Prompt Template": 1, "Context": 2,
-    "LLM": 1, "Response Preview": 2, "Chat Append (Assistant)": 1,
+    "Chat History": 1, "Chat Append (User)": 1, "Prompt Template": 1, "Context": 1,
+    "LLM": 1, "Response Preview": 1, "Chat Append (Assistant)": 1,
 }
 # the console lines one chat send writes: each Preview shows its value once.
 CHAT_LOGS = {"Context": 1, "Response Preview": 1}
-# with its voice enabled: the TTS once, the Audio Preview on its value and trigger.
-VOICE_FIRES = {**CHAT_FIRES, "TTS": 1, "Audio Preview": 2}
+# with its voice enabled: the TTS once, the Audio Preview once on its trigger.
+VOICE_FIRES = {**CHAT_FIRES, "TTS": 1, "Audio Preview": 1}
 VOICE_LOGS = {**CHAT_LOGS, "Audio Preview": 1}
 # a voice model nothing ships, picked the way a person picks one in the TTS.
 FAKE_VOICE = models.ModelManifest(id="acme/voice", provider="acme", model="v1", label="Acme Voice",

@@ -3,8 +3,8 @@ boltjar.nodes.core.builtin: the core nodes.
 
 Lean nodes: content is a node, the engine is lean. Data nodes are `pulled`
 (evaluated on demand; the Template also fires on its trigger); work/actor nodes
-fire on a trigger input (marked `trigger=True`) and pull their data inputs (see
-boltjar.runtime).
+fire on a trigger input (an `event` marked `trigger=True`) and pull their data
+inputs when it fires: a data wire never fires a node (see boltjar.runtime).
 """
 from __future__ import annotations
 
@@ -1012,12 +1012,18 @@ class Compute:
 
 # ============================================================ logic (fired, route)
 @node(id="core.logic.condition", name="Logic", kind=Kind.LOGIC, category="Logic",
-      summary="Route a value true/false on an expression. Routes, never computes.",
+      summary="Route a turn true or false on an expression. When `trigger` fires it "
+              "reads `value` (and `condition`), passes `value` on at `value`, then "
+              "fires `true` or `false`. Routes, never computes.",
       icon="git-branch-outline", subline="route · {expression|clip:14}")
 class Logic:
     expression: Widget = code("value")
-    inputs = [Port("value", "any", trigger=True), Port("condition", "any", optional=True)]
-    outputs = [Port("true", "any"), Port("false", "any")]
+    inputs = [Port("trigger", "event", trigger=True),
+              Port("value", "any"),
+              Port("condition", "any", optional=True)]
+    # `true` / `false` are the route: an event, so the branch wires it to the next
+    # node's trigger. `value` passes the value read on this fire on to either branch.
+    outputs = [Port("true", "event"), Port("false", "event"), Port("value", "any")]
 
     def route(self, value=None, condition=None, **_):
         try:
@@ -1199,9 +1205,9 @@ class LLM:
 
 @node(id="core.ai.tool", name="Tool", kind=Kind.TRANSFORM, category="AI",
       summary="A tool the LLM can call. It declares a name, a description and its "
-              "parameters. When the model calls it, `call` carries the arguments into "
-              "the body you wired, and the answer that comes back on `result` goes "
-              "back to the model.",
+              "parameters. When the model calls it, `call` carries the arguments and "
+              "`trigger` fires the body you wired; when the body fires `result_trigger`, "
+              "the Tool reads `result` and hands it back to the model.",
       icon="construct-outline")
 class Tool:
     name: Widget = Widget(kind="text", default="my_tool", label="name")
@@ -1214,34 +1220,41 @@ class Tool:
     schema: Widget = Widget(kind="code",
                             default='{"type":"object","properties":{},"required":[]}',
                             op_field="schema_mode", op_values=("manual",))
-    inputs = [Port("result", "text", trigger=True)]
+    # the body's answer: `result_trigger` fires when it is ready and `result` is
+    # read then (the Chat node's user_trigger / user pairing).
+    inputs = [Port("result_trigger", "event", trigger=True),
+              Port("result", "text")]
     # `call` declares a scaffold: an unwired-body `call` offers a one-click "Add
     # Tool Args" that spawns + pre-wires the body node. Declarative, read
-    # generically by the editor (see boltjar.sdk.Port.scaffold).
+    # generically by the editor (see boltjar.sdk.Port.scaffold). `call` carries
+    # the model's arguments (and offers the tool on the LLM's `tools`); `trigger`
+    # fires right after it, once per call.
     outputs = [Port("call", "tool-call", scaffold="core.ai.tool_args"),
                Port("trigger", "event")]
 
     def run(self, **_):
         # The Tool node never runs on its own: its lifecycle is driven by the
-        # runtime (Ctx.call_tool emits the `call` event; a value landing on
-        # `result` is intercepted by _consume and routed to the awaiting LLM).
-        # If something falls through to this run (no waiter), do nothing.
+        # runtime (Ctx.call_tool emits `call` then `trigger`; a fire of
+        # `result_trigger` is intercepted by _consume, which reads `result` and
+        # hands it to the awaiting LLM). With no call waiting, do nothing.
         return {}
 
 
 @node(id="core.ai.tool_args", name="Tool Args", kind=Kind.TRANSFORM, category="AI",
-      summary="Where a tool's body starts. It runs when the model calls the tool: "
-              "it splits `call` into one typed output per argument and fires `trigger` "
-              "to run the rest of the body. Its field names are also the tool's "
-              "parameters (in auto mode the Tool builds its schema from them). Wire "
-              "the body's answer back into the Tool's `result`.",
+      summary="Where a tool's body starts. It runs when the Tool's `trigger` fires "
+              "(the model called the tool): it reads `call`, splits it into one output "
+              "per argument and fires `trigger` to run the rest of the body. Its field "
+              "names are also the tool's parameters (in auto mode the Tool builds its "
+              "schema from them). Wire the body's answer back into the Tool's `result` "
+              "and its trigger into `result_trigger`.",
       icon="log-in-outline")
 class ToolArgs:
     fields: Widget = Widget(kind="text", default="", label="Arguments",
                             placeholder="location, unit")
-    # `call` is a TRIGGER: a value landing here (the model invoking the tool) fires
-    # this node, so the body runs once per call.
-    inputs = [Port("call", "tool-call", trigger=True)]
+    # the Tool's `trigger` fires this node once per call; `call` is data (the
+    # model's arguments), read at that moment.
+    inputs = [Port("trigger", "event", trigger=True),
+              Port("call", "tool-call")]
     # `trigger` drives the body; the per-argument outputs are reshaped by the editor
     # from `fields` (one socket each). Mirrors Split JSON, plus the trigger.
     outputs = [Port("trigger", "event")]
@@ -2910,55 +2923,45 @@ class Http:
 
 # ============================================================ outputs (sinks)
 @node(id="core.output.log", name="Log", kind=Kind.OUTPUT, category="Inspect",
-      summary="Write the incoming value to the editor console and the server terminal.",
+      summary="Write a value to the editor console and the server terminal. When "
+              "`trigger` fires it reads `in`, writes it, then passes the trigger on.",
       icon="terminal-outline", subline="log · {label|clip:14}")
 class Log:
     label: str = "log"
-    inputs = [Port("in", "any", trigger=True)]
+    # `trigger` fires the write; `in` is data, read at that moment.
+    inputs = [Port("trigger", "event", trigger=True),
+              Port("in", "any")]
     outputs = [Port("trigger", "event")]
 
     def deliver(self, value, ctx, inputs=None):
         # the editor gets the value whole; the terminal prints the same line
         # summarized (a clip or an image as its type, size and length, long text cut).
-        ctx.log(f"{self.label}: {value}", echo=True)
+        ctx.log(f"{self.label}: {(inputs or {}).get('in')}", echo=True)
         return {"trigger": True}
 
 
 @node(id="core.output.preview", name="Preview", kind=Kind.OUTPUT, category="Inspect",
       summary="Tap a wire and show its value live, drawn to suit its type. It sits "
-              "mid-flow: when `trigger` fires it passes `in` on at `out`, then passes the "
-              "trigger on.",
+              "mid-flow: when `trigger` fires it reads `in`, shows it, passes it on at "
+              "`out`, then passes the trigger on.",
       icon="eye-outline", subline="preview · live tap")
 class Preview:
     # A transparent tap, so it can sit in the MIDDLE of a flow (in -> preview ->
-    # out). `in` is the value to show and fires the node so a tap updates live;
-    # it emits nothing (a value arriving is not a control event). `trigger` (e.g.
-    # an LLM's done) must be wired: it re-emits the latest `in` on `out`, then
-    # forwards exactly one `trigger`. Wiring one source into both (value, then
-    # done) therefore passes one value and one trigger per turn, never two.
-    inputs = [Port("in", "any", trigger=True),
-              Port("trigger", "event", trigger=True)]
+    # out). `trigger` (e.g. an LLM's done) fires it; `in` is data, read at that
+    # moment, so one fire shows one value and passes on one value and exactly one
+    # trigger, never two.
+    inputs = [Port("trigger", "event", trigger=True),
+              Port("in", "any")]
     outputs = [Port("out", "any"), Port("trigger", "event")]
     # disabled, Preview wires through (in -> out, trigger -> trigger) so it can be
     # bypassed mid-flow without breaking the line.
     bypass = {"in": "out", "trigger": "trigger"}
 
     def deliver(self, value, ctx, inputs=None):
-        # the runtime sets `_fired_port` before deliver; a value handed straight
-        # to deliver with no port named is a tap on `in`.
-        if getattr(self, "_fired_port", "in") != "trigger":
-            ctx.log(f"preview: {value}")
-            self._in_since_trigger = True
-            return {}
-        # a `trigger` fire: `in` was latched by its own fire, or (fed by a PULLED
-        # source such as a Text, which never fires `in`) is pulled right now. Emit
-        # it on `out` BEFORE the trigger so a consumer fired by the trigger reads
-        # it. Log it only when no `in` fire has already logged it since the last
-        # trigger (the value came by pull), so the console shows each value once.
+        # emit `in` on `out` BEFORE the trigger, so a consumer the trigger fires
+        # reads this fire's value.
         in_val = (inputs or {}).get("in")
-        if not getattr(self, "_in_since_trigger", False):
-            ctx.log(f"preview: {in_val}")
-        self._in_since_trigger = False
+        ctx.log(f"preview: {in_val}")
         return {"out": in_val, "trigger": True}
 
 
@@ -3172,11 +3175,12 @@ class Wait:
 
 @node(id="core.flow.queue", name="Queue", kind=Kind.TRANSFORM, category="Flow",
       opens_turn=True,
-      summary="Run many producers through one lane. Each arrival on `in` waits in "
-              "a buffer, `out` releases one item, and the next goes only when `ack` "
-              "fires, so two turns reach a shared LLM one after the other. Both "
-              "triggers must be wired: the producers into `in`, and the node that ends "
-              "the turn into `ack`.",
+      summary="Run many producers through one lane. Each fire on a `trigger` socket "
+              "queues an item: the `in` socket wired from the same producer, else that "
+              "trigger's own payload. One item is released at a time (`out`, then "
+              "`trigger`), and the next goes only when `ack` fires, so two turns reach a "
+              "shared LLM one after the other. The producers' triggers and the node that "
+              "ends the turn (into `ack`) must be wired.",
       icon="file-tray-stacked-outline")
 class Queue:
     # a watchdog so a job whose `ack` never fires (a tool body that raised, a broken
@@ -3185,13 +3189,17 @@ class Queue:
     # forever (strict backpressure). A real turn finishes well under the default.
     timeout: Widget = Widget(kind="number", default=300, min=0, max=86400, step=10,
                              label="ack timeout (s, 0 = wait forever)")
-    # growable trigger `in`: every producer pushes here (Chat, Audio, Interval, ...),
-    # each on a socket named after it. `ack` is the back-edge: 'the current job
-    # finished, release the next'. Both must be wired.
-    inputs = [Port("in", "any", growable=True, trigger=True, ghost_base="in"),
+    # growable `trigger`: every producer fires here (Chat, Audio, Interval, ...),
+    # each on its own socket (trigger0, trigger1, ...). Growable `in` is data: a
+    # producer's item, read when that producer's trigger fires (in0, in1, ...).
+    # `ack` is the back-edge: 'the current job finished, release the next'. The
+    # triggers and `ack` must be wired.
+    inputs = [Port("trigger", "event", growable=True, trigger=True),
+              Port("in", "any", growable=True, optional=True),
               Port("ack", "event", trigger=True)]
-    # `out` is the released item (same shape in as out); `count` is the pending depth.
-    outputs = [Port("out", "any"), Port("count", "int")]
+    # `out` is the released item (same shape in as out), then `trigger` fires the
+    # job; `count` is the pending depth.
+    outputs = [Port("out", "any"), Port("count", "int"), Port("trigger", "event")]
 
     def __init__(self):
         self._buf: list = []
@@ -3210,9 +3218,9 @@ class Queue:
         if fired == "ack":
             self._busy = False               # the lane is free again
         elif fired:
-            # a socket of `in` fired: buffer its payload with the run it came
-            # from (a held webhook call), so the job runs in that run when released
-            self._buf.append((ins.get(fired), ctx.scope if ctx is not None else None))
+            # a `trigger` socket fired: buffer its item with the run it came from
+            # (a held webhook call), so the job runs in that run when released
+            self._buf.append((self._item(fired, ins, ctx), ctx.scope if ctx is not None else None))
         # release the FIFO head only when the lane is free; opens_turn means the
         # released job runs on a fresh epoch (re-pulls / the LLM re-runs per item).
         if not self._busy and self._buf:
@@ -3221,8 +3229,22 @@ class Queue:
                 ctx.carry_scope(scope)
             self._busy = True
             self._busy_since = time.monotonic()
-            return {"out": item, "count": len(self._buf)}
+            return {"out": item, "count": len(self._buf), "trigger": True}
         return {"count": len(self._buf)}
+
+    def _item(self, fired: str, ins: dict, ctx):
+        """What an arrival on the `trigger` socket `fired` queues: the `in` socket
+        wired from the node that fired it (its data, read on this fire), else the
+        trigger's own payload (a Chat's trigger carries its text)."""
+        source = ctx.source_of(fired) if ctx is not None else None
+        if source is not None:
+            spec = type(self)._spec
+            promoted = (getattr(self, "_node_cfg", None) or {}).get("promoted") or ()
+            data = next(p for p in spec.inputs if p.name == "in")
+            for name, value in ins.items():
+                if spec.growable_base(name, promoted) is data and ctx.source_of(name) == source:
+                    return value
+        return ins.get(fired)
 
 
 @node(id="core.output.chat", name="Chat", kind=Kind.OUTPUT, category="Inspect",

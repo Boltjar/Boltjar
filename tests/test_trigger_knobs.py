@@ -128,7 +128,8 @@ def _hook(knobs: dict, promoted: list[str], sources: list[dict]) -> dict:
     config = {"path": "foo", "method": "POST", "secret": "", **knobs, "promoted": promoted}
     nodes = [{"id": "hook", "type": "core.trigger.webhook", "config": config},
              {"id": "log", "type": "core.output.log", "config": {}}]
-    edges = [{"src": "hook", "src_port": "trigger", "dst": "log", "dst_port": "in"}]
+    edges = [{"src": "hook", "src_port": "trigger", "dst": "log", "dst_port": "trigger"},
+             {"src": "hook", "src_port": "trigger", "dst": "log", "dst_port": "in"}]
     for source in sources:
         nodes.append(source["node"])
         edges.append({"src": source["node"]["id"], "src_port": source["port"],
@@ -191,7 +192,8 @@ def test_a_call_reads_the_secret_wire_of_the_webhook_it_is_for_only():
                                       "promoted": ["secret"]}})
     graph["nodes"].append({"id": "count", "type": "test.trigger_knobs.counted", "config": {}})
     graph["edges"] += [{"src": "count", "src_port": "out", "dst": "other", "dst_port": "secret"},
-                       {"src": "other", "src_port": "trigger", "dst": "log", "dst_port": "in"}]
+                       {"src": "other", "src_port": "trigger", "dst": "log", "dst_port": "in"},
+                       {"src": "other", "src_port": "trigger", "dst": "log", "dst_port": "trigger"}]
     assert validate_graph(graph) == []
     slug = "wh-secret-read-once"
     ws = _power_on(slug, graph)

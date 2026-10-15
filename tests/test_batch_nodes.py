@@ -92,6 +92,7 @@ def test_list_is_pulled_end_to_end() -> None:
             {"src": "cmp", "src_port": "out", "dst": "llm", "dst_port": "prompt"},
             {"src": "fire", "src_port": "trigger", "dst": "llm", "dst_port": "trigger"},
             {"src": "llm", "src_port": "response", "dst": "out", "dst_port": "in"},
+            {"src": "llm", "src_port": "trigger", "dst": "out", "dst_port": "trigger"},
         ],
     }
     assert any("3" in e["message"] for e in logs(run_graph(graph))), "List of 3 must reach the puller"
@@ -125,6 +126,7 @@ def test_for_each_dispenses_in_order_then_after_last() -> None:
             {"src": "fe", "src_port": "item", "dst": "llm", "dst_port": "prompt"},
             {"src": "llm", "src_port": "trigger", "dst": "fe", "dst_port": "loop"},
             {"src": "fe", "src_port": "after_last", "dst": "done", "dst_port": "in"},
+            {"src": "fe", "src_port": "after_last", "dst": "done", "dst_port": "trigger"},
         ],
     }
     events = run_graph(graph)
@@ -224,6 +226,7 @@ def test_for_each_fresh_epoch_repulls_per_item() -> None:
             {"src": "body", "src_port": "out", "dst": "llm", "dst_port": "prompt"},
             {"src": "fe", "src_port": "each", "dst": "llm", "dst_port": "trigger"},
             {"src": "llm", "src_port": "response", "dst": "log", "dst_port": "in"},
+            {"src": "llm", "src_port": "trigger", "dst": "log", "dst_port": "trigger"},
             # back-edge: the LLM's done releases the next item.
             {"src": "llm", "src_port": "trigger", "dst": "fe", "dst_port": "loop"},
         ],
@@ -297,6 +300,7 @@ def test_sync_barrier_real_fire_path() -> None:
             {"src": "fea", "src_port": "after_last", "dst": "sy", "dst_port": "in_0"},
             {"src": "feb", "src_port": "after_last", "dst": "sy", "dst_port": "in_1"},
             {"src": "sy", "src_port": "out", "dst": "out", "dst_port": "in"},
+            {"src": "sy", "src_port": "out", "dst": "out", "dst_port": "trigger"},
         ],
     }
     fired = [e for e in logs(run_graph(graph)) if e["node"] == "out"]
@@ -315,7 +319,8 @@ def test_sync_counts_a_socket_whatever_it_is_named() -> None:
                   {"id": "out", "type": "core.output.log", "config": {"label": "both"}}],
         "edges": [{"src": "a", "src_port": "trigger", "dst": "sy", "dst_port": "left"},
                   {"src": "b", "src_port": "trigger", "dst": "sy", "dst_port": "in0"},
-                  {"src": "sy", "src_port": "out", "dst": "out", "dst_port": "in"}],
+                  {"src": "sy", "src_port": "out", "dst": "out", "dst_port": "in"},
+                  {"src": "sy", "src_port": "out", "dst": "out", "dst_port": "trigger"}],
     })
 
     async def drive() -> list[str]:
@@ -385,6 +390,7 @@ def test_wait_paces_for_each_loop() -> None:
             {"src": "fe", "src_port": "each", "dst": "w", "dst_port": "trigger"},
             {"src": "w", "src_port": "trigger", "dst": "fe", "dst_port": "loop"},
             {"src": "fe", "src_port": "after_last", "dst": "done", "dst_port": "in"},
+            {"src": "fe", "src_port": "after_last", "dst": "done", "dst_port": "trigger"},
         ],
     }
     events = run_graph(graph)

@@ -38,6 +38,7 @@ def _graph(path: str = "foo", method: str = "POST", secret: str = "",
     ]
     edges = [
         {"src": "hook", "src_port": "trigger", "dst": "log", "dst_port": "in"},
+        {"src": "hook", "src_port": "trigger", "dst": "log", "dst_port": "trigger"},
     ]
     if nodes_extra:
         nodes.extend(nodes_extra)
@@ -316,7 +317,9 @@ def test_multiple_webhooks_route_by_path():
         ],
         "edges": [
             {"src": "hook_a", "src_port": "trigger", "dst": "log_a", "dst_port": "in"},
+            {"src": "hook_a", "src_port": "trigger", "dst": "log_a", "dst_port": "trigger"},
             {"src": "hook_b", "src_port": "trigger", "dst": "log_b", "dst_port": "in"},
+            {"src": "hook_b", "src_port": "trigger", "dst": "log_b", "dst_port": "trigger"},
         ],
     }
     ws = _power_on(slug, graph)

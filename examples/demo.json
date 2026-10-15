@@ -15,6 +15,7 @@
     { "src": "Changes",       "src_port": "out",      "dst": "Prompt", "dst_port": "changes" },
     { "src": "Prompt",        "src_port": "trigger",  "dst": "LLM",    "dst_port": "trigger" },
     { "src": "Prompt",        "src_port": "out",      "dst": "LLM",    "dst_port": "prompt" },
+    { "src": "LLM",           "src_port": "trigger",  "dst": "Log",    "dst_port": "trigger" },
     { "src": "LLM",           "src_port": "response", "dst": "Log",    "dst_port": "in" }
   ]
 }

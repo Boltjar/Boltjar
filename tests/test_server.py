@@ -22,7 +22,8 @@ def test_websocket_runs_a_graph() -> None:
             {"id": "m", "type": "core.trigger.manual"},
             {"id": "log", "type": "core.output.log", "config": {"label": "t"}},
         ],
-        "edges": [{"src": "m", "src_port": "trigger", "dst": "log", "dst_port": "in"}],
+        "edges": [{"src": "m", "src_port": "trigger", "dst": "log", "dst_port": "trigger"},
+                  {"src": "m", "src_port": "trigger", "dst": "log", "dst_port": "in"}],
     }
     with client.websocket_connect("/ws") as ws:
         # On connect the hub sends the current status (off) + the (empty) live_graph
@@ -30,7 +31,11 @@ def test_websocket_runs_a_graph() -> None:
         # live_graph set. Drain a bounded number of frames until we've seen the run
         # events (frame-count-agnostic so protocol additions don't break the test).
         ws.send_json({"action": "on", "graph": graph})
-        events = [ws.receive_json() for _ in range(8)]
+        events = []
+        for _ in range(16):
+            events.append(ws.receive_json())
+            if any(e.get("kind") == "log" for e in events):
+                break
         ws.send_json({"action": "off"})
     assert any(e.get("kind") == "value" for e in events)
     assert any(e.get("kind") == "log" for e in events)
@@ -168,7 +173,8 @@ def test_runtime_survives_subscriber_disconnect() -> None:
                 {"id": "m", "type": "core.trigger.manual"},
                 {"id": "log", "type": "core.output.log", "config": {"label": "t"}},
             ],
-            "edges": [{"src": "m", "src_port": "trigger", "dst": "log", "dst_port": "in"}],
+            "edges": [{"src": "m", "src_port": "trigger", "dst": "log", "dst_port": "trigger"},
+                      {"src": "m", "src_port": "trigger", "dst": "log", "dst_port": "in"}],
         }
 
         # First subscriber turns the graph on.
@@ -337,6 +343,7 @@ def test_validate_edges_accepts_llm_reshaped_ports() -> None:
         {"src": "img", "src_port": "out", "dst": "llm", "dst_port": "image"},
         {"src": "t", "src_port": "out", "dst": "llm", "dst_port": "temperature"},
         {"src": "llm", "src_port": "tool_call", "dst": "log", "dst_port": "in"},
+        {"src": "llm", "src_port": "trigger", "dst": "log", "dst_port": "trigger"},
     ]}
     offenders = [p for p in validate_graph(graph)
                  if p["kind"] in ("bad-source-port", "bad-target-port", "type-mismatch")]

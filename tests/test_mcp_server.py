@@ -68,10 +68,10 @@ def test_list_node_types_is_condensed_schema():
     # growable, so an author knows what to wire before validate_graph says so.
     preview = next(n for n in cat if n["id"] == "core.output.preview")
     assert [p for p in preview["ports"] if p["direction"] == "in"] == [
-        {"name": "in", "type": "any", "direction": "in",
-         "trigger": True, "optional": False, "growable": False},
         {"name": "trigger", "type": "event", "direction": "in",
-         "trigger": True, "optional": False, "growable": False}]
+         "trigger": True, "optional": False, "growable": False},
+        {"name": "in", "type": "any", "direction": "in",
+         "trigger": False, "optional": False, "growable": False}]
     sync = next(n for n in cat if n["id"] == "core.flow.sync")
     assert {"name": "in", "type": "event", "direction": "in",
             "trigger": True, "optional": False, "growable": True} in sync["ports"]

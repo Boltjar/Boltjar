@@ -634,7 +634,8 @@ def _run_llm(model: str, prompt: str = "hi") -> dict:
                   {"id": "out", "type": "core.output.log"}],
         "edges": [{"src": "chat", "src_port": "trigger", "dst": "llm", "dst_port": "trigger"},
                   {"src": "chat", "src_port": "text", "dst": "llm", "dst_port": "prompt"},
-                  {"src": "llm", "src_port": "response", "dst": "out", "dst_port": "in"}],
+                  {"src": "llm", "src_port": "response", "dst": "out", "dst_port": "in"},
+                  {"src": "llm", "src_port": "trigger", "dst": "out", "dst_port": "trigger"}],
     }
     events: list[dict] = []
     rt = Runtime(observer=events.append)

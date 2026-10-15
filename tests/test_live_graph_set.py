@@ -22,7 +22,8 @@ GRAPH = {
         {"id": "m", "type": "core.trigger.manual"},
         {"id": "log", "type": "core.output.log", "config": {"label": "t"}},
     ],
-    "edges": [{"src": "m", "src_port": "trigger", "dst": "log", "dst_port": "in"}],
+    "edges": [{"src": "m", "src_port": "trigger", "dst": "log", "dst_port": "trigger"},
+              {"src": "m", "src_port": "trigger", "dst": "log", "dst_port": "in"}],
 }
 
 
@@ -44,7 +45,7 @@ def test_live_graph_broadcast_on_power_on() -> None:
         ws.send_json({"action": "on", "graph": GRAPH})
         lg = _drain_until(ws, "live_graph")
         assert set(lg["nodes"]) == {"m", "log"}
-        assert lg["edges"] == [["m", "trigger", "log", "in"]]
+        assert lg["edges"] == [["m", "trigger", "log", "trigger"], ["m", "trigger", "log", "in"]]
         ws.send_json({"action": "off"})
 
 
@@ -64,7 +65,7 @@ def test_connect_replays_current_live_set() -> None:
             assert status["kind"] == "status" and status["power"] == "on"
             lg = _drain_until(ws_b, "live_graph")
             assert set(lg["nodes"]) == {"m", "log"}
-            assert lg["edges"] == [["m", "trigger", "log", "in"]]
+            assert lg["edges"] == [["m", "trigger", "log", "trigger"], ["m", "trigger", "log", "in"]]
 
         ws_a.send_json({"action": "off"})
 

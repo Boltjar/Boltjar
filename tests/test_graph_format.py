@@ -29,7 +29,8 @@ GRAPH = {
         {"id": "m", "type": "core.trigger.manual", "config": {}},
         {"id": "lg", "type": "core.output.log", "config": {"label": "o"}},
     ],
-    "edges": [{"src": "m", "src_port": "trigger", "dst": "lg", "dst_port": "in"}],
+    "edges": [{"src": "m", "src_port": "trigger", "dst": "lg", "dst_port": "trigger"},
+              {"src": "m", "src_port": "trigger", "dst": "lg", "dst_port": "in"}],
 }
 
 

@@ -87,6 +87,7 @@ def test_generic_node_uses_wired_value_over_config() -> None:
             {"src": "c", "src_port": "out", "dst": "llm", "dst_port": "prompt"},
             {"src": "fire", "src_port": "trigger", "dst": "llm", "dst_port": "trigger"},
             {"src": "llm", "src_port": "response", "dst": "out", "dst_port": "in"},
+            {"src": "llm", "src_port": "trigger", "dst": "out", "dst_port": "trigger"},
         ],
     }
     out = logs(run_graph(graph))
@@ -113,6 +114,7 @@ def test_generic_node_keeps_config_when_input_unwired() -> None:
             {"src": "c", "src_port": "out", "dst": "llm", "dst_port": "prompt"},
             {"src": "fire", "src_port": "trigger", "dst": "llm", "dst_port": "trigger"},
             {"src": "llm", "src_port": "response", "dst": "out", "dst_port": "in"},
+            {"src": "llm", "src_port": "trigger", "dst": "out", "dst_port": "trigger"},
         ],
     }
     out = logs(run_graph(graph))
@@ -139,6 +141,7 @@ def test_llm_promoted_param_still_overrides_at_runtime() -> None:
             {"src": "fire", "src_port": "trigger", "dst": "llm", "dst_port": "trigger"},
             {"src": "t", "src_port": "out", "dst": "llm", "dst_port": "temperature"},
             {"src": "llm", "src_port": "response", "dst": "out", "dst_port": "in"},
+            {"src": "llm", "src_port": "trigger", "dst": "out", "dst_port": "trigger"},
         ],
     }
     events = run_graph(graph)

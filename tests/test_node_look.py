@@ -24,14 +24,18 @@ FIXTURE = pathlib.Path(__file__).resolve().parent.parent / "editor" / "test" / "
 
 
 def _look(d: dict) -> dict:
-    """The part of a served definition the editor's icon, subline, knob rows and
-    palette search read (editor/test/knob-rows.test.mjs and node-search.test.mjs
-    read the same file)."""
+    """The part of a served definition the editor's icon, subline, knob rows,
+    palette search and graph migration read (editor/test/knob-rows.test.mjs,
+    node-search.test.mjs and graph-format.test.mjs read the same file)."""
     return {
         "id": d["id"], "name": d["name"], "kind": d["kind"], "category": d["category"],
         "summary": d["summary"],
         "icon": d["icon"], "subline": d["subline"],
-        "inputs": [{"name": p["name"], "growable": p["growable"]} for p in d["inputs"]],
+        "inputs": [{"name": p["name"], "type": p["type"], "growable": p["growable"],
+                    "trigger": p["trigger"], "optional": p["optional"]} for p in d["inputs"]],
+        "outputs": [{"name": p["name"], "type": p["type"], "optional": p["optional"]}
+                    for p in d["outputs"]],
+        "bypass": d["bypass"],
         "widgets": [{"name": w["name"], "kind": w["kind"], "label": w["label"],
                      "default": w["default"], "surface": w["surface"],
                      "promotable": w["promotable"], "op_field": w["op_field"],

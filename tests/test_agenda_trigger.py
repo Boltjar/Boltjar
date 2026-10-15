@@ -45,6 +45,7 @@ def _graph():
         "edges": [
             {"src": DB_KEY, "src_port": "db", "dst": "ag", "dst_port": "db"},
             {"src": "ag", "src_port": "due", "dst": "lg", "dst_port": "in"},
+            {"src": "ag", "src_port": "due", "dst": "lg", "dst_port": "trigger"},
         ],
     }
 
