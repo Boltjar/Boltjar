@@ -6,6 +6,7 @@
 // ============================================================================
 import type { Edge, Node, XYPosition } from "@xyflow/react";
 import type { Graph, GraphEdge, GraphNode, ModelManifest, NodeDef } from "../types/protocol";
+import { keyOf, TriggerWalk, type PortRef } from "./triggerWalk";
 import { DB_ID, KV_ID, LLM_ID, llmInputType, llmOutputType, nodePromoted, promotedParamType, widgetPortType } from "./dynamicPorts";
 
 /** Data carried on each React Flow node: enough to render the card. */
@@ -220,11 +221,6 @@ const FIRED_BY_DATA: Record<string, [string, string]> = {
 };
 const QUEUE_ID = "core.flow.queue";
 const LOGIC_ID = "core.logic.condition";
-const ROUTER_TYPE = "core.flow.router";
-const WIRELESS_IN_TYPE = "core.flow.wireless_in";
-const WIRELESS_OUT_TYPE = "core.flow.wireless_out";
-
-type PortRef = [string, string];
 
 /** Whether `port` of a node of `def` is a trigger input (format 3 shape): a
  *  declared port says so itself; any other socket belongs to the growable
@@ -264,57 +260,10 @@ export function migrateTriggers(
   edges: readonly GraphEdge[],
   defs: ReadonlyMap<string, NodeDef>,
 ): GraphEdge[] {
-  const byId = new Map(nodes.map((n) => [n.id, n]));
-  const key = (node: string, port: string) => `${node}\u0000${port}`;
-  // each wired input -> its source, the last wire winning as on the server
-  const into = new Map<string, PortRef>();
-  const inputs = new Map<string, PortRef>(); // the same keys -> [dst, dst_port]
-  for (const e of edges) {
-    into.set(key(e.dst, e.dst_port), [e.src, e.src_port]);
-    inputs.set(key(e.dst, e.dst_port), [e.dst, e.dst_port]);
-  }
-  const intoNode = (id: string): [string, PortRef][] =>
-    [...inputs].filter(([, [dst]]) => dst === id).map(([k, [, port]]) => [port, into.get(k)!]);
-  const wirelessIn = new Map<string, string>();
-  for (const n of nodes) {
-    const channel = String(n.config?.channel ?? "1");
-    if (n.type === WIRELESS_IN_TYPE && !wirelessIn.has(channel)) wirelessIn.set(channel, n.id);
-  }
-  const defOf = (id: string) => defs.get(byId.get(id)?.type ?? "");
-  const outType = (def: NodeDef | undefined, port: string) => def?.outputs.find((p) => p.name === port)?.type;
-
-  /** The trigger that fires when (src, port) carries a new value; see
-   *  trigger_for in boltjar/graph_format.py. */
-  const triggerFor = (src: string, port: string, seen: ReadonlySet<string> = new Set()): PortRef | null => {
-    const node = byId.get(src);
-    if (!node || seen.has(key(src, port))) return null;
-    const next = new Set(seen).add(key(src, port));
-    const def = defOf(src);
-    if (node.type === WIRELESS_OUT_TYPE) {
-      const wi = wirelessIn.get(String(node.config?.channel ?? "1"));
-      const up = wi ? into.get(key(wi, port)) : undefined;
-      const found = up ? triggerFor(up[0], up[1], next) : null;
-      if (!found) return null;
-      const socket = intoNode(wi!).find(([, s]) => s[0] === found[0] && s[1] === found[1]);
-      return socket ? [src, socket[0]] : found;
-    }
-    if (!def) return null;
-    if (node.disabled || node.type === ROUTER_TYPE) {
-      const inPort = Object.entries(def.bypass ?? {}).find(([, o]) => o === port)?.[0];
-      const up = inPort ? into.get(key(src, inPort)) : undefined;
-      return up ? triggerFor(up[0], up[1], next) : null;
-    }
-    if (outType(def, port) === "event") return [src, port];
-    if (outType(def, "trigger") === "event") return [src, "trigger"];
-    const events = def.outputs.filter((p) => p.type === "event" && !p.optional).map((p) => p.name);
-    if (events.length) return events.length === 1 ? [src, events[0]] : null;
-    const found = new Map<string, PortRef>();
-    for (const [, [s, p]] of intoNode(src)) {
-      const t = triggerFor(s, p, next);
-      if (t) found.set(key(t[0], t[1]), t);
-    }
-    return found.size === 1 ? [...found.values()][0] : null;
-  };
+  const walk = new TriggerWalk(nodes, edges, defs);
+  const { byId, into } = walk;
+  const key = keyOf;
+  const triggerFor = (src: string, port: string) => walk.triggerFor(src, port);
 
   // every decision reads the graph as saved; the changes are applied after
   const renames = new Map<number, Partial<GraphEdge>>();
@@ -342,12 +291,17 @@ export function migrateTriggers(
       renames.set(i, { src_port: "trigger" });
     }
   });
-  for (const n of nodes) {
-    if (n.type !== QUEUE_ID) continue;
+  const sockets = new Map<string, number[]>();
+  edges.forEach((e, i) => {
+    if (byId.get(e.dst)?.type === QUEUE_ID) sockets.set(e.dst, [...(sockets.get(e.dst) ?? []), i]);
+  });
+  for (const [id, queueWires] of sockets) {
+    const n = byId.get(id)!;
     const promoted = new Set(nodePromoted(n.config ?? {}));
     let k = 0;
-    edges.forEach((e, i) => {
-      if (e.dst !== n.id || e.dst_port === "ack" || promoted.has(e.dst_port)) return;
+    queueWires.forEach((i) => {
+      const e = edges[i];
+      if (e.dst_port === "ack" || promoted.has(e.dst_port)) return;
       while (wired.has(key(n.id, `trigger${k}`)) || wired.has(key(n.id, `in${k}`))) k += 1;
       const trigger = triggerFor(e.src, e.src_port);
       if (trigger && trigger[0] === e.src && trigger[1] === e.src_port) {

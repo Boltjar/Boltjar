@@ -66,6 +66,146 @@ _WIRELESS_OUT = "core.flow.wireless_out"
 _WIRE_KEYS = ("src", "src_port", "dst", "dst_port")
 
 
+# the TriggerWalk's marker for a (node, port) whose trigger is being worked out
+_ACTIVE = object()
+
+
+class TriggerWalk:
+    """The wires of a saved graph, and the trigger behind any output of it.
+
+    trigger_for(src, port) is the trigger that fires when (src, port) carries a
+    new value: the port itself when it is an event, else the node's `trigger`
+    output, else its one event output. Through a Router, a bypassed node or a
+    Wireless pair it is found at the real source; for a data node with no event
+    output it is the one trigger behind all of its wired inputs. None when it
+    cannot be told, a cycle included.
+
+    The walk is iterative and memoized over the whole graph: each (node, port)
+    is worked out once, so a graph of any size or shape (an opened file can be
+    anything) migrates in time linear in its wires and never recurses."""
+
+    def __init__(self, graph: dict, spec_of: Callable) -> None:
+        self.spec_of = spec_of
+        self.nodes = {n["id"]: n for n in graph.get("nodes") or []
+                      if isinstance(n, dict) and isinstance(n.get("id"), str)}
+        self.wires = [(i, e) for i, e in enumerate(graph.get("edges") or [])
+                      if isinstance(e, dict) and all(isinstance(e.get(k), str) for k in _WIRE_KEYS)]
+        # each wired input -> its source, the last wire winning as in the runtime
+        self.into = {(e["dst"], e["dst_port"]): (e["src"], e["src_port"]) for _i, e in self.wires}
+        # node -> [(its input port, (source, source port))]
+        self.inputs: dict[str, list[tuple[str, tuple[str, str]]]] = {}
+        for (dst, dp), src in self.into.items():
+            self.inputs.setdefault(dst, []).append((dp, src))
+        self.wireless_in: dict[str, str] = {}
+        for nid, n in self.nodes.items():
+            if n.get("type") == _WIRELESS_IN:
+                self.wireless_in.setdefault(_channel(n), nid)
+        self._memo: dict[tuple[str, str], object] = {}
+
+    def spec(self, nid: str):
+        return self.spec_of(self.nodes[nid].get("type")) if nid in self.nodes else None
+
+    def upstream(self, src: str, port: str):
+        """The wire (source, source port) a pass-through output (a Router, a
+        bypassed node, a Wireless Out) carries on, None when it carries
+        nothing; False when (src, port) is no pass-through."""
+        node = self.nodes.get(src)
+        if node is None:
+            return None
+        if node.get("type") == _WIRELESS_OUT:
+            wi = self.wireless_in.get(_channel(node))
+            return self.into.get((wi, port)) if wi else None
+        if node.get("disabled") or node.get("type") == _ROUTER:
+            sp = self.spec(src)
+            if sp is None:
+                return None
+            in_port = next((i for i, o in sp.bypass.items() if o == port), None)
+            return self.into.get((src, in_port)) if in_port else None
+        return False
+
+    def source(self, src: str, port: str):
+        """The real (node, port) behind an output, through any pass-throughs, or
+        None when the wire carries nothing."""
+        seen = set()
+        while (src, port) not in seen:
+            seen.add((src, port))
+            up = self.upstream(src, port)
+            if up is False:
+                return (src, port)
+            if up is None:
+                return None
+            src, port = up
+        return None  # a pass-through cycle carries nothing
+
+    def _plan(self, key: tuple[str, str]):
+        """("done", trigger) or ("deps", [keys], combine) for one output."""
+        src, port = key
+        node = self.nodes.get(src)
+        if node is None:
+            return ("done", None)
+        up = self.upstream(src, port)
+        if up is None:
+            return ("done", None)
+        if up is not False:
+            if node.get("type") != _WIRELESS_OUT:
+                return ("deps", [up], lambda found: found[0])
+            wi = self.wireless_in.get(_channel(node))
+
+            def through_pair(found, src=src, wi=wi):
+                # the same trigger through this pair, when the Wireless In carries it
+                if found[0] is None:
+                    return None
+                socket = next((dp for dp, s in self.inputs.get(wi, ()) if s == found[0]), None)
+                return (src, socket) if socket else found[0]
+            return ("deps", [up], through_pair)
+        sp = self.spec(src)
+        if sp is None:
+            return ("done", None)
+        if _out_type(sp, port) == "event":
+            return ("done", (src, port))
+        if _out_type(sp, "trigger") == "event":
+            return ("done", (src, "trigger"))
+        events = [p.name for p in sp.outputs if p.type == "event" and not p.optional]
+        if events:
+            return ("done", (src, events[0]) if len(events) == 1 else None)
+
+        def the_one(found):
+            distinct = {f for f in found if f is not None}
+            return distinct.pop() if len(distinct) == 1 else None
+        return ("deps", [s for _dp, s in self.inputs.get(src, ())], the_one)
+
+    def trigger_for(self, src: str, port: str):
+        memo = self._memo
+        root = (src, port)
+        stack: list[list] = [[root, None]]
+        while stack:
+            frame = stack[-1]
+            key, plan = frame
+            if plan is None:
+                if key in memo:  # worked out, or under way higher up (a cycle)
+                    stack.pop()
+                    continue
+                plan = self._plan(key)
+                if plan[0] == "done":
+                    memo[key] = plan[1]
+                    stack.pop()
+                    continue
+                memo[key] = _ACTIVE
+                frame[1] = plan
+                stack.extend([dep, None] for dep in plan[1] if dep not in memo)
+                continue
+            found = [None if memo.get(dep, None) is _ACTIVE else memo.get(dep) for dep in plan[1]]
+            memo[key] = plan[2](found)
+            stack.pop()
+        result = memo.get(root)
+        return None if result is _ACTIVE else result
+
+
+def _channel(node: dict) -> str:
+    config = node.get("config")
+    return str((config if isinstance(config, dict) else {}).get("channel", "1"))
+
+
 def _from_2(graph: dict) -> dict:
     """Format 3: a data wire never fires a node (see migrate_triggers)."""
     import boltjar.nodes.core  # noqa: F401  the walk reads the core node specs
@@ -107,56 +247,10 @@ def migrate_triggers(graph: dict, spec_of: Callable) -> dict:
 
     A trigger that cannot be told stays unwired: the graph loads, and
     validation names the trigger, so the person wires it."""
-    nodes = {n["id"]: n for n in graph.get("nodes") or []
-             if isinstance(n, dict) and isinstance(n.get("id"), str)}
     edges = list(graph.get("edges") or [])
-    wires = [(i, e) for i, e in enumerate(edges)
-             if isinstance(e, dict) and all(isinstance(e.get(k), str) for k in _WIRE_KEYS)]
-    into = {(e["dst"], e["dst_port"]): (e["src"], e["src_port"]) for _i, e in wires}
-    wireless_in: dict[str, str] = {}
-    for nid, n in nodes.items():
-        if n.get("type") == _WIRELESS_IN:
-            wireless_in.setdefault(str((n.get("config") or {}).get("channel", "1")), nid)
-
-    def spec(nid: str):
-        return spec_of(nodes[nid].get("type")) if nid in nodes else None
-
-    def trigger_for(src: str, port: str, seen: frozenset = frozenset()):
-        """The trigger that fires when (src, port) carries a new value: the port
-        itself when it is an event, else the node's `trigger` output, else its
-        one event output. Through a Router, a bypassed node or a Wireless pair
-        it is found at the real source; for a data node with no event output it
-        is the one trigger behind all of its wired inputs. None when it cannot
-        be told."""
-        if (src, port) in seen or src not in nodes:
-            return None
-        seen = seen | {(src, port)}
-        node, sp = nodes[src], spec(src)
-        if node.get("type") == _WIRELESS_OUT:
-            wi = wireless_in.get(str((node.get("config") or {}).get("channel", "1")))
-            up = into.get((wi, port)) if wi else None
-            found = trigger_for(*up, seen) if up else None
-            if found is None:
-                return None
-            # the same trigger through this pair, when the Wireless In carries it
-            socket = next((dp for (dst, dp), s in into.items() if dst == wi and s == found), None)
-            return (src, socket) if socket else found
-        if sp is None:
-            return None
-        if node.get("disabled") or node.get("type") == _ROUTER:
-            in_port = next((i for i, o in sp.bypass.items() if o == port), None)
-            up = into.get((src, in_port)) if in_port else None
-            return trigger_for(*up, seen) if up else None
-        if _out_type(sp, port) == "event":
-            return (src, port)
-        if _out_type(sp, "trigger") == "event":
-            return (src, "trigger")
-        events = [p.name for p in sp.outputs if p.type == "event" and not p.optional]
-        if events:
-            return (src, events[0]) if len(events) == 1 else None
-        found = {trigger_for(s, p, seen) for (dst, _dp), (s, p) in into.items() if dst == src}
-        found.discard(None)
-        return found.pop() if len(found) == 1 else None
+    walk = TriggerWalk(graph, spec_of)
+    nodes, wires, into, spec = walk.nodes, walk.wires, walk.into, walk.spec
+    trigger_for = walk.trigger_for
 
     # every decision reads the graph as saved; the changes are applied after
     renames: dict[int, dict] = {}
@@ -182,17 +276,20 @@ def migrate_triggers(graph: dict, spec_of: Callable) -> dict:
             renames[i] = {"src_port": "value"}
         elif src_type == _QUEUE and e["src_port"] == "out" and to_trigger:
             renames[i] = {"src_port": "trigger"}
-    for nid, node in nodes.items():
-        if node.get("type") != _QUEUE:
-            continue
-        promoted = set((node.get("config") or {}).get("promoted") or ())
+    sockets: dict[str, list[tuple[int, dict]]] = {}
+    for i, e in wires:
+        if nodes.get(e["dst"], {}).get("type") == _QUEUE:
+            sockets.setdefault(e["dst"], []).append((i, e))
+    for nid, queue_wires in sockets.items():
+        promoted = set((nodes[nid].get("config") or {}).get("promoted") or ())
+        taken = {dp for (d, dp) in wired if d == nid}
         k = 0
-        for i, e in wires:
-            if e["dst"] != nid or e["dst_port"] == "ack" or e["dst_port"] in promoted:
+        for i, e in queue_wires:
+            if e["dst_port"] == "ack" or e["dst_port"] in promoted:
                 continue
-            taken = {dp for (d, dp) in wired if d == nid}
             while f"trigger{k}" in taken or f"in{k}" in taken:
                 k += 1
+            taken.update((f"trigger{k}", f"in{k}"))
             src = (e["src"], e["src_port"])
             trigger = trigger_for(*src)
             if trigger == src:
@@ -233,10 +330,15 @@ def format_of(graph: dict) -> int:
 def migrate(graph: dict) -> dict:
     """The graph in CURRENT_FORMAT, with `format` stamped as its first key. The
     input is never modified. Raises GraphFormatError for a graph this Boltjar
-    cannot read (see format_of)."""
+    cannot read (see format_of), or whose shape a step cannot read."""
     version = format_of(graph)
-    out = copy.deepcopy(graph)
-    while version < CURRENT_FORMAT:
-        out = _STEPS[version](out)
-        version += 1
+    try:
+        out = copy.deepcopy(graph)
+        while version < CURRENT_FORMAT:
+            out = _STEPS[version](out)
+            version += 1
+    except (RecursionError, TypeError, AttributeError, KeyError, ValueError) as exc:
+        # a graph whose shape no step can read (an opened file can hold anything):
+        # refused like any graph this Boltjar cannot read, never a crash
+        raise GraphFormatError(f"the graph could not be read: {type(exc).__name__}: {exc}") from exc
     return {"format": CURRENT_FORMAT, **{k: v for k, v in out.items() if k != "format"}}

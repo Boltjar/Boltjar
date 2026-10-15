@@ -177,6 +177,63 @@ def test_format_3_graphs_with_a_told_trigger_validate_and_the_rest_name_it():
             assert problems == [], name
 
 
+def _chain(length: int, *, cyclic: bool = False) -> dict:
+    """Manual -> `length` Computes in a row -> Log.in, format 2; `cyclic` feeds
+    the last Compute back into the first instead of the Manual."""
+    nodes = [{"id": "go", "type": "core.trigger.manual"}, {"id": "log", "type": "core.output.log"}]
+    edges = []
+    for k in range(length):
+        nodes.append({"id": f"c{k}", "type": "core.data.compute", "config": {"expression": "value0"}})
+        src = (f"c{k - 1}", "out") if k else ((f"c{length - 1}", "out") if cyclic else ("go", "trigger"))
+        edges.append({"src": src[0], "src_port": src[1], "dst": f"c{k}", "dst_port": "value0"})
+    edges.append({"src": f"c{length - 1}", "src_port": "out", "dst": "log", "dst_port": "in"})
+    return {"format": 2, "nodes": nodes, "edges": edges}
+
+
+def test_format_3_walks_a_long_chain_once():
+    import time
+    graph = _chain(5000)
+    started = time.perf_counter()
+    out = migrate(graph)
+    assert time.perf_counter() - started < 1.0
+    assert out["edges"][-1] == {"src": "go", "src_port": "trigger", "dst": "log", "dst_port": "trigger"}
+
+
+def test_format_3_shares_the_walk_across_many_readers():
+    # many Logs reading one long chain: each wire is walked once, not once per Log
+    import time
+    graph = _chain(2000)
+    for k in range(2000):
+        graph["nodes"].append({"id": f"log{k}", "type": "core.output.log"})
+        graph["edges"].append({"src": f"c{k}", "src_port": "out", "dst": f"log{k}", "dst_port": "in"})
+    started = time.perf_counter()
+    out = migrate(graph)
+    assert time.perf_counter() - started < 1.0
+    assert sum(e["dst_port"] == "trigger" for e in out["edges"]) == 2001
+
+
+def test_format_3_leaves_a_trigger_behind_a_cycle_unwired():
+    graph = _chain(50, cyclic=True)
+    out = migrate(graph)
+    assert out["edges"] == graph["edges"]
+    assert "log: required trigger 'trigger' is not connected" in _trigger_problems(out)
+
+
+@pytest.mark.parametrize("graph", [
+    {"format": 2, "nodes": [{"id": "a", "type": ["not", "a", "type"]}],
+     "edges": [{"src": "x", "src_port": "out", "dst": "a", "dst_port": "in"}]},
+    {"format": 2, "nodes": [{"id": "q", "type": "core.flow.queue", "config": {"promoted": 5}}],
+     "edges": [{"src": "x", "src_port": "out", "dst": "q", "dst_port": "a"}]},
+    {"format": 2, "nodes": [{"id": "q", "type": "core.flow.queue", "config": "q"}],
+     "edges": [{"src": "x", "src_port": "out", "dst": "q", "dst_port": "a"}]},
+], ids=["unhashable type", "promoted that is not a list", "config that is not an object"])
+def test_a_graph_whose_shape_cannot_be_read_is_refused_not_crashed(graph):
+    with pytest.raises(GraphFormatError, match="could not be read"):
+        migrate(graph)
+    problems = client.post("/api/validate", json=graph).json()["problems"]
+    assert [p["kind"] for p in problems] == ["format"]
+
+
 def test_every_shipped_example_is_already_in_the_format_3_shape():
     # a shipped example is saved in the current format, so its load never
     # migrates: running the format 3 step over it again changes nothing.

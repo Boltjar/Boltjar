@@ -307,7 +307,7 @@ class Hub:
     async def _checked(self, graph: dict) -> tuple[dict, list[dict]]:
         """The graph in the current format, and its validation problems."""
         try:
-            graph = migrate(graph)
+            graph = await asyncio.to_thread(migrate, graph)
         except GraphFormatError as exc:
             return graph, [_format_problem(exc)]
         return graph, await validate_graph_now(graph)
@@ -1283,7 +1283,7 @@ async def put_graph(name: str, graph: dict):
     # every save is stamped with the current format (a graph from an older
     # editor is migrated first; one from a newer Boltjar is refused, not truncated).
     try:
-        graph = migrate(graph)
+        graph = await asyncio.to_thread(migrate, graph)
     except GraphFormatError as exc:
         return JSONResponse({"error": str(exc)}, status_code=422)
     # a linked file is saved back where it lives, atomically, and only there.
@@ -1499,7 +1499,7 @@ async def stores_ensure(graph: dict = Body(...)):
     declares exist before a table picker looks for them. A running graph
     creates them itself (the Database node's open)."""
     try:
-        graph = migrate(graph)
+        graph = await asyncio.to_thread(migrate, graph)
     except GraphFormatError as exc:
         return JSONResponse({"error": str(exc)}, status_code=422)
     return await asyncio.to_thread(ensure_declared_schemas, graph)
@@ -1531,7 +1531,7 @@ async def kv_destroy(key: str) -> dict:
 @app.post("/api/validate")
 async def validate(graph: dict) -> dict:
     try:
-        graph = migrate(graph)
+        graph = await asyncio.to_thread(migrate, graph)
     except GraphFormatError as exc:
         return {"problems": [_format_problem(exc)]}
     return {"problems": await validate_graph_now(graph)}

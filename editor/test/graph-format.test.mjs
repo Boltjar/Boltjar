@@ -97,6 +97,36 @@ for (const c of cases) {
   check(`format 3, the input is not mutated: ${c.name}`, JSON.stringify(c.graph), saved);
 }
 
+// ---- the walk visits each wire once: a long chain, many readers, a cycle
+function chain(length, cyclic = false) {
+  const nodes = [{ id: "go", type: "core.trigger.manual", config: {}, pos: [0, 0] },
+    { id: "log", type: "core.output.log", config: {}, pos: [0, 0] }];
+  const edges = [];
+  for (let k = 0; k < length; k++) {
+    nodes.push({ id: `c${k}`, type: "core.data.compute", config: { expression: "value0" }, pos: [0, 0] });
+    const src = k ? [`c${k - 1}`, "out"] : cyclic ? [`c${length - 1}`, "out"] : ["go", "trigger"];
+    edges.push({ src: src[0], src_port: src[1], dst: `c${k}`, dst_port: "value0" });
+  }
+  edges.push({ src: `c${length - 1}`, src_port: "out", dst: "log", dst_port: "in" });
+  return { format: 2, name: "chain", nodes, edges };
+}
+let started = performance.now();
+const long = migrateGraph(chain(5000), defs).graph;
+check("a 5,000-node chain migrates in well under a second", performance.now() - started < 1000, true);
+check("its Log fires on the trigger at the head", long.edges[long.edges.length - 1],
+  { src: "go", src_port: "trigger", dst: "log", dst_port: "trigger" });
+const readers = chain(2000);
+for (let k = 0; k < 2000; k++) {
+  readers.nodes.push({ id: `log${k}`, type: "core.output.log", config: {}, pos: [0, 0] });
+  readers.edges.push({ src: `c${k}`, src_port: "out", dst: `log${k}`, dst_port: "in" });
+}
+started = performance.now();
+const many = migrateGraph(readers, defs).graph;
+check("2,000 Logs on one chain share the walk", performance.now() - started < 1000, true);
+check("each of them is wired", many.edges.filter((e) => e.dst_port === "trigger").length, 2001);
+const cycle = chain(50, true);
+check("a trigger behind a cycle stays unwired", migrateGraph(cycle, defs).graph.edges, cycle.edges);
+
 if (failures) {
   console.error(`\n${failures} check(s) failed`);
   process.exit(1);
