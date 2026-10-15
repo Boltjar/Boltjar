@@ -393,7 +393,7 @@ export default function App() {
     // and the draft autosave below persists the clean graph. A node whose
     // definition or model manifest is unknown is not judged.
     const loadHealed = (g: Graph, opts?: { dirty?: boolean }) => {
-      const { graph: current, changed } = migrateGraph(g);
+      const { graph: current, changed } = migrateGraph(g, defs);
       const { graph: clean, removed } = healDeadWires(current, defs, models);
       // a healed graph differs from the saved file, so it arrives unsaved: the
       // primary button offers Save, and On never runs the file's dead wire. So
@@ -720,7 +720,7 @@ export default function App() {
     const kept = dirtyRef.current ? latestToGraph.current() : null;
     const prior = readAside(slug);
     versionRef.current.set(slug, loaded.version);
-    const { graph: current, changed } = migrateGraph({ ...loaded.graph, name: slug });
+    const { graph: current, changed } = migrateGraph({ ...loaded.graph, name: slug }, defs);
     const { graph: clean, removed } = healDeadWires(current, defs, models);
     loadGraph(clean, { dirty: changed || removed.length > 0 });
     for (const w of removed) socket.notice(deadWireNotice(w), "warn");
@@ -756,7 +756,7 @@ export default function App() {
       }
     }
     writeAside(slug, swapped(kept, canvas));
-    const { graph: current, changed } = migrateGraph({ ...incoming, name: slug });
+    const { graph: current, changed } = migrateGraph({ ...incoming, name: slug }, defs);
     const { graph: clean, removed } = healDeadWires(current, defs, models);
     loadGraph(clean, { dirty: kept.role !== "saved" || changed || removed.length > 0 });
     for (const w of removed) socket.notice(deadWireNotice(w), "warn");
@@ -823,7 +823,7 @@ export default function App() {
       socket.notice(openFailedNotice(file.name, "the browser could not read it"), "bad");
       return;
     }
-    const parsed = parseWorkflowFile(text);
+    const parsed = parseWorkflowFile(text, defs);
     if (!parsed.ok) {
       socket.notice(openFailedNotice(file.name, parsed.error), "bad");
       return;
@@ -842,7 +842,7 @@ export default function App() {
     }
     setTabsState((prev) => withTabOpened(prev, slug, { unsaved: true }));
     socket.notice(`opened ${file.name} as ${slug}, not saved yet`, "ok");
-  }, [socket.notice, tabsState.open, setTabsState]);
+  }, [socket.notice, tabsState.open, setTabsState, defs]);
 
   // Save as: a copy of the workflow on the canvas (unsaved edits included) is
   // saved under a new slug and takes over the canvas in its own tab. The

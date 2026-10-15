@@ -28,6 +28,10 @@ function moduleUrl(file) {
   return urls.get(file);
 }
 const { serializeGraph, migrateGraph, GRAPH_FORMAT } = await import(moduleUrl(resolve(here, "../src/lib/graphAdapter.ts")));
+// the core node definitions the server serves (kept equal to the registry by
+// tests/test_node_look.py), which the format 3 step reads
+const defs = new Map(JSON.parse(readFileSync(resolve(here, "fixtures/core-nodes.json"), "utf8"))
+  .map((d) => [d.id, d]));
 
 let failures = 0;
 function check(label, got, want) {
@@ -68,7 +72,7 @@ const draft = {
   edges: [],
 };
 const before = JSON.stringify(draft);
-const migrated = migrateGraph(draft);
+const migrated = migrateGraph(draft, defs);
 check("the format 1 draft changed", migrated.changed, true);
 check("it is in the current format", migrated.graph.format, GRAPH_FORMAT);
 check("the LLM on auto holds no model", migrated.graph.nodes[0].config, { promoted: [] });
@@ -76,9 +80,22 @@ check("a picked model stays as saved", migrated.graph.nodes[1].config, { model: 
 check("an auto that is no model stays", migrated.graph.nodes[2].config, { response_type: "auto" });
 check("the draft itself is not mutated", JSON.stringify(draft), before);
 const current = { format: GRAPH_FORMAT, name: "x", nodes: [{ id: "llm", type: "core.ai.llm", config: { model: "auto" }, pos: [0, 0] }], edges: [] };
-check("a current graph comes back as is", migrateGraph(current).graph === current && !migrateGraph(current).changed, true);
+check("a current graph comes back as is", migrateGraph(current, defs).graph === current && !migrateGraph(current, defs).changed, true);
 check("a graph with no format migrates like format 0",
-  migrateGraph({ name: "old", nodes: [{ id: "a", type: "core.ai.llm", config: { model: "auto" }, pos: [0, 0] }], edges: [] }).graph.nodes[0].config, {});
+  migrateGraph({ name: "old", nodes: [{ id: "a", type: "core.ai.llm", config: { model: "auto" }, pos: [0, 0] }], edges: [] }, defs).graph.nodes[0].config, {});
+
+// ---- format 3: a data wire never fires a node. The cases are shared with the
+// server's migrate (tests/test_graph_format.py), so both wire the same triggers.
+const { cases } = JSON.parse(readFileSync(resolve(here, "fixtures/migrate-format-3.json"), "utf8"));
+for (const c of cases) {
+  const saved = JSON.stringify(c.graph);
+  const out = migrateGraph(c.graph, defs);
+  check(`format 3: ${c.name}`, out.graph.edges, c.edges);
+  check(`format 3, the nodes stay: ${c.name}`, out.graph.nodes, c.graph.nodes);
+  check(`format 3, changed says so: ${c.name}`, out.changed,
+    JSON.stringify(c.edges) !== JSON.stringify(c.graph.edges));
+  check(`format 3, the input is not mutated: ${c.name}`, JSON.stringify(c.graph), saved);
+}
 
 if (failures) {
   console.error(`\n${failures} check(s) failed`);

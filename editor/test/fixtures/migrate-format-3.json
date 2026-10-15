@@ -1,0 +1,1058 @@
+{
+ "about": "Format 2 graphs and the wires each carries once migrated to format 3 (a data wire never fires a node). Read by tests/test_graph_format.py and editor/test/graph-format.test.mjs, so the server and the editor migrate alike.",
+ "cases": [
+  {
+   "name": "a Log fed by an LLM fires on the LLM's trigger",
+   "graph": {
+    "format": 2,
+    "nodes": [
+     {
+      "id": "fire",
+      "type": "core.trigger.manual",
+      "config": {}
+     },
+     {
+      "id": "llm",
+      "type": "core.ai.llm",
+      "config": {}
+     },
+     {
+      "id": "log",
+      "type": "core.output.log",
+      "config": {}
+     }
+    ],
+    "edges": [
+     {
+      "src": "fire",
+      "src_port": "trigger",
+      "dst": "llm",
+      "dst_port": "trigger"
+     },
+     {
+      "src": "llm",
+      "src_port": "response",
+      "dst": "log",
+      "dst_port": "in"
+     }
+    ]
+   },
+   "edges": [
+    {
+     "src": "fire",
+     "src_port": "trigger",
+     "dst": "llm",
+     "dst_port": "trigger"
+    },
+    {
+     "src": "llm",
+     "src_port": "response",
+     "dst": "log",
+     "dst_port": "in"
+    },
+    {
+     "src": "llm",
+     "src_port": "trigger",
+     "dst": "log",
+     "dst_port": "trigger"
+    }
+   ]
+  },
+  {
+   "name": "a Log fed by an event fires on that event and still logs its payload",
+   "graph": {
+    "format": 2,
+    "nodes": [
+     {
+      "id": "fire",
+      "type": "core.trigger.manual",
+      "config": {}
+     },
+     {
+      "id": "log",
+      "type": "core.output.log",
+      "config": {}
+     }
+    ],
+    "edges": [
+     {
+      "src": "fire",
+      "src_port": "trigger",
+      "dst": "log",
+      "dst_port": "in"
+     }
+    ]
+   },
+   "edges": [
+    {
+     "src": "fire",
+     "src_port": "trigger",
+     "dst": "log",
+     "dst_port": "in"
+    },
+    {
+     "src": "fire",
+     "src_port": "trigger",
+     "dst": "log",
+     "dst_port": "trigger"
+    }
+   ]
+  },
+  {
+   "name": "a Log fed by a data node fires on the one trigger behind it",
+   "graph": {
+    "format": 2,
+    "nodes": [
+     {
+      "id": "chat",
+      "type": "core.trigger.chat",
+      "config": {}
+     },
+     {
+      "id": "calc",
+      "type": "core.data.compute",
+      "config": {
+       "expression": "value0"
+      }
+     },
+     {
+      "id": "log",
+      "type": "core.output.log",
+      "config": {}
+     }
+    ],
+    "edges": [
+     {
+      "src": "chat",
+      "src_port": "text",
+      "dst": "calc",
+      "dst_port": "value0"
+     },
+     {
+      "src": "calc",
+      "src_port": "out",
+      "dst": "log",
+      "dst_port": "in"
+     }
+    ]
+   },
+   "edges": [
+    {
+     "src": "chat",
+     "src_port": "text",
+     "dst": "calc",
+     "dst_port": "value0"
+    },
+    {
+     "src": "calc",
+     "src_port": "out",
+     "dst": "log",
+     "dst_port": "in"
+    },
+    {
+     "src": "chat",
+     "src_port": "trigger",
+     "dst": "log",
+     "dst_port": "trigger"
+    }
+   ]
+  },
+  {
+   "name": "a Log behind two triggers stays unwired, for validation to name",
+   "graph": {
+    "format": 2,
+    "nodes": [
+     {
+      "id": "a",
+      "type": "core.trigger.chat",
+      "config": {}
+     },
+     {
+      "id": "b",
+      "type": "core.trigger.chat",
+      "config": {}
+     },
+     {
+      "id": "calc",
+      "type": "core.data.compute",
+      "config": {
+       "expression": "value0 + value1"
+      }
+     },
+     {
+      "id": "log",
+      "type": "core.output.log",
+      "config": {}
+     }
+    ],
+    "edges": [
+     {
+      "src": "a",
+      "src_port": "text",
+      "dst": "calc",
+      "dst_port": "value0"
+     },
+     {
+      "src": "b",
+      "src_port": "text",
+      "dst": "calc",
+      "dst_port": "value1"
+     },
+     {
+      "src": "calc",
+      "src_port": "out",
+      "dst": "log",
+      "dst_port": "in"
+     }
+    ]
+   },
+   "edges": [
+    {
+     "src": "a",
+     "src_port": "text",
+     "dst": "calc",
+     "dst_port": "value0"
+    },
+    {
+     "src": "b",
+     "src_port": "text",
+     "dst": "calc",
+     "dst_port": "value1"
+    },
+    {
+     "src": "calc",
+     "src_port": "out",
+     "dst": "log",
+     "dst_port": "in"
+    }
+   ]
+  },
+  {
+   "name": "a Log fed by a constant has no trigger to take",
+   "graph": {
+    "format": 2,
+    "nodes": [
+     {
+      "id": "text",
+      "type": "core.value.text",
+      "config": {
+       "text": "hi"
+      }
+     },
+     {
+      "id": "log",
+      "type": "core.output.log",
+      "config": {}
+     }
+    ],
+    "edges": [
+     {
+      "src": "text",
+      "src_port": "out",
+      "dst": "log",
+      "dst_port": "in"
+     }
+    ]
+   },
+   "edges": [
+    {
+     "src": "text",
+     "src_port": "out",
+     "dst": "log",
+     "dst_port": "in"
+    }
+   ]
+  },
+  {
+   "name": "a Log behind a Router fires on the source's trigger",
+   "graph": {
+    "format": 2,
+    "nodes": [
+     {
+      "id": "fire",
+      "type": "core.trigger.manual",
+      "config": {}
+     },
+     {
+      "id": "llm",
+      "type": "core.ai.llm",
+      "config": {}
+     },
+     {
+      "id": "r",
+      "type": "core.flow.router",
+      "config": {}
+     },
+     {
+      "id": "log",
+      "type": "core.output.log",
+      "config": {}
+     }
+    ],
+    "edges": [
+     {
+      "src": "fire",
+      "src_port": "trigger",
+      "dst": "llm",
+      "dst_port": "trigger"
+     },
+     {
+      "src": "llm",
+      "src_port": "response",
+      "dst": "r",
+      "dst_port": "in"
+     },
+     {
+      "src": "r",
+      "src_port": "out",
+      "dst": "log",
+      "dst_port": "in"
+     }
+    ]
+   },
+   "edges": [
+    {
+     "src": "fire",
+     "src_port": "trigger",
+     "dst": "llm",
+     "dst_port": "trigger"
+    },
+    {
+     "src": "llm",
+     "src_port": "response",
+     "dst": "r",
+     "dst_port": "in"
+    },
+    {
+     "src": "r",
+     "src_port": "out",
+     "dst": "log",
+     "dst_port": "in"
+    },
+    {
+     "src": "llm",
+     "src_port": "trigger",
+     "dst": "log",
+     "dst_port": "trigger"
+    }
+   ]
+  },
+  {
+   "name": "a Log behind a bypassed Preview fires on the trigger behind it",
+   "graph": {
+    "format": 2,
+    "nodes": [
+     {
+      "id": "fire",
+      "type": "core.trigger.manual",
+      "config": {}
+     },
+     {
+      "id": "llm",
+      "type": "core.ai.llm",
+      "config": {}
+     },
+     {
+      "id": "pv",
+      "type": "core.output.preview",
+      "config": {},
+      "disabled": true
+     },
+     {
+      "id": "log",
+      "type": "core.output.log",
+      "config": {}
+     }
+    ],
+    "edges": [
+     {
+      "src": "fire",
+      "src_port": "trigger",
+      "dst": "llm",
+      "dst_port": "trigger"
+     },
+     {
+      "src": "llm",
+      "src_port": "response",
+      "dst": "pv",
+      "dst_port": "in"
+     },
+     {
+      "src": "llm",
+      "src_port": "trigger",
+      "dst": "pv",
+      "dst_port": "trigger"
+     },
+     {
+      "src": "pv",
+      "src_port": "out",
+      "dst": "log",
+      "dst_port": "in"
+     }
+    ]
+   },
+   "edges": [
+    {
+     "src": "fire",
+     "src_port": "trigger",
+     "dst": "llm",
+     "dst_port": "trigger"
+    },
+    {
+     "src": "llm",
+     "src_port": "response",
+     "dst": "pv",
+     "dst_port": "in"
+    },
+    {
+     "src": "llm",
+     "src_port": "trigger",
+     "dst": "pv",
+     "dst_port": "trigger"
+    },
+    {
+     "src": "pv",
+     "src_port": "out",
+     "dst": "log",
+     "dst_port": "in"
+    },
+    {
+     "src": "llm",
+     "src_port": "trigger",
+     "dst": "log",
+     "dst_port": "trigger"
+    }
+   ]
+  },
+  {
+   "name": "a Preview fed through a Wireless pair takes the trigger through the same pair",
+   "graph": {
+    "format": 2,
+    "nodes": [
+     {
+      "id": "chat",
+      "type": "core.trigger.chat",
+      "config": {}
+     },
+     {
+      "id": "tpl",
+      "type": "core.data.template",
+      "config": {
+       "template": "{chat}"
+      }
+     },
+     {
+      "id": "win",
+      "type": "core.flow.wireless_in",
+      "config": {
+       "channel": "2"
+      }
+     },
+     {
+      "id": "wout",
+      "type": "core.flow.wireless_out",
+      "config": {
+       "channel": "2"
+      }
+     },
+     {
+      "id": "pv",
+      "type": "core.output.preview",
+      "config": {}
+     }
+    ],
+    "edges": [
+     {
+      "src": "chat",
+      "src_port": "trigger",
+      "dst": "tpl",
+      "dst_port": "trigger"
+     },
+     {
+      "src": "chat",
+      "src_port": "text",
+      "dst": "tpl",
+      "dst_port": "chat"
+     },
+     {
+      "src": "tpl",
+      "src_port": "trigger",
+      "dst": "win",
+      "dst_port": "tpl.trigger"
+     },
+     {
+      "src": "tpl",
+      "src_port": "out",
+      "dst": "win",
+      "dst_port": "tpl.out"
+     },
+     {
+      "src": "wout",
+      "src_port": "tpl.out",
+      "dst": "pv",
+      "dst_port": "in"
+     }
+    ]
+   },
+   "edges": [
+    {
+     "src": "chat",
+     "src_port": "trigger",
+     "dst": "tpl",
+     "dst_port": "trigger"
+    },
+    {
+     "src": "chat",
+     "src_port": "text",
+     "dst": "tpl",
+     "dst_port": "chat"
+    },
+    {
+     "src": "tpl",
+     "src_port": "trigger",
+     "dst": "win",
+     "dst_port": "tpl.trigger"
+    },
+    {
+     "src": "tpl",
+     "src_port": "out",
+     "dst": "win",
+     "dst_port": "tpl.out"
+    },
+    {
+     "src": "wout",
+     "src_port": "tpl.out",
+     "dst": "pv",
+     "dst_port": "in"
+    },
+    {
+     "src": "wout",
+     "src_port": "tpl.trigger",
+     "dst": "pv",
+     "dst_port": "trigger"
+    }
+   ]
+  },
+  {
+   "name": "a Preview whose trigger is wired is left as it is",
+   "graph": {
+    "format": 2,
+    "nodes": [
+     {
+      "id": "fire",
+      "type": "core.trigger.manual",
+      "config": {}
+     },
+     {
+      "id": "llm",
+      "type": "core.ai.llm",
+      "config": {}
+     },
+     {
+      "id": "pv",
+      "type": "core.output.preview",
+      "config": {}
+     }
+    ],
+    "edges": [
+     {
+      "src": "fire",
+      "src_port": "trigger",
+      "dst": "llm",
+      "dst_port": "trigger"
+     },
+     {
+      "src": "llm",
+      "src_port": "response",
+      "dst": "pv",
+      "dst_port": "in"
+     },
+     {
+      "src": "fire",
+      "src_port": "trigger",
+      "dst": "pv",
+      "dst_port": "trigger"
+     }
+    ]
+   },
+   "edges": [
+    {
+     "src": "fire",
+     "src_port": "trigger",
+     "dst": "llm",
+     "dst_port": "trigger"
+    },
+    {
+     "src": "llm",
+     "src_port": "response",
+     "dst": "pv",
+     "dst_port": "in"
+    },
+    {
+     "src": "fire",
+     "src_port": "trigger",
+     "dst": "pv",
+     "dst_port": "trigger"
+    }
+   ]
+  },
+  {
+   "name": "a Logic fires on its value's trigger, and a route into data carries `value`",
+   "graph": {
+    "format": 2,
+    "nodes": [
+     {
+      "id": "chat",
+      "type": "core.trigger.chat",
+      "config": {}
+     },
+     {
+      "id": "if",
+      "type": "core.logic.condition",
+      "config": {
+       "expression": "value"
+      }
+     },
+     {
+      "id": "llm",
+      "type": "core.ai.llm",
+      "config": {}
+     },
+     {
+      "id": "log",
+      "type": "core.output.log",
+      "config": {}
+     }
+    ],
+    "edges": [
+     {
+      "src": "chat",
+      "src_port": "text",
+      "dst": "if",
+      "dst_port": "value"
+     },
+     {
+      "src": "if",
+      "src_port": "true",
+      "dst": "llm",
+      "dst_port": "trigger"
+     },
+     {
+      "src": "if",
+      "src_port": "true",
+      "dst": "llm",
+      "dst_port": "prompt"
+     },
+     {
+      "src": "if",
+      "src_port": "false",
+      "dst": "log",
+      "dst_port": "in"
+     }
+    ]
+   },
+   "edges": [
+    {
+     "src": "chat",
+     "src_port": "text",
+     "dst": "if",
+     "dst_port": "value"
+    },
+    {
+     "src": "if",
+     "src_port": "true",
+     "dst": "llm",
+     "dst_port": "trigger"
+    },
+    {
+     "src": "if",
+     "src_port": "value",
+     "dst": "llm",
+     "dst_port": "prompt"
+    },
+    {
+     "src": "if",
+     "src_port": "value",
+     "dst": "log",
+     "dst_port": "in"
+    },
+    {
+     "src": "chat",
+     "src_port": "trigger",
+     "dst": "if",
+     "dst_port": "trigger"
+    },
+    {
+     "src": "if",
+     "src_port": "false",
+     "dst": "log",
+     "dst_port": "trigger"
+    }
+   ]
+  },
+  {
+   "name": "a tool body closes on its last node's trigger",
+   "graph": {
+    "format": 2,
+    "nodes": [
+     {
+      "id": "ask",
+      "type": "core.trigger.chat",
+      "config": {}
+     },
+     {
+      "id": "llm",
+      "type": "core.ai.llm",
+      "config": {}
+     },
+     {
+      "id": "tool",
+      "type": "core.ai.tool",
+      "config": {
+       "name": "get_time"
+      }
+     },
+     {
+      "id": "args",
+      "type": "core.ai.tool_args",
+      "config": {}
+     },
+     {
+      "id": "now",
+      "type": "core.sensor.clock",
+      "config": {}
+     },
+     {
+      "id": "answer",
+      "type": "core.data.template",
+      "config": {
+       "template": "{now}"
+      }
+     },
+     {
+      "id": "weather",
+      "type": "core.ai.tool",
+      "config": {
+       "name": "get_weather"
+      }
+     },
+     {
+      "id": "city",
+      "type": "core.ai.tool_args",
+      "config": {
+       "fields": "city"
+      }
+     },
+     {
+      "id": "api",
+      "type": "core.net.http",
+      "config": {
+       "url": "https://example.com/{city}"
+      }
+     }
+    ],
+    "edges": [
+     {
+      "src": "ask",
+      "src_port": "trigger",
+      "dst": "llm",
+      "dst_port": "trigger"
+     },
+     {
+      "src": "ask",
+      "src_port": "text",
+      "dst": "llm",
+      "dst_port": "prompt"
+     },
+     {
+      "src": "tool",
+      "src_port": "call",
+      "dst": "llm",
+      "dst_port": "tool0"
+     },
+     {
+      "src": "tool",
+      "src_port": "call",
+      "dst": "args",
+      "dst_port": "call"
+     },
+     {
+      "src": "args",
+      "src_port": "trigger",
+      "dst": "answer",
+      "dst_port": "trigger"
+     },
+     {
+      "src": "now",
+      "src_port": "out",
+      "dst": "answer",
+      "dst_port": "now"
+     },
+     {
+      "src": "answer",
+      "src_port": "out",
+      "dst": "tool",
+      "dst_port": "result"
+     },
+     {
+      "src": "weather",
+      "src_port": "call",
+      "dst": "llm",
+      "dst_port": "tool1"
+     },
+     {
+      "src": "weather",
+      "src_port": "call",
+      "dst": "city",
+      "dst_port": "call"
+     },
+     {
+      "src": "city",
+      "src_port": "trigger",
+      "dst": "api",
+      "dst_port": "trigger"
+     },
+     {
+      "src": "city",
+      "src_port": "city",
+      "dst": "api",
+      "dst_port": "city"
+     },
+     {
+      "src": "api",
+      "src_port": "body",
+      "dst": "weather",
+      "dst_port": "result"
+     }
+    ]
+   },
+   "edges": [
+    {
+     "src": "ask",
+     "src_port": "trigger",
+     "dst": "llm",
+     "dst_port": "trigger"
+    },
+    {
+     "src": "ask",
+     "src_port": "text",
+     "dst": "llm",
+     "dst_port": "prompt"
+    },
+    {
+     "src": "tool",
+     "src_port": "call",
+     "dst": "llm",
+     "dst_port": "tool0"
+    },
+    {
+     "src": "tool",
+     "src_port": "call",
+     "dst": "args",
+     "dst_port": "call"
+    },
+    {
+     "src": "args",
+     "src_port": "trigger",
+     "dst": "answer",
+     "dst_port": "trigger"
+    },
+    {
+     "src": "now",
+     "src_port": "out",
+     "dst": "answer",
+     "dst_port": "now"
+    },
+    {
+     "src": "answer",
+     "src_port": "out",
+     "dst": "tool",
+     "dst_port": "result"
+    },
+    {
+     "src": "weather",
+     "src_port": "call",
+     "dst": "llm",
+     "dst_port": "tool1"
+    },
+    {
+     "src": "weather",
+     "src_port": "call",
+     "dst": "city",
+     "dst_port": "call"
+    },
+    {
+     "src": "city",
+     "src_port": "trigger",
+     "dst": "api",
+     "dst_port": "trigger"
+    },
+    {
+     "src": "city",
+     "src_port": "city",
+     "dst": "api",
+     "dst_port": "city"
+    },
+    {
+     "src": "api",
+     "src_port": "body",
+     "dst": "weather",
+     "dst_port": "result"
+    },
+    {
+     "src": "answer",
+     "src_port": "trigger",
+     "dst": "tool",
+     "dst_port": "result_trigger"
+    },
+    {
+     "src": "tool",
+     "src_port": "trigger",
+     "dst": "args",
+     "dst_port": "trigger"
+    },
+    {
+     "src": "api",
+     "src_port": "trigger",
+     "dst": "weather",
+     "dst_port": "result_trigger"
+    },
+    {
+     "src": "weather",
+     "src_port": "trigger",
+     "dst": "city",
+     "dst_port": "trigger"
+    }
+   ]
+  },
+  {
+   "name": "a Queue fires on its producers' triggers and reads the data they sent",
+   "graph": {
+    "format": 2,
+    "nodes": [
+     {
+      "id": "a",
+      "type": "core.trigger.chat",
+      "config": {}
+     },
+     {
+      "id": "b",
+      "type": "core.trigger.chat",
+      "config": {}
+     },
+     {
+      "id": "q",
+      "type": "core.flow.queue",
+      "config": {}
+     },
+     {
+      "id": "tpl",
+      "type": "core.data.template",
+      "config": {
+       "template": "{q}"
+      }
+     },
+     {
+      "id": "llm",
+      "type": "core.ai.llm",
+      "config": {}
+     }
+    ],
+    "edges": [
+     {
+      "src": "a",
+      "src_port": "trigger",
+      "dst": "q",
+      "dst_port": "a"
+     },
+     {
+      "src": "b",
+      "src_port": "text",
+      "dst": "q",
+      "dst_port": "b"
+     },
+     {
+      "src": "q",
+      "src_port": "out",
+      "dst": "tpl",
+      "dst_port": "trigger"
+     },
+     {
+      "src": "q",
+      "src_port": "out",
+      "dst": "tpl",
+      "dst_port": "q"
+     },
+     {
+      "src": "tpl",
+      "src_port": "trigger",
+      "dst": "llm",
+      "dst_port": "trigger"
+     },
+     {
+      "src": "tpl",
+      "src_port": "out",
+      "dst": "llm",
+      "dst_port": "prompt"
+     },
+     {
+      "src": "llm",
+      "src_port": "trigger",
+      "dst": "q",
+      "dst_port": "ack"
+     }
+    ]
+   },
+   "edges": [
+    {
+     "src": "a",
+     "src_port": "trigger",
+     "dst": "q",
+     "dst_port": "trigger0"
+    },
+    {
+     "src": "b",
+     "src_port": "text",
+     "dst": "q",
+     "dst_port": "in1"
+    },
+    {
+     "src": "q",
+     "src_port": "trigger",
+     "dst": "tpl",
+     "dst_port": "trigger"
+    },
+    {
+     "src": "q",
+     "src_port": "out",
+     "dst": "tpl",
+     "dst_port": "q"
+    },
+    {
+     "src": "tpl",
+     "src_port": "trigger",
+     "dst": "llm",
+     "dst_port": "trigger"
+    },
+    {
+     "src": "tpl",
+     "src_port": "out",
+     "dst": "llm",
+     "dst_port": "prompt"
+    },
+    {
+     "src": "llm",
+     "src_port": "trigger",
+     "dst": "q",
+     "dst_port": "ack"
+    },
+    {
+     "src": "b",
+     "src_port": "trigger",
+     "dst": "q",
+     "dst_port": "trigger1"
+    }
+   ]
+  }
+ ]
+}

@@ -18,7 +18,7 @@
 // graph's file (letters, digits, `-` and `_`), and a slug already in use is
 // refused, never overwritten. Pure, so the node tests drive it.
 // ============================================================================
-import type { Graph } from "../types/protocol";
+import type { Graph, NodeDef } from "../types/protocol";
 import { GRAPH_FORMAT, migrateGraph } from "./graphAdapter";
 import { freeSlug } from "./tabs";
 
@@ -63,8 +63,9 @@ const isText = (v: unknown): v is string => typeof v === "string";
 const isObject = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v);
 
-/** The workflow in a file's text, in the current format, or why it is not one. */
-export function parseWorkflowFile(text: string): ParsedWorkflow {
+/** The workflow in a file's text, in the current format (`defs` are the node
+ *  definitions the migration reads), or why it is not one. */
+export function parseWorkflowFile(text: string, defs: ReadonlyMap<string, NodeDef>): ParsedWorkflow {
   let data: unknown;
   try {
     data = JSON.parse(text);
@@ -93,7 +94,7 @@ export function parseWorkflowFile(text: string): ParsedWorkflow {
   if (data.groups !== undefined && !Array.isArray(data.groups)) {
     return { ok: false, error: "its groups are not a list" };
   }
-  return { ok: true, graph: migrateGraph(data as unknown as Graph).graph };
+  return { ok: true, graph: migrateGraph(data as unknown as Graph, defs).graph };
 }
 
 /** The slug an opened file takes: from its `name`, else its file name, else

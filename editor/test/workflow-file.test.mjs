@@ -28,6 +28,8 @@ const {
   exportFileName, exportText, openedSlug, openFailedNotice, parseWorkflowFile, saveAsName, workflowSlug,
 } = await import(moduleUrl(resolve(here, "../src/lib/workflowFile.ts")));
 const { serializeGraph, GRAPH_FORMAT } = await import(moduleUrl(resolve(here, "../src/lib/graphAdapter.ts")));
+const defs = new Map(JSON.parse(readFileSync(resolve(here, "fixtures/core-nodes.json"), "utf8"))
+  .map((d) => [d.id, d]));
 
 let failures = 0;
 function check(label, got, want) {
@@ -79,13 +81,13 @@ check("the download is <slug>.json", exportFileName("my-flow"), "my-flow.json");
 const workflow = (extra = {}) => JSON.stringify({
   format: 2, name: "Friend Flow", nodes: [{ id: "a", type: "core.value.text", config: { text: "hi" }, pos: [0, 0] }], edges: [], ...extra,
 });
-const valid = parseWorkflowFile(workflow());
+const valid = parseWorkflowFile(workflow(), defs);
 check("a valid workflow opens", valid.ok, true);
 check("it keeps its nodes", valid.graph.nodes.map((n) => n.id), ["a"]);
 check("it arrives in the current format", valid.graph.format, GRAPH_FORMAT);
 
 const refused = (label, text, reason) => {
-  const r = parseWorkflowFile(text);
+  const r = parseWorkflowFile(text, defs);
   check(label, [r.ok, r.error], [false, reason]);
 };
 refused("text that is not JSON is refused", "{ nodes: [", "it is not JSON");
@@ -109,12 +111,12 @@ const old = parseWorkflowFile(JSON.stringify({
     { id: "llm", type: "core.ai.llm", config: { model: "auto", temperature: 0.2 } },
     { id: "tts", type: "core.audio.tts", config: { model: "xai/tts", api_key: "{{secret.XAI_KEY}}" } },
   ],
-}));
+}), defs);
 check("an old format opens", old.ok, true);
 check("it is migrated to the current format", old.graph.format, GRAPH_FORMAT);
 check("format 1's auto model is dropped, no model is picked for it", old.graph.nodes[0].config, { temperature: 0.2 });
 check("a real model pick and a secret reference come through", old.graph.nodes[1].config, { model: "xai/tts", api_key: "{{secret.XAI_KEY}}" });
-const unversioned = parseWorkflowFile(JSON.stringify({ nodes: [], edges: [] }));
+const unversioned = parseWorkflowFile(JSON.stringify({ nodes: [], edges: [] }), defs);
 check("a file from before formats (format 0) opens migrated", [unversioned.ok, unversioned.graph.format], [true, GRAPH_FORMAT]);
 check("the refusal line names the file", openFailedNotice("notes.json", "it is not JSON"), "did not open notes.json: it is not JSON");
 

@@ -165,30 +165,203 @@ export function projectGraph(
 /** The graph format this editor writes: the shape serializeGraph produces. It
  *  equals the server's CURRENT_FORMAT (boltjar/graph_format.py, which a test
  *  checks), and the server migrates every graph it serves to that format. */
-export const GRAPH_FORMAT = 2;
+export const GRAPH_FORMAT = 3;
 
 /** The model value format 1 had for "run whatever model can run now". It is
  *  gone: a model can cost money, so only a person picks one. */
 const FORMAT_1_AUTO = "auto";
 
 /**
- * A graph the editor holds from before GRAPH_FORMAT (a localStorage draft never
- * passes through the server) in the current format, the way the server's
- * migrate (boltjar/graph_format.py) turns it: format 2 drops the "auto" model,
- * so a model picker that held it holds none. `changed` says whether anything
- * was dropped. A current graph comes back as is; the input is never mutated.
+ * A graph the editor holds from before GRAPH_FORMAT (a localStorage draft or an
+ * opened file never passes through the server) in the current format, the way
+ * the server's migrate (boltjar/graph_format.py) turns it: format 2 drops the
+ * "auto" model, so a model picker that held it holds none; format 3 wires the
+ * trigger each node that used to fire on data now fires on (migrateTriggers).
+ * `defs` are the node definitions the format 3 step reads. `changed` says
+ * whether anything changed. A current graph comes back as is; the input is
+ * never mutated.
  */
-export function migrateGraph(graph: Graph): { graph: Graph; changed: boolean } {
-  if ((graph.format ?? 0) >= GRAPH_FORMAT) return { graph, changed: false };
+export function migrateGraph(
+  graph: Graph,
+  defs: ReadonlyMap<string, NodeDef>,
+): { graph: Graph; changed: boolean } {
+  const format = graph.format ?? 0;
+  if (format >= GRAPH_FORMAT) return { graph, changed: false };
   let changed = false;
-  const nodes = graph.nodes.map((n) => {
-    if (n.config?.model !== FORMAT_1_AUTO) return n;
-    changed = true;
-    const config = { ...n.config };
-    delete config.model;
-    return { ...n, config };
+  let nodes = graph.nodes;
+  let edges = graph.edges;
+  if (format < 2) {
+    nodes = nodes.map((n) => {
+      if (n.config?.model !== FORMAT_1_AUTO) return n;
+      changed = true;
+      const config = { ...n.config };
+      delete config.model;
+      return { ...n, config };
+    });
+  }
+  if (format < 3) {
+    edges = migrateTriggers(nodes, edges, defs);
+    changed = changed || JSON.stringify(edges) !== JSON.stringify(graph.edges);
+  }
+  return { graph: { ...graph, format: GRAPH_FORMAT, nodes, edges }, changed };
+}
+
+/** Format 3: a data wire never fires a node. These nodes used to fire on a data
+ *  input and now fire on an event input, reading that data when it fires:
+ *  {node type: [data input, its new trigger input]}. The Queue is reshaped by
+ *  its own rule (see migrateTriggers). Mirrors FIRED_BY_DATA in
+ *  boltjar/graph_format.py. */
+const FIRED_BY_DATA: Record<string, [string, string]> = {
+  "core.output.log": ["in", "trigger"],
+  "core.output.preview": ["in", "trigger"],
+  "core.logic.condition": ["value", "trigger"],
+  "core.ai.tool": ["result", "result_trigger"],
+  "core.ai.tool_args": ["call", "trigger"],
+};
+const QUEUE_ID = "core.flow.queue";
+const LOGIC_ID = "core.logic.condition";
+const ROUTER_TYPE = "core.flow.router";
+const WIRELESS_IN_TYPE = "core.flow.wireless_in";
+const WIRELESS_OUT_TYPE = "core.flow.wireless_out";
+
+type PortRef = [string, string];
+
+/** Whether `port` of a node of `def` is a trigger input (format 3 shape): a
+ *  declared port says so itself; any other socket belongs to the growable
+ *  input it falls under (the only one, else the one its name starts with), and
+ *  a knob promoted to an input is never one. Mirrors NodeSpec.growable_base. */
+function firesOn(def: NodeDef | undefined, config: Record<string, unknown> | undefined, port: string): boolean {
+  if (!def) return false;
+  const declared = def.inputs.find((p) => p.name === port);
+  if (declared) return declared.trigger;
+  const bases = def.inputs.filter((p) => p.growable);
+  if (!bases.length || nodePromoted(config ?? {}).includes(port)) return false;
+  const base = bases.length === 1 ? bases[0] : bases.find((p) => port.startsWith(p.name));
+  return !!base?.trigger;
+}
+
+/**
+ * The format 2 -> 3 step over a graph's wires. Mirrors migrate_triggers in
+ * boltjar/graph_format.py; the shared cases in
+ * editor/test/fixtures/migrate-format-3.json keep the two in step.
+ *
+ * - The Log, Preview, Logic, Tool and Tool Args fire on a new event input
+ *   (FIRED_BY_DATA) and read the data input that used to fire them. The new
+ *   trigger is wired from the trigger that came with that data (triggerFor).
+ * - A Logic `true` / `false` wire into a data input carried the value: it comes
+ *   from the Logic's `value` output now (`true` / `false` are events).
+ * - A Queue fires on growable `trigger` sockets and reads its items from
+ *   growable `in` sockets: each old socket fed by an event becomes `trigger<k>`;
+ *   one fed by data becomes `in<k>`, with `trigger<k>` wired from that data's
+ *   trigger. A Queue `out` wire into a trigger input comes from the Queue's
+ *   `trigger` output now.
+ *
+ * A trigger that cannot be told stays unwired: the graph loads, and validation
+ * names the trigger, so the person wires it.
+ */
+export function migrateTriggers(
+  nodes: readonly GraphNode[],
+  edges: readonly GraphEdge[],
+  defs: ReadonlyMap<string, NodeDef>,
+): GraphEdge[] {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const key = (node: string, port: string) => `${node}\u0000${port}`;
+  // each wired input -> its source, the last wire winning as on the server
+  const into = new Map<string, PortRef>();
+  const inputs = new Map<string, PortRef>(); // the same keys -> [dst, dst_port]
+  for (const e of edges) {
+    into.set(key(e.dst, e.dst_port), [e.src, e.src_port]);
+    inputs.set(key(e.dst, e.dst_port), [e.dst, e.dst_port]);
+  }
+  const intoNode = (id: string): [string, PortRef][] =>
+    [...inputs].filter(([, [dst]]) => dst === id).map(([k, [, port]]) => [port, into.get(k)!]);
+  const wirelessIn = new Map<string, string>();
+  for (const n of nodes) {
+    const channel = String(n.config?.channel ?? "1");
+    if (n.type === WIRELESS_IN_TYPE && !wirelessIn.has(channel)) wirelessIn.set(channel, n.id);
+  }
+  const defOf = (id: string) => defs.get(byId.get(id)?.type ?? "");
+  const outType = (def: NodeDef | undefined, port: string) => def?.outputs.find((p) => p.name === port)?.type;
+
+  /** The trigger that fires when (src, port) carries a new value; see
+   *  trigger_for in boltjar/graph_format.py. */
+  const triggerFor = (src: string, port: string, seen: ReadonlySet<string> = new Set()): PortRef | null => {
+    const node = byId.get(src);
+    if (!node || seen.has(key(src, port))) return null;
+    const next = new Set(seen).add(key(src, port));
+    const def = defOf(src);
+    if (node.type === WIRELESS_OUT_TYPE) {
+      const wi = wirelessIn.get(String(node.config?.channel ?? "1"));
+      const up = wi ? into.get(key(wi, port)) : undefined;
+      const found = up ? triggerFor(up[0], up[1], next) : null;
+      if (!found) return null;
+      const socket = intoNode(wi!).find(([, s]) => s[0] === found[0] && s[1] === found[1]);
+      return socket ? [src, socket[0]] : found;
+    }
+    if (!def) return null;
+    if (node.disabled || node.type === ROUTER_TYPE) {
+      const inPort = Object.entries(def.bypass ?? {}).find(([, o]) => o === port)?.[0];
+      const up = inPort ? into.get(key(src, inPort)) : undefined;
+      return up ? triggerFor(up[0], up[1], next) : null;
+    }
+    if (outType(def, port) === "event") return [src, port];
+    if (outType(def, "trigger") === "event") return [src, "trigger"];
+    const events = def.outputs.filter((p) => p.type === "event" && !p.optional).map((p) => p.name);
+    if (events.length) return events.length === 1 ? [src, events[0]] : null;
+    const found = new Map<string, PortRef>();
+    for (const [, [s, p]] of intoNode(src)) {
+      const t = triggerFor(s, p, next);
+      if (t) found.set(key(t[0], t[1]), t);
+    }
+    return found.size === 1 ? [...found.values()][0] : null;
+  };
+
+  // every decision reads the graph as saved; the changes are applied after
+  const renames = new Map<number, Partial<GraphEdge>>();
+  const added: GraphEdge[] = [];
+  const wired = new Set(into.keys());
+  const add = (trigger: PortRef | null, dst: string, port: string) => {
+    if (!trigger || wired.has(key(dst, port))) return;
+    wired.add(key(dst, port));
+    added.push({ src: trigger[0], src_port: trigger[1], dst, dst_port: port });
+  };
+
+  for (const n of nodes) {
+    const pair = FIRED_BY_DATA[n.type];
+    const src = pair ? into.get(key(n.id, pair[0])) : undefined;
+    if (pair && src) add(triggerFor(src[0], src[1]), n.id, pair[1]);
+  }
+  edges.forEach((e, i) => {
+    const dst = byId.get(e.dst);
+    if (!dst || dst.type === QUEUE_ID) return; // a Queue's own sockets: below
+    const srcType = byId.get(e.src)?.type;
+    const toTrigger = firesOn(defs.get(dst.type), dst.config, e.dst_port);
+    if (srcType === LOGIC_ID && (e.src_port === "true" || e.src_port === "false") && !toTrigger) {
+      renames.set(i, { src_port: "value" });
+    } else if (srcType === QUEUE_ID && e.src_port === "out" && toTrigger) {
+      renames.set(i, { src_port: "trigger" });
+    }
   });
-  return { graph: { ...graph, format: GRAPH_FORMAT, nodes }, changed };
+  for (const n of nodes) {
+    if (n.type !== QUEUE_ID) continue;
+    const promoted = new Set(nodePromoted(n.config ?? {}));
+    let k = 0;
+    edges.forEach((e, i) => {
+      if (e.dst !== n.id || e.dst_port === "ack" || promoted.has(e.dst_port)) return;
+      while (wired.has(key(n.id, `trigger${k}`)) || wired.has(key(n.id, `in${k}`))) k += 1;
+      const trigger = triggerFor(e.src, e.src_port);
+      if (trigger && trigger[0] === e.src && trigger[1] === e.src_port) {
+        renames.set(i, { dst_port: `trigger${k}` });
+        wired.add(key(n.id, `trigger${k}`));
+      } else {
+        renames.set(i, { dst_port: `in${k}` });
+        wired.add(key(n.id, `in${k}`));
+        add(trigger, n.id, `trigger${k}`);
+      }
+      k += 1;
+    });
+  }
+  return [...edges.map((e, i) => (renames.has(i) ? { ...e, ...renames.get(i) } : e)), ...added];
 }
 
 /** Reconstruct a backend Graph from the live React Flow state. */

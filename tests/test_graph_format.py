@@ -32,6 +32,9 @@ GRAPH = {
     "edges": [{"src": "m", "src_port": "trigger", "dst": "lg", "dst_port": "trigger"},
               {"src": "m", "src_port": "trigger", "dst": "lg", "dst_port": "in"}],
 }
+# format 2 -> 3 cases shared with the editor's migrateGraph (graph-format.test.mjs)
+MIGRATE_3 = json.loads((REPO / "editor" / "test" / "fixtures" / "migrate-format-3.json")
+                       .read_text(encoding="utf-8"))["cases"]
 
 
 @pytest.fixture
@@ -124,7 +127,7 @@ FORMAT_1 = {
 
 def test_format_2_loads_an_auto_model_as_none_picked():
     out = migrate(FORMAT_1)
-    assert out["format"] == CURRENT_FORMAT == 2
+    assert out["format"] == CURRENT_FORMAT
     configs = {n["id"]: n["config"] for n in out["nodes"]}
     assert configs["auto"] == {"promoted": []}, "no model picked, never resolved"
     assert configs["picked"] == FORMAT_1["nodes"][1]["config"], "a picked model stays as saved"
@@ -145,6 +148,41 @@ def test_a_saved_auto_model_opens_as_none_picked(dirs):
     served = client.get("/api/graphs/fmt1").json()
     assert "model" not in next(n for n in served["nodes"] if n["id"] == "auto")["config"]
     assert next(n for n in served["nodes"] if n["id"] == "picked")["config"]["model"] == "xai/grok-4.20"
+
+
+@pytest.mark.parametrize("case", MIGRATE_3, ids=[c["name"] for c in MIGRATE_3])
+def test_format_3_wires_each_new_trigger_from_the_one_that_came_with_its_data(case):
+    before = copy.deepcopy(case["graph"])
+    out = migrate(case["graph"])
+    assert out["format"] == CURRENT_FORMAT
+    assert out["edges"] == case["edges"]
+    assert out["nodes"] == before["nodes"], "only wires change"
+    assert case["graph"] == before, "the input is never modified"
+
+
+def _trigger_problems(graph: dict) -> list[str]:
+    return [f"{p['node']}: {p['message']}" for p in server.validate_graph(graph)
+            if p["kind"] == "missing-input" and "trigger" in p["message"]]
+
+
+def test_format_3_graphs_with_a_told_trigger_validate_and_the_rest_name_it():
+    by_name = {c["name"]: c["graph"] for c in MIGRATE_3}
+    for name, graph in by_name.items():
+        problems = _trigger_problems(migrate(graph))
+        if name == "a Log behind two triggers stays unwired, for validation to name":
+            assert problems == ["log: required trigger 'trigger' is not connected"]
+        elif name == "a Log fed by a constant has no trigger to take":
+            assert problems == ["log: required trigger 'trigger' is not connected"]
+        else:
+            assert problems == [], name
+
+
+def test_every_shipped_example_is_already_in_the_format_3_shape():
+    # a shipped example is saved in the current format, so its load never
+    # migrates: running the format 3 step over it again changes nothing.
+    for path in sorted((REPO / "examples").glob("*.json")):
+        graph = json.loads(path.read_text(encoding="utf-8"))
+        assert migrate({**graph, "format": 2})["edges"] == graph["edges"], path.name
 
 
 # --------------------------------------------------------------- the server

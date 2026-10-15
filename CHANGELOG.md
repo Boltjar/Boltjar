@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/).
 - Third-party nodes are now called custom nodes, as in ComfyUI: they live in `custom_nodes/`, each with a `custom_node.toml` manifest.
 - A data wire never fires a node. Every node that acts fires on its own `trigger` input, an event, and reads its data inputs when it fires. Log, Preview, Logic, Queue, Tool and Tool Args used to fire on a data input and now have a trigger of their own: Log and Preview fire on `trigger` and read `in`; Logic fires on `trigger`, reads `value`, passes it on at `value` and fires `true` or `false`, which are events now; a Queue fires on its `trigger` sockets, one per producer, and reads each producer's item from its `in` socket; a Tool's `call` comes with its `trigger`, Tool Args fires on that trigger and reads `call`, and the Tool reads `result` when `result_trigger` fires. A Preview now runs once per turn. A custom node that declares `trigger=True` on any port that is not an event is refused when it loads, with the node named.
   Breaking: Log, Preview, Logic, Queue, Tool and Tool Args changed ports, and a custom node with a trigger that is not an event no longer loads.
+- Graphs are saved in format 3. A graph saved before it loads with each new trigger wired from the trigger that came with its data; one that cannot be told stays unwired, and validation names it.
 
 ### Added
 
