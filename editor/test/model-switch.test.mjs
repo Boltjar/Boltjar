@@ -1,7 +1,8 @@
 // ============================================================================
 // Framework-free harness for what a MODEL SWITCH does to a model-driven node
-// (LLM / TTS / STT): the config it takes and which of its wires survive. Drives
-// the REAL modelSwitchConfig / survivesReshape / concreteOutputs
+// (LLM / TTS / STT): the config it takes, which of its wires survive and the
+// console line for each one it removes. Drives the REAL modelSwitchConfig /
+// survivesReshape / reshapeLoss / modelSwitchNotice / concreteOutputs
 // (src/lib/dynamicPorts.ts), typesCompatible (src/lib/types.ts) and
 // declaredOption (src/lib/knobOptions.ts), each transpiled with the installed
 // TypeScript compiler (their only imports are type-only). Run: `npm run test`.
@@ -23,7 +24,7 @@ async function load(rel) {
   }).outputText;
   return import("data:text/javascript," + encodeURIComponent(js));
 }
-const { modelSwitchConfig, survivesReshape, concreteInputs, concreteOutputs, promotedParamType } = await load("dynamicPorts.ts");
+const { modelSwitchConfig, survivesReshape, reshapeLoss, modelSwitchNotice, concreteInputs, concreteOutputs, promotedParamType } = await load("dynamicPorts.ts");
 const { typesCompatible } = await load("types.ts");
 const { declaredOption } = await load("knobOptions.ts");
 
@@ -134,6 +135,33 @@ const imageless = manifest("acme/tooler", "llm", { tools: true });
 models.set(imageless.id, imageless);
 const toTooler = modelSwitchConfig(LLM, grok, "acme/tooler", imageless);
 check("-> tools but no image: image wire pruned (not a tool)", survives(LLM, toTooler, llmIn, { side: "in", handle: "image", type: "image" }), false);
+
+// ---- 3b. each wire a switch removes is said on the console, with why
+const loss = (def, next, connected, wire) =>
+  reshapeLoss(def, next, new Set(connected), wire, models, typesCompatible);
+const DEVSTRAL = manifest("ollama/devstral:24b", "llm", { label: "Devstral 24B" });
+models.set(DEVSTRAL.id, DEVSTRAL);
+const gemma = { model: "xai/grok-4.3", params: {}, promoted: [] };
+const toDevstral = modelSwitchConfig(LLM, gemma, DEVSTRAL.id, DEVSTRAL);
+const imageWire = { side: "in", handle: "image", type: "image" };
+const imageLoss = loss(LLM, toDevstral, ["trigger", "prompt", "image"], imageWire);
+check("-> Devstral 24B: the image wire is lost because its port is gone", imageLoss, { kind: "port" });
+check("-> Devstral 24B: the notice names node, socket and model",
+  modelSwitchNotice("LLM", imageWire, imageLoss, DEVSTRAL.label),
+  "LLM: removed the wire into image, Devstral 24B has no image input");
+check("-> Devstral 24B: a kept wire has no loss",
+  loss(LLM, toDevstral, ["trigger", "prompt", "image"], { side: "in", handle: "prompt", type: "text" }), null);
+const reasoningWire = { side: "out", handle: "reasoning" };
+check("-> no thinking: the reasoning output notice says output",
+  modelSwitchNotice("llm (2)", reasoningWire, loss(LLM, toDevstral, [], reasoningWire), "Devstral 24B"),
+  "llm (2): removed the wire from reasoning, Devstral 24B has no reasoning output");
+check("-> tools but no image: the image wire reads as a gone port, not a tool type",
+  loss(LLM, toTooler, llmIn, imageWire), { kind: "port" });
+check("a port that stays but takes another type is a type loss",
+  loss(TTS, toXai, ttsIn, { side: "in", handle: "text", type: "image" }), { kind: "type", takes: "text" });
+check("the type notice reads plainly",
+  modelSwitchNotice("TTS", { side: "in", handle: "text", type: "image" }, { kind: "type", takes: "text" }, "xai/tts"),
+  "TTS: removed the wire into text, with xai/tts it takes text, not image");
 
 // ---- 4. the LLM's error branch renders on every model
 const outNames = (cfg) => concreteOutputs(LLM, cfg, models).map((p) => `${p.name}:${p.type}`);

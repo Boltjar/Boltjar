@@ -883,12 +883,48 @@ export function survivesReshape(
   models: ModelLookup | undefined,
   compatible: (outType: string, inType: string) => boolean,
 ): boolean {
+  return reshapeLoss(def, nextConfig, connectedInputs, wire, models, compatible) === null;
+}
+
+/** Why a reshape cut a wire: its port is gone from the node, or the port is
+ *  still there but now `takes` a type the wire does not carry. */
+export type ReshapeLoss = { kind: "port" } | { kind: "type"; takes: string };
+
+/**
+ * survivesReshape's verdict with its reason: null when the wire survives, else
+ * why it is cut. A wire that only fits a growable socket by name (an `image`
+ * wire re-read as an LLM `tools` socket) counts as a port that is gone, since
+ * the socket it was drawn on no longer exists.
+ */
+export function reshapeLoss(
+  def: NodeDef,
+  nextConfig: Record<string, unknown>,
+  connectedInputs: ReadonlySet<string>,
+  wire: NodeWire,
+  models: ModelLookup | undefined,
+  compatible: (outType: string, inType: string) => boolean,
+): ReshapeLoss | null {
   if (wire.side === "out") {
-    return concreteOutputs(def, nextConfig, models).some((p) => p.name === wire.handle);
+    return concreteOutputs(def, nextConfig, models).some((p) => p.name === wire.handle)
+      ? null : { kind: "port" };
   }
   const port = concreteInputs(def, nextConfig, connectedInputs, models)
     .find((p) => p.name === wire.handle && !p.ghost);
-  return port !== undefined && compatible(wire.type, port.type);
+  if (port === undefined) return { kind: "port" };
+  if (compatible(wire.type, port.type)) return null;
+  return port.base ? { kind: "port" } : { kind: "type", takes: port.type };
+}
+
+/**
+ * The console line for one wire a model switch removed, naming the node, the
+ * socket and the new model (`model` is the manifest's label, else its id).
+ */
+export function modelSwitchNotice(node: string, wire: NodeWire, loss: ReshapeLoss, model: string): string {
+  const where = wire.side === "in" ? `the wire into ${wire.handle}` : `the wire from ${wire.handle}`;
+  const why = loss.kind === "type" && wire.side === "in"
+    ? `with ${model} it takes ${loss.takes}, not ${wire.type}`
+    : `${model} has no ${wire.handle} ${wire.side === "in" ? "input" : "output"}`;
+  return `${node}: removed ${where}, ${why}`;
 }
 
 /**

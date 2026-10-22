@@ -201,7 +201,9 @@ export default function App() {
     followSaveRef.current(slug, version);
   }, []));
 
-  const graph = useGraph(defs, models);
+  // a model switch says on the console which wire it removed, as a load says
+  // which dead wire it healed.
+  const graph = useGraph(defs, models, useCallback((line: string) => socket.notice(line, "warn"), [socket.notice]));
   const version = useVersion();
 
   const [graphLoading, setGraphLoading] = useState(true);

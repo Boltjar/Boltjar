@@ -56,9 +56,12 @@ import {
   parseTemplateTags,
   ROUTER_ID,
   sourceSocketSlug,
-  survivesReshape,
+  modelSwitchNotice,
+  reshapeLoss,
   TEMPLATE_ID,
   WIRELESS_OUT_ID,
+  type NodeWire,
+  type ReshapeLoss,
 } from "../lib/dynamicPorts";
 
 export interface ConnectionRejection {
@@ -133,7 +136,7 @@ export interface GraphStore {
   updateConfig: (id: string, key: string, value: unknown) => void;
   /** Select a model on any model-driven node: set config.model, start params from
    *  the new model's defaults, drop stale promotions, and prune only the edges
-   *  whose port the reshaped node no longer has. */
+   *  whose port the reshaped node no longer has, naming each on the console. */
   setLlmModel: (id: string, modelId: string) => void;
   /** Promote a model setting (an LLM `temperature`, a TTS `speed`) to a typed
    *  input port on any node with a model picker (append to config.promoted). */
@@ -174,10 +177,15 @@ export interface GraphStore {
 
 const PASTE_OFFSET: XYPosition = { x: 28, y: 28 };
 
+/** `notice` puts one line on the console (App passes the run socket's notice):
+ *  a model switch reports each wire it removed through it. */
 export function useGraph(
   defs: Map<string, NodeDef>,
   models: ReadonlyMap<string, ModelManifest>,
+  notice?: (line: string) => void,
 ): GraphStore {
+  const noticeRef = useRef(notice);
+  noticeRef.current = notice;
   const [nodes, setNodes] = useState<WFNode[]>([]);
   const [edges, setEdges] = useState<WFEdge[]>([]);
   const [graphName, setGraphNameState] = useState<string>("untitled");
@@ -591,8 +599,9 @@ export function useGraph(
    *  the config starts from the new manifest's defaults (modelSwitchConfig, so no
    *  param of the previous model leaks into this one), and a wire is kept only
    *  while its port still exists on the reshaped node and its type still fits
-   *  (survivesReshape, read from the same concreteInputs/concreteOutputs the
-   *  canvas renders). So a TTS keeps its text/lang wires across a switch, and an
+   *  (reshapeLoss, read from the same concreteInputs/concreteOutputs the
+   *  canvas renders). Each wire dropped is reported through `notice`
+   *  (modelSwitchNotice). So a TTS keeps its text/lang wires across a switch, and an
    *  LLM drops a wire on an input or output the new model no longer has. */
   const setLlmModel = useCallback((id: string, modelId: string) => {
     const node = nodes.find((n) => n.id === id);
@@ -600,26 +609,32 @@ export function useGraph(
     if (!node || !def) return;
     const nextConfig = modelSwitchConfig(def, node.data.config, modelId, models.get(modelId));
     const connected = connectedInputs.get(id) ?? new Set<string>();
+    // each wire on the node the new model has no room for, with why: the drop
+    // is right, and every one is said on the console so none vanishes unseen.
+    const lost: Array<{ edgeId: string; wire: NodeWire; loss: ReshapeLoss }> = [];
+    for (const e of edges) {
+      let wire: NodeWire;
+      if (e.source === id) {
+        wire = { side: "out", handle: e.sourceHandle ?? "" };
+      } else if (e.target === id) {
+        const srcTypeId = typeById.get(e.source);
+        // "" is no type yet (a Router with nothing upstream): the wire stays
+        const carried = srcTypeId ? carriedType(e.source, e.sourceHandle ?? "") ?? "" : "any";
+        wire = { side: "in", handle: e.targetHandle ?? "", type: carried };
+      } else continue;
+      const loss = reshapeLoss(def, nextConfig, connected, wire, models, typesCompatible);
+      if (loss) lost.push({ edgeId: e.id, wire, loss });
+    }
+    const gone = new Set(lost.map((l) => l.edgeId));
     commit();
     setNodes((nds) =>
       nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, config: nextConfig } } : n)),
     );
-    setEdges((eds) =>
-      eds.filter((e) => {
-        if (e.source === id) {
-          return survivesReshape(def, nextConfig, connected,
-            { side: "out", handle: e.sourceHandle ?? "" }, models, typesCompatible);
-        }
-        if (e.target !== id) return true;
-        const srcTypeId = typeById.get(e.source);
-        // "" is no type yet (a Router with nothing upstream): the wire stays
-        const carried = srcTypeId ? carriedType(e.source, e.sourceHandle ?? "") ?? "" : "any";
-        return survivesReshape(def, nextConfig, connected,
-          { side: "in", handle: e.targetHandle ?? "", type: carried }, models, typesCompatible);
-      }),
-    );
+    if (gone.size) setEdges((eds) => eds.filter((e) => !gone.has(e.id)));
     markEdited();
-  }, [nodes, defs, models, connectedInputs, typeById, configById, commit, markEdited, carriedType]);
+    const label = models.get(modelId)?.label || modelId;
+    for (const l of lost) noticeRef.current?.(modelSwitchNotice(id, l.wire, l.loss, label));
+  }, [nodes, edges, defs, models, connectedInputs, typeById, configById, commit, markEdited, carriedType]);
 
   const promoteParam = useCallback((id: string, name: string) => {
     const node = nodes.find((n) => n.id === id);
