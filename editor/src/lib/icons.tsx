@@ -2,7 +2,8 @@
 // Icons: react-icons `io5` set (which IS Ionicons 7). No CDN <ion-icon> web
 // components. We keep the kebab-case Ionicon names as the lookup key and
 // resolve each to its io5 React component, so every call site names an icon
-// the way Ionicons does.
+// the way Ionicons does. A brand mark io5 lacks (the OpenAI logo) comes from
+// react-icons' Remix set under a `logo-<brand>` name.
 // ============================================================================
 import type { IconBaseProps } from "react-icons";
 import {
@@ -137,12 +138,12 @@ import {
   IoCheckmarkOutline,
   IoCloseCircleOutline,
   IoLibraryOutline,
-  IoLogoElectron,
   IoMusicalNoteOutline,
   IoOpenOutline,
   IoRemoveCircleOutline,
   IoSwapHorizontalOutline,
 } from "react-icons/io5";
+import { RiOpenaiFill } from "react-icons/ri";
 import type { ComponentType } from "react";
 
 type IconCmp = ComponentType<IconBaseProps>;
@@ -296,7 +297,8 @@ const REGISTRY: Record<string, IconCmp> = {
   "library-outline": IoLibraryOutline,
   "open-outline": IoOpenOutline,
   "musical-note-outline": IoMusicalNoteOutline,
-  "logo-electron": IoLogoElectron,
+  // a provider's own mark, from Remix Icon (io5 has no OpenAI logo)
+  "logo-openai": RiOpenaiFill,
 };
 
 // A purpose-built close (×) icon with NO internal padding, drawn on a perfect

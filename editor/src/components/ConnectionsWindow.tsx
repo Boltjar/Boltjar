@@ -123,7 +123,7 @@ const PROVIDER_META: Record<string, ProviderMeta> = {
   },
   openai: {
     label: "OpenAI",
-    icon: "logo-electron",
+    icon: "logo-openai",
     colorVar: "--good",
     modality: "LLM · cloud",
     isLocal: false,
