@@ -1,12 +1,15 @@
 version: 2
-# Minor and patch updates only: majors are upgraded by hand, so every ecosystem
-# ignores semver-major. A security update skips that rule, which is why mcp also
-# ignores 2.x by version range (see its pin in requirements.txt).
+# Security updates only: a PR opens when a dependency has a known vulnerability
+# (Dependabot security updates are on in the repository settings). Routine
+# version updates are off (open-pull-requests-limit: 0); dependencies are
+# upgraded by hand. mcp ignores 2.x by version range (see its pin in
+# requirements.txt), since a security update skips the semver-major rule.
 updates:
   - package-ecosystem: pip
     directory: /
     schedule:
       interval: weekly
+    open-pull-requests-limit: 0
     commit-message:
       prefix: deps
     # a range in requirements.txt changes only when a release falls outside it;
@@ -26,6 +29,7 @@ updates:
     directory: /editor
     schedule:
       interval: weekly
+    open-pull-requests-limit: 0
     commit-message:
       prefix: deps
     ignore:
@@ -40,6 +44,7 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    open-pull-requests-limit: 0
     commit-message:
       prefix: ci
     ignore:
